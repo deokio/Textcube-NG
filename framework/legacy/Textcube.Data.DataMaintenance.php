@@ -31,7 +31,17 @@ class DataMaintenance {
 		POD::query("DELETE FROM {$database['prefix']}Links WHERE blogid = $blogid");
 		POD::query("DELETE FROM {$database['prefix']}RefererLogs WHERE blogid = $blogid");
 		POD::query("DELETE FROM {$database['prefix']}RefererStatistics WHERE blogid = $blogid");
+		// Textcube-NG: r3-43 R-573 Plugins 행을 지우기 전에 이 블로그의 플러그인 무결성 기준값(BlogSettings pgi_*)도 지운다
+		// (deactivatePlugin() 과 같은 pluginGuardRemoveBaseline() 사용 — 그대로 두면 지운 플러그인의 기준값 행이 남는다)
+		if (function_exists('pluginGuardRemoveBaseline')) {
+			$guardPlugins = POD::queryColumn("SELECT name FROM {$database['prefix']}Plugins WHERE blogid = $blogid");
+			if (is_array($guardPlugins)) {
+				foreach ($guardPlugins as $guardPlugin) pluginGuardRemoveBaseline($guardPlugin);
+			}
+			unset($guardPlugins, $guardPlugin);
+		}
 		POD::query("DELETE FROM {$database['prefix']}Plugins WHERE blogid = $blogid");
+		if (function_exists('pluginKeptSettingsClear')) pluginKeptSettingsClear();	// Textcube-NG: r3-42 끌 때 보관한 플러그인 설정도 지운다(BlogSettings pluginSettingsKept)
 		//POD::query("DELETE FROM {$database['prefix']}UserSettings WHERE user = $blogid");
 		
 		POD::query("DELETE FROM {$database['prefix']}Filters WHERE blogid = $blogid");
@@ -57,7 +67,9 @@ class DataMaintenance {
 		
 		if ($removeAttachments) {
 			Path::removeFiles(Path::combine(ROOT, 'attach', $blogid));
-			POD::query("UPDATE {$database['prefix']}BlogSettings SET logo = '' WHERE blogid = $blogid");
+			// Textcube-NG: r3-43 R-572 BlogSettings 는 (blogid, name, value) 표라 원본의 'SET logo = ''' 질의는 없는 칸이라 실패했다(로고 설정이 남음).
+			// removeBlogLogo() 와 같은 Setting API 로 logo 값을 비운다(요청 안 설정 묶음과 DB 를 함께 바꾼다)
+			Setting::setBlogSettingGlobal('logo', '', $blogid);
 		}
 	}
 }

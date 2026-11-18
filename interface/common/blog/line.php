@@ -83,7 +83,7 @@ if (!doesHaveOwnership() && isset($cache->contents)) {
 			.'  xhr.send("id=" + id + "&category=" + newCat);'.CRLF
 			.'}'.CRLF
 			.'function tcDeleteLine(id) {'.CRLF
-			.'  if (!confirm("'.addslashes(_t('삭제하시겠습니까?')).'")) return;'.CRLF
+			.'  tcConfirm("'.addslashes(_t('삭제하시겠습니까?')).'", function () {'.CRLF	// Textcube-NG: 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396)
 			.'  var xhr = new XMLHttpRequest();'.CRLF
 			.'  xhr.open("POST", "'.addslashes($blogURL).'/owner/entry/line/delete/");'.CRLF
 			.'  xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");'.CRLF
@@ -95,6 +95,7 @@ if (!doesHaveOwnership() && isset($cache->contents)) {
 			.'  };'.CRLF
 			.'  xhr.onerror = function() { alert("'.addslashes(_t('삭제할 수 없었습니다.')).'"); };'.CRLF
 			.'  xhr.send("id=" + id);'.CRLF
+			.'  });'.CRLF
 			.'}'.CRLF
 			.'//]]>'.CRLF
 			.'</script>';

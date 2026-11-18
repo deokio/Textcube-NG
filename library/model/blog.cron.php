@@ -71,6 +71,8 @@ function checkCronJob()
 	if( !empty($_SERVER['HTTP_REFERER']) || !dumbCronScheduler(true) ) return;
 
 	$request = new HTTPRequest('GET', $ctx->getProperty('uri.default').'/cron');
+	// Textcube-NG: $service['cronRequestPublicOnly'] === true 일 때만 공인 주소로 제한(기본 false = 원본 동작)(r3-7, 결정 446d)
+	$request->publicOnly = (isset($GLOBALS['service']['cronRequestPublicOnly']) && $GLOBALS['service']['cronRequestPublicOnly'] === true);
 	$request->timeout = 2;
 	$request->send();
 }

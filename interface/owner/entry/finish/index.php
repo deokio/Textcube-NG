@@ -2,6 +2,14 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 $IV = array(
 	'POST' => array(
 		'visibility' => array('int', 0, 3),
@@ -25,6 +33,13 @@ require ROOT . '/library/preprocessor.php';
 requireModel('blog.entry');
 
 requireStrictRoute();
+/* [보안] 원본은 글 저장(완료) 시 작성자를 확인하지 않아 팀블로그 글쓴이가 다른 사람의 글을 수정할 수 있었다
+   → update 핸들러와 같게 편집자가 아니면 대상 글의 작성자인지 확인(새 글은 해당 없음) */
+if(!empty($suri['id']) && !Acl::check('group.editors')) {
+	if(getUserIdOfEntry(getBlogId(), (int)$suri['id']) != getUserId()) {
+		Respond::ResultPage(-1);
+	}
+}
 
 if(empty($suri['id'])) {
 	$entry = array();
@@ -41,8 +56,8 @@ if (empty($suri['id']) || !is_null($entry)) {
 	$entry['starred']    = $_POST['starred'];
 	$entry['category']   = $_POST['category'];
 	$entry['location']   = empty($_POST['location']) ? '/' : $_POST['location'];
-	$entry['latitude'] = empty($_POST['latitude']) ? null : $_POST['latitude'];
-	$entry['longitude'] = empty($_POST['longitude']) ? null : $_POST['longitude'];
+	$entry['latitude'] = (empty($_POST['latitude']) || $_POST['latitude'] === 'null' || $_POST['latitude'] === 'undefined') ? null : $_POST['latitude'];
+	$entry['longitude'] = (empty($_POST['longitude']) || $_POST['longitude'] === 'null' || $_POST['longitude'] === 'undefined') ? null : $_POST['longitude'];
 	$entry['tag']        = empty($_POST['tag']) ? '' : $_POST['tag'];
 	$entry['title']      = $_POST['title'];
 	$entry['content']    = $_POST['content'];
@@ -59,13 +74,9 @@ if (empty($suri['id']) || !is_null($entry)) {
 
 	if(empty($suri['id'])) {
 		if ($id = addEntry($blogid, $entry)) {
-			// 새 글 저장 전 업로드된 parent=0 임시 첨부파일을 새 entryId로 이전
-			$pool = DBModel::getInstance();
-			$pool->reset('Attachments');
-			$pool->setAttribute('parent', $id);
-			$pool->setQualifier('blogid', 'equals', $blogid);
-			$pool->setQualifier('parent', 'equals', 0);
-			$pool->update();
+			// 새 글 저장 전 업로드된 임시 첨부파일을 새 entryId로 이전
+			// [보안] 현재 사용자의 임시 첨부(parent = -(userid+1))만 — 원본(포트)은 이 블로그의 parent=0 전부(다른 구성원의 임시 첨부 포함)
+			moveTemporaryAttachments($blogid, getUserId(), $id);
 			fireEvent('AddPost', $id, $entry);
 			setBlogSetting('LatestEditedEntry_user'.getUserId(),$id);
 			$result = array();

@@ -26,4 +26,12 @@ $__text['시간 제한 초과'] = 'Timeout';
 $__text['알 수 없는 오류'] = 'Unknown error';
 $__text['위치 정보를 가져오지 못하였습니다.'] = 'Could not retrieve your location.';
 $__text['현재 웹브라우저는 Geolocation 기능을 지원하지 않습니다.'] = 'Your web browser does not provide Geolocation functions.';
+$__text['검색 결과가 없습니다.'] = 'No results found.';
+$__text['마커 고정시키기'] = 'Pin this marker';
+$__text['오류가 발생하였습니다. (%1)'] = 'An error has occurred. (%1)';
+$__text['닫기'] = 'Close';
+$__text['제목 : '] = 'Title : ';
+$__text['설명 : '] = 'Description : ';
+$__text['삭제하기'] = 'Delete';
+$__text['%1에 얽힌 이야기'] = 'Stories about %1';
 ?>

@@ -77,8 +77,8 @@ function PN_Referer_Default()
 							<table class="data-inbox" cellspacing="0" cellpadding="0">
 								<thead>
 									<tr>
-										<th class="number"><span class="text">날짜</span></th>
-										<th class="site"><span class="text">주소</span></th>
+										<th class="number"><span class="text"><?php echo _t("날짜");?></span></th>
+										<th class="site"><span class="text"><?php echo _t("주소");?></span></th>
 									</tr>
 								</thead>
 								<tbody>
@@ -93,7 +93,19 @@ function PN_Referer_Default()
 ?>
 									<tr class="<?php echo $className;?> inactive-class" onmouseover="rolloverClass(this, 'over')" onmouseout="rolloverClass(this, 'out')">
 										<td class="date"><?php echo Timestamp::formatDate($record['referred']);?></td>
+<?php
+		/* [보안] Referer 는 방문자가 임의로 보낼 수 있다. 원본은 javascript: 등 모든 scheme 을 링크(window.open)로 만들었다 →
+		   http(s) 주소만 링크로, 그 외는 텍스트로 표시 */
+		if (preg_match('@^https?://@i', $record['url'])) {
+?>
 										<td class="address"><a href="<?php echo Misc::escapeJSInAttribute($record['url']);?>" onclick="window.open(this.href); return false;" title="<?php echo htmlspecialchars($record['url']);?>"><?php echo fireEvent('ViewRefererURL', htmlspecialchars(UTF8::lessenAsEm($record['url'], 70)), $record);?></a></td>
+<?php
+		} else {
+?>
+										<td class="address"><span title="<?php echo htmlspecialchars($record['url']);?>"><?php echo fireEvent('ViewRefererURL', htmlspecialchars(UTF8::lessenAsEm($record['url'], 70)), $record);?></span></td>
+<?php
+		}
+?>
 									</tr>
 <?php
 	}
@@ -114,7 +126,7 @@ function PN_Referer_Default()
 										</span>
 									</div>
 									<div class="page-count">
-										<?php echo Misc::getArrayValue(explode('%1', '한 페이지에 목록 %1건 표시'), 0);?>
+										<?php echo Misc::getArrayValue(explode('%1', _t('한 페이지에 목록 %1건 표시')), 0);?>
 										<select name="perPage" onchange="document.getElementById('part-statistics-log').submit()">					
 <?php
 	for ($i = 10; $i <= 30; $i += 5) {
@@ -130,7 +142,7 @@ function PN_Referer_Default()
 	}
 ?>
 										</select>
-										<?php echo Misc::getArrayValue(explode('%1', '한 페이지에 목록 %1건 표시'), 1);?>
+										<?php echo Misc::getArrayValue(explode('%1', _t('한 페이지에 목록 %1건 표시')), 1);?>
 									</div>
 								</div>
 							</div>

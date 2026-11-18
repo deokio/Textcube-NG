@@ -30,9 +30,9 @@ header('Content-type: text/javascript');
 // 방어 검증: _sectest/suggest_sqli_test.php (악성 입력 7종 ALL PASS) — SECURITY.md 참조.
 $pool = DBModel::getInstance();
 $pool->reset("Users");
-$pool->setQualifierSet(array("name","like",$_GET['input'],true),
+$pool->setQualifierSet(array("name","like",'%'.escapeSearchString($_GET['input']).'%',false),
 	"OR",
-	array("loginid","like",$_GET['input'],true));
+	array("loginid","like",'%'.escapeSearchString($_GET['input']).'%',false));
 $pool->setLimit(5);
 $result = $pool->getAll("loginid, name");
 if ($result) {

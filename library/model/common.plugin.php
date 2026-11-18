@@ -5,6 +5,8 @@
 
 global $pluginSetting;
 $pluginSetting = array();
+// Textcube-NG: 플러그인 안전 검사(PDO 호환성·허용 목록·적재 재검증·파일 무결성)(v3.211)
+require_once ROOT . '/library/model/common.plugin.guard.php';
 
 /***** Plugin data manipulation *****/
 function clearPluginSettingCache() {
@@ -21,17 +23,76 @@ function clearPluginSettingCache() {
 
 function activatePlugin($name) {
     global $database, $activePlugins;
+    global $pluginGuardMessage;
+    $pluginGuardMessage = ''; // Textcube-NG: 활성화 결과 메시지(native 경고·거부 사유)(v3.211)
     if (in_array($name, $activePlugins)) {
         return true;
     }
-    if (!preg_match('/^[-a-zA-Z0-9_ ]+$/', $name)) {
+    // Textcube-NG: r3-42 켜기 검사는 pluginActivationGate 로 옮겼다(다시 검사 recheckPlugin 과 같이 쓴다)
+    $guard = pluginActivationGate($name);
+    if (!$guard[0]) {
+        $pluginGuardMessage = $guard[1];
         return false;
+    }
+    $pluginName = $name;
+    $pluginOpLock = pluginOpLock(true); // Textcube-NG: r3-42 블로그별 플러그인 작업 잠금(같은 요청 안의 잠금은 겹쳐도 막히지 않는다)
+    $name = POD::escapeString(UTF8::lessenAsEncoding($name, 255));
+    $result = POD::queryCount("INSERT INTO {$database['prefix']}Plugins VALUES (" . getBlogId() . ", '$name', null)");
+    if ($result == 1) {
+        $activePlugins[] = $pluginName; // Textcube-NG: r3-30 R-491 같은 요청 안에서 다시 켜기 요청이 오면(plugins.php 자동 켜기 뒤) 이미 켜진 것으로 본다(원본은 같은 키를 다시 INSERT 하다 실패)
+        pluginKeptSettingsRestore($pluginName); // Textcube-NG: r3-42 끌 때 보관해 둔 설정을 되돌린다(보관한 것이 없으면 아무 것도 하지 않는다)
+        // Textcube-NG: 파일 무결성 기준값(sha256)과 검사 결과를 남기고, native 경고를 활성화 결과로 돌려준다(v3.211)
+        $pluginGuardSaved = false;
+        pluginGuardBuildRecord($pluginName, Acl::check('group.creators') ? 'creator' : 'user', $pluginGuardSaved);
+        $pluginGuardMessage = $guard[1];
+        if (!$pluginGuardSaved && pluginGuardStrictEnabled()) {
+            // 엄격 모드: 기록을 남기지 못하면 적재 때 막힌다
+            $pluginGuardMessage = ltrim($pluginGuardMessage . "\n" . _t('무결성 기록을 저장하지 못했습니다. 엄격 모드에서는 이 플러그인을 불러오지 않습니다. 끄고 다시 켜 보십시오.'), "\n");
+        }
+    }
+    clearPluginSettingCache();
+    CacheControl::flushItemsByPlugin($pluginName);
+    pluginOpUnlock($pluginOpLock); // Textcube-NG: r3-42
+    return ($result == 1);
+}
+
+// Textcube-NG: r3-42 $refuseKeptOverflow — true 면 설정 보관 한도를 넘거나 보관 저장이 실패할 때 끄지 않는다(관리 화면 owner/plugin/deactivate 만 true).
+// 기본값 false 는 원본과 같이 끈다(자동 끄기 library/plugins.php, 데이터 삭제, 다른 플러그인의 호출)
+function deactivatePlugin($name, $refuseKeptOverflow = false) {
+    global $database, $activePlugins;
+    if (!in_array($name, $activePlugins)) {
+        return false;
+    }
+    $pluginName = $name;
+    // Textcube-NG: r3-42 끄기 전에 이 플러그인의 설정을 블로그 설정 pluginSettingsKept 에 보관한다(다시 켜면 activatePlugin 이 되돌린다). 블로그별 잠금 안에서 한다
+    $pluginOpLock = pluginOpLock(true);
+    $keptStore = pluginKeptSettingsStore($pluginName, $refuseKeptOverflow);
+    if ($refuseKeptOverflow && ($keptStore === 'overflow' || $keptStore === 'failed')) {
+        pluginOpUnlock($pluginOpLock);
+        return false;
+    }
+    $name = POD::escapeString($name);
+    POD::query("DELETE FROM {$database['prefix']}Plugins
+			WHERE blogid = " . getBlogId() . "
+				AND name = '$name'");
+    clearPluginSettingCache();
+    CacheControl::flushItemsByPlugin($pluginName);
+    pluginGuardRemoveBaseline($pluginName); // Textcube-NG: 파일 무결성 기준값 삭제(다시 켜면 새로 남긴다)(v3.211)
+    pluginOpUnlock($pluginOpLock); // Textcube-NG: r3-42
+    return true;
+}
+
+// Textcube-NG: r3-42 켜기 검사(이름·폴더·index.xml/index.php·요구 판번호·서비스 관리자 전용·PDO 호환성·허용 목록)를 activatePlugin 에서 떼어
+// 다시 검사(recheckPlugin)와 같이 쓴다. 돌려주는 값은 pluginGuardCheckActivation 과 같은 array(통과 여부, 거부 사유 또는 경고)
+function pluginActivationGate($name) {
+    if (!preg_match('/^[-a-zA-Z0-9_ ]+$/', $name)) {
+        return array(false, '');
     }
     if (!is_dir(ROOT . "/plugins/$name")) {
-        return false;
+        return array(false, '');
     }
     if (!file_exists(ROOT . "/plugins/$name/index.xml") || !file_exists(ROOT . "/plugins/$name/index.php")) {
-        return false;
+        return array(false, '');
     }
     $xmls = new XMLStruct();
     $manifest = @file_get_contents(ROOT . "/plugins/$name/index.xml");
@@ -47,43 +108,309 @@ function activatePlugin($name) {
         $requiredMaxVersion = $xmls->getValue('/plugin/requirements/textcube/maxVersion');
         if (!is_null($requiredMinVersion)) {
             if (version_compare($currentTextcubeVersion, $requiredMinVersion) < 0) {
-                return false;
+                return array(false, '');
             }
         }
         if (!is_null($requiredMaxVersion)) {
             if (version_compare($currentTextcubeVersion, $requiredMaxVersion) > 0) {
-                return false;
+                return array(false, '');
             }
         }
         if (!is_null($requiredTextcubeVersion)) {
             if (version_compare($currentTextcubeVersion, $requiredTextcubeVersion) < 0) {
-                return false;
+                return array(false, '');
             }
         }
+        /* [보안] 서비스 관리자 전용 플러그인(<privilege>administrator</privilege>)은 서비스 관리자만 켠다 — 목록(owner/plugin)만
+           숨기고 activate 요청은 막지 않았다 (v3.151) */
+        if ($xmls->getValue('/plugin/requirements/privilege') == 'administrator' && !Acl::check('group.creators')) {
+            return array(false, '');
+        }
     } else {
-        return false;
+        return array(false, '');
     }
-    $pluginName = $name;
-    $name = POD::escapeString(UTF8::lessenAsEncoding($name, 255));
-    $result = POD::queryCount("INSERT INTO {$database['prefix']}Plugins VALUES (" . getBlogId() . ", '$name', null)");
-    clearPluginSettingCache();
-    CacheControl::flushItemsByPlugin($pluginName);
-    return ($result == 1);
+    // Textcube-NG: PDO 호환성·허용 목록 검사. PDO 모드에서 직접 SQL·미제공 연결 요소·판정 불가 호출(검토 예외 밖)을 쓰면 거부하고, native 모드는 켜고 경고한다(v3.211)
+    return pluginGuardCheckActivation($name);
 }
 
-function deactivatePlugin($name) {
-    global $database, $activePlugins;
-    if (!in_array($name, $activePlugins)) {
+// Textcube-NG: r3-42 플러그인 작업 잠금(블로그별). 켜기·끄기·다시 검사·설정 초기화·보관 설정 읽고 쓰기를 한 번에 하나만 한다.
+// cache/pluginlock/<blogid>.lock.cache 에 flock(blog.skin.php 의 편집기 CSS 잠금과 같은 모양: mkdir 0700, fopen 'c', chmod 0600).
+// 같은 요청 안에서는 다시 잠가도 막히지 않는다(깊이 계산). $wait 가 false 면 기다리지 않는다.
+// 돌려주는 값: true(잠금) / false(다른 요청이 잠그고 있음) / null(잠글 수 없음 — 캐시 폴더 없음·열기 실패 등, 잠그지 않고 진행)
+function pluginOpLock($wait = true) {
+    global $pluginOpLockHandle, $pluginOpLockDepth;
+    if (is_resource($pluginOpLockHandle)) {
+        $pluginOpLockDepth = intval($pluginOpLockDepth) + 1;
+        return true;
+    }
+    if (!defined('__TEXTCUBE_CACHE_DIR__')) {
+        return null;
+    }
+    $blogid = intval(getBlogId());
+    if ($blogid <= 0) {
+        return null;
+    }
+    $dir = __TEXTCUBE_CACHE_DIR__ . '/pluginlock';
+    if (!is_dir($dir) && !@mkdir($dir, 0700) && !is_dir($dir)) {
+        return null;
+    }
+    $lockPath = $dir . '/' . $blogid . '.lock.cache';
+    $lock = @fopen($lockPath, 'c');
+    if ($lock === false) {
+        return null;
+    }
+    @chmod($lockPath, 0600);	// 다른 캐시 파일과 같은 권한(실패는 무시)
+    $wouldBlock = 0;
+    if (!@flock($lock, $wait ? LOCK_EX : (LOCK_EX | LOCK_NB), $wouldBlock)) {
+        fclose($lock);
+        return (!$wait && $wouldBlock) ? false : null;
+    }
+    $pluginOpLockHandle = $lock;
+    $pluginOpLockDepth = 1;
+    return true;
+}
+
+// Textcube-NG: r3-42 pluginOpLock 이 true 를 돌려준 만큼 푼다. 가장 바깥에서 풀 때 flock 을 풀고 닫는다(요청이 끝나면 PHP 가 닫으므로 그때도 풀린다)
+function pluginOpUnlock($token) {
+    global $pluginOpLockHandle, $pluginOpLockDepth;
+    if ($token !== true || !is_resource($pluginOpLockHandle)) {
+        return;
+    }
+    $pluginOpLockDepth = intval($pluginOpLockDepth) - 1;
+    if ($pluginOpLockDepth > 0) {
+        return;
+    }
+    @flock($pluginOpLockHandle, LOCK_UN);
+    fclose($pluginOpLockHandle);
+    $pluginOpLockHandle = null;
+    $pluginOpLockDepth = 0;
+}
+
+// Textcube-NG: r3-42 다른 플러그인 작업이 처리 중일 때의 응답 메시지(owner/plugin/activate·deactivate·recheck·resetSetting)
+function pluginOpBusyMessage() {
+    return _t('다른 플러그인 작업을 처리하고 있습니다. 잠시 뒤 다시 시도하십시오.');
+}
+
+// Textcube-NG: r3-42 잠근 뒤 켜진 플러그인 목록을 DB 에서 다시 읽는다(library/plugins.php 와 같은 질의). 요청 처음에 읽은 목록은
+// 앞선 요청이 끝나기 전에 읽었을 수 있다. 같은 요청의 SELECT 결과 캐시(POD)를 먼저 비운다
+function pluginOpRefreshActive() {
+    global $activePlugins;
+    POD::clearCache();
+    $pool = DBModel::getInstance();
+    $pool->reset('Plugins');
+    $pool->setQualifier('blogid', 'eq', getBlogId());
+    $names = $pool->getColumn('name');
+    $activePlugins = is_array($names) ? $names : array();
+}
+
+// Textcube-NG: r3-42 끌 때 보관한 설정 묶음(블로그 설정 pluginSettingsKept, serialize 한 [플러그인 이름 => Plugins.settings 값])의 크기 한도(바이트).
+// BlogSettings.value 가 MySQL TEXT(65535 바이트)이므로 그보다 작게 둔다. 넘으면 그 플러그인의 설정은 보관하지 않는다(원래처럼 지워짐)
+function pluginKeptSettingsMaxBytes() {
+    return 65000;
+}
+
+// Textcube-NG: r3-42 보관 설정 묶음을 DB 에서 바로 읽는다(메모리·캐시 묶음은 다른 요청이 바꾼 값을 모를 수 있다).
+// 클래스는 풀지 않고(allowed_classes false), 배열이 아니면 빈 묶음, 이름이 올바르지 않거나 값이 문자열이 아닌 항목은 버린다
+function pluginKeptSettingsLoad() {
+    POD::clearCache();
+    $raw = Setting::getBlogSettingGlobal('pluginSettingsKept', null, null, true);
+    if (!is_string($raw) || $raw === '') {
+        return array();
+    }
+    $map = @unserialize($raw, array('allowed_classes' => false));
+    if (!is_array($map)) {
+        return array();
+    }
+    $result = array();
+    foreach ($map as $key => $value) {
+        $key = (string)$key;
+        if (pluginGuardNameIsValid($key) && is_string($value)) {
+            $result[$key] = $value;
+        }
+    }
+    return $result;
+}
+
+// Textcube-NG: r3-42 보관 설정 묶음을 쓴다. 빈 묶음이면 설정 행을 지운다. 묵은 메모리 묶음 때문에 INSERT 로 가서 실패하지 않게
+// pluginGuardSetBlogValue·pluginGuardRemoveBaseline 과 같이 자리값을 두어 덮어쓰기(replace)·삭제 경로로 보낸다
+function pluginKeptSettingsSave($map) {
+    global $__gCacheBlogSettings;
+    POD::clearCache();
+    if (empty($map)) {
+        $blogid = getBlogId();
+        if (!is_numeric($blogid)) {
+            return false;
+        }
+        pluginGuardCacheStorage();
+        if (!is_array(Setting::getBlogSettingsGlobal($blogid))) {
+            return false;
+        }
+        if (isset($__gCacheBlogSettings[$blogid]) && is_array($__gCacheBlogSettings[$blogid]) && !array_key_exists('pluginSettingsKept', $__gCacheBlogSettings[$blogid])) {
+            $__gCacheBlogSettings[$blogid]['pluginSettingsKept'] = '';
+        }
+        $result = Setting::removeBlogSettingGlobal('pluginSettingsKept', $blogid);
+        pluginGuardSyncBlogCache($blogid);
+        return ($result !== false && $result !== null);
+    }
+    $value = serialize($map);
+    if (strlen($value) > pluginKeptSettingsMaxBytes()) {
         return false;
     }
-    $pluginName = $name;
-    $name = POD::escapeString($name);
-    POD::query("DELETE FROM {$database['prefix']}Plugins
-			WHERE blogid = " . getBlogId() . "
-				AND name = '$name'");
+    return pluginGuardSetBlogValue('pluginSettingsKept', $value);
+}
+
+// Textcube-NG: r3-42 관리 화면 끄기를 거절할 때의 안내(owner/plugin/deactivate). $reason 은 $pluginKeptRefusal 값('overflow' 보관 한도 초과, 'failed' 보관 저장 실패)
+function pluginKeptRefusalMessage($reason) {
+    if ($reason === 'overflow') {
+        return _t('설정을 보관할 공간이 부족해 끌 수 없습니다. 설정을 초기화한 뒤 끄십시오.');
+    }
+    return _t('설정을 보관하지 못해 끄지 않았습니다. 잠시 뒤 다시 시도하십시오.');
+}
+
+// Textcube-NG: r3-42 끄기 전에 이 플러그인의 Plugins.settings 를 보관 묶음에 넣는다. 지금 설정이 없으면(NULL·빈 값) 이미 보관한 항목을 그대로 두고
+// 한도와 무관하게 끈다(보관 항목을 지우는 것은 [초기화]·[보관 설정 지우기]·데이터 삭제뿐이다).
+// $refuse 가 true 일 때(관리 화면의 끄기) 한도를 넘으면 'overflow', 보관 저장이 실패하면 'failed' 를 돌려주고 $pluginKeptRefusal 에 같은 값을 두어 끄기를 거절하게 한다.
+// false 일 때(자동 끄기 library/plugins.php·데이터 삭제·다른 호출) 한도를 넘으면 보관하지 않고, 저장이 실패해도 원본처럼 설정을 지우며 끈다
+function pluginKeptSettingsStore($name, $refuse = false) {
+    global $pluginKeptRefusal;
+    $pluginKeptRefusal = '';
+    if (!pluginGuardNameIsValid($name)) {
+        return false;
+    }
+    $lock = pluginOpLock(true);
+    POD::clearCache();
+    $pool = DBModel::getInstance();
+    $pool->reset('Plugins');
+    $pool->setQualifier('blogid', 'eq', getBlogId());
+    $pool->setQualifier('name', 'eq', UTF8::lessenAsEncoding($name, 255), true);
+    $settings = $pool->getCell('settings');
+    $map = pluginKeptSettingsLoad();
+    $before = $map;
+    if (is_string($settings) && $settings !== '') {
+        $map[$name] = $settings;
+        if (strlen(serialize($map)) > pluginKeptSettingsMaxBytes()) {
+            if ($refuse) {
+                $pluginKeptRefusal = 'overflow';
+                pluginOpUnlock($lock);
+                return 'overflow';
+            }
+            unset($map[$name]);
+        }
+    }
+    $result = ($map === $before) ? true : pluginKeptSettingsSave($map);
+    if ($refuse && !$result) {
+        $pluginKeptRefusal = 'failed';
+        $result = 'failed';
+    }
+    pluginOpUnlock($lock);
+    return $result;
+}
+
+// Textcube-NG: r3-42 다시 켠 뒤(INSERT 성공) 보관해 둔 설정을 Plugins.settings 로 되돌리고 묶음에서 뺀다. 보관한 것이 없으면 아무 것도 하지 않는다
+function pluginKeptSettingsRestore($name) {
+    if (!pluginGuardNameIsValid($name)) {
+        return false;
+    }
+    $lock = pluginOpLock(true);
+    $map = pluginKeptSettingsLoad();
+    $result = true;
+    if (isset($map[$name])) {
+        $pool = DBModel::getInstance();
+        $pool->reset('Plugins');
+        $pool->setQualifier('blogid', 'eq', getBlogId());
+        $pool->setQualifier('name', 'eq', UTF8::lessenAsEncoding($name, 255), true);
+        $pool->setAttribute('settings', $map[$name], true);
+        if ($pool->update()) {
+            unset($map[$name]);
+            $result = pluginKeptSettingsSave($map);
+        } else {
+            $result = false;
+        }
+    }
+    pluginOpUnlock($lock);
+    return $result;
+}
+
+// Textcube-NG: r3-42 이 플러그인의 보관 설정을 지운다(꺼진 플러그인의 [보관 설정 지우기], 플러그인 데이터 삭제). 없으면 그대로 성공
+function pluginKeptSettingsRemove($name) {
+    if (!is_string($name) || $name === '') {
+        return false;
+    }
+    $lock = pluginOpLock(true);
+    $map = pluginKeptSettingsLoad();
+    $result = true;
+    if (array_key_exists($name, $map)) {
+        unset($map[$name]);
+        $result = pluginKeptSettingsSave($map);
+    }
+    pluginOpUnlock($lock);
+    return $result;
+}
+
+// Textcube-NG: r3-42 이 블로그의 보관 설정을 모두 지운다(데이터 모두 지우기 — DataMaintenance::removeAll 이 Plugins 행을 모두 지울 때)
+function pluginKeptSettingsClear() {
+    $lock = pluginOpLock(true);
+    $result = pluginKeptSettingsSave(array());
+    pluginOpUnlock($lock);
+    return $result;
+}
+
+// Textcube-NG: r3-42 다시 검사(켜진 플러그인만). 끄지 않고 켜기와 같은 검사(pluginActivationGate)를 거친 뒤, 무결성 기준값을 지우고 지금 파일로 새로 남긴다.
+// Plugins 행·설정은 건드리지 않는다. 결과 메시지(native 경고·거부 사유·엄격 모드 기록 실패)는 activatePlugin 과 같이 $pluginGuardMessage 에 둔다
+function recheckPlugin($name) {
+    global $activePlugins;
+    global $pluginGuardMessage;
+    $pluginGuardMessage = '';
+    if (!is_array($activePlugins) || !in_array($name, $activePlugins)) {
+        return false;
+    }
+    $guard = pluginActivationGate($name);
+    if (!$guard[0]) {
+        $pluginGuardMessage = $guard[1];
+        return false;
+    }
+    $lock = pluginOpLock(true);
+    pluginGuardRemoveBaseline($name);
+    $pluginGuardSaved = false;
+    pluginGuardBuildRecord($name, Acl::check('group.creators') ? 'creator' : 'user', $pluginGuardSaved);
+    $pluginGuardMessage = $guard[1];
+    if (!$pluginGuardSaved && pluginGuardStrictEnabled()) {
+        // 엄격 모드: 기록을 남기지 못하면 적재 때 막힌다(activatePlugin 과 같은 안내)
+        $pluginGuardMessage = ltrim($pluginGuardMessage . "\n" . _t('무결성 기록을 저장하지 못했습니다. 엄격 모드에서는 이 플러그인을 불러오지 않습니다. 끄고 다시 켜 보십시오.'), "\n");
+    }
     clearPluginSettingCache();
-    CacheControl::flushItemsByPlugin($pluginName);
+    CacheControl::flushItemsByPlugin($name);
+    pluginOpUnlock($lock);
     return true;
+}
+
+// Textcube-NG: r3-42 설정 초기화. scope 'active' — 켜진 플러그인의 Plugins.settings 를 NULL 로(기본값) 하고 보관 항목도 지운다. scope 'kept' — 꺼진 플러그인의 보관 설정을 지운다.
+// 범위와 지금 상태가 맞지 않으면(예: 오래된 화면의 [보관 설정 지우기]를 켜진 플러그인에 누름) 아무 것도 하지 않고 실패한다
+function resetPluginConfig($name, $scope) {
+    global $activePlugins;
+    if (!pluginGuardNameIsValid($name)) {
+        return false;
+    }
+    $active = is_array($activePlugins) && in_array($name, $activePlugins);
+    $lock = pluginOpLock(true);
+    $result = false;
+    if ($scope === 'active' && $active) {
+        $pool = DBModel::getInstance();
+        $pool->reset('Plugins');
+        $pool->setQualifier('blogid', 'eq', getBlogId());
+        $pool->setQualifier('name', 'eq', UTF8::lessenAsEncoding($name, 255), true);
+        $pool->setAttribute('settings', null);
+        $result = $pool->update() ? true : false;
+        if ($result) {
+            $result = pluginKeptSettingsRemove($name); // 끌 때 지금 설정이 없으면 보관 항목을 남겨 두므로 초기화는 보관 항목도 지운다
+        }
+        clearPluginSettingCache();
+        CacheControl::flushItemsByPlugin($name);
+    } else if ($scope === 'kept' && !$active) {
+        $result = pluginKeptSettingsRemove($name);
+    }
+    pluginOpUnlock($lock);
+    return $result;
 }
 
 function getCurrentSetting($name) {
@@ -117,7 +444,7 @@ function updatePluginConfig($name, $setVal) {
         return false;
     }
     $pluginName = $name;
-    $name = POD::escapeString(UTF8::lessenAsEncoding($name, 255));
+    $name = UTF8::lessenAsEncoding($name, 255);
     $setting = serialize(Setting::fetchConfigXML($setVal));
     $pool = DBModel::getInstance();
     $pool->reset('Plugins');
@@ -195,7 +522,8 @@ function getPluginInformation($plugin) {
     return null;
 }
 
-function treatPluginTable($plugin, $name, $fields, $keys, $version) {
+// Textcube-NG: $indexes 는 plugins.php 가 읽은 <index> 값들 — 처음 만들 때와 version 이 바뀐 UpdateDB 뒤에 색인을 만든다(createPluginTableIndexes)(v3.210)
+function treatPluginTable($plugin, $name, $fields, $keys, $version, $indexes = array()) {
     global $database;
     if (doesExistTable($database['prefix'] . $name)) {
         $keyname = 'Database_' . $name;
@@ -224,48 +552,223 @@ function treatPluginTable($plugin, $name, $fields, $keys, $version) {
                     $query->update();
                     $eventName = 'UpdateDB_' . $name;
                     fireEvent($eventName, $values[1]);
+                    // Textcube-NG: 플러그인의 UpdateDB 처리(열 추가 등) 뒤, 같은 이름의 색인이 없을 때만 만든다(v3.210)
+                    createPluginTableIndexes($name, $fields, $indexes, true);
                 }
             }
         }
         return true;
     } else {
-        $query = "CREATE TABLE {$database['prefix']}{$name} (blogid int(11) NOT NULL default 0,";
-        $isaiExists = false;
-        $index = '';
-        foreach ($fields as $field) {
-            $ai = '';
-            if (strtolower($field['attribute']) == 'int' || strtolower($field['attribute']) == 'mediumint') {
-                if ($field['autoincrement'] == 1 && !$isaiExists) {
-                    $ai = ' AUTO_INCREMENT ';
+        // Textcube-NG: PostgreSQL·SQLite3·Cubrid 는 DBModel::create() 와 같은 꼴로 만든다 — 아래 원본 CREATE 문(int(11)·AUTO_INCREMENT·KEY()·DEFAULT CHARSET)은 MySQL 전용이라 그 밖에서는 문법 오류였다(v3.210)
+        if (!in_array(POD::dbms(), array('MySQL', 'MySQLi'))) {
+            if (!preg_match('/^[A-Za-z0-9_]+$/', $name)) {
+                return false;
+            }
+            $reserved = POD::reservedFieldNames();
+            if (!is_array($reserved)) {
+                $reserved = array();
+            }
+            $columns = array('blogid ' . POD::fieldType('int') . ' DEFAULT 0 NOT NULL');
+            $isaiExists = false;
+            foreach ($fields as $field) {
+                $attribute = strtolower($field['attribute']);
+                $type = POD::fieldType($attribute);
+                if (is_null($type) || !preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/', $field['name'])) {
+                    return false;
+                }
+                // Textcube-NG: 자동 증가는 MySQL 분기와 같이 'int' 이고 autoincrement 인 첫 필드만 — PostgreSQL 은 SERIAL, Cubrid 는 AUTO_INCREMENT(둘 다 DEFAULT 없이 NOT NULL).
+                // SQLite3 의 AUTOINCREMENT 는 단일 INTEGER PRIMARY KEY 에만 붙으므로 그 열을 기본 키로 하고, (blogid, 키…)는 아래에서 UNIQUE 제약으로 둔다 — 번호는 블로그와 관계없이 표 전체에서 유일하다(v3.210)
+                $ai = ($attribute == 'int' && $field['autoincrement'] == 1 && !$isaiExists);
+                if ($ai) {
+                    if (POD::dbms() == 'PostgreSQL') {
+                        $type = 'SERIAL';
+                    } else if (POD::dbms() == 'Cubrid') {
+                        $type .= ' AUTO_INCREMENT';
+                    } else if (POD::dbms() == 'SQLite3') {
+                        $type = 'INTEGER PRIMARY KEY AUTOINCREMENT';
+                    } else {
+                        return false;
+                    }
                     $isaiExists = true;
-                    if (!in_array($field['name'], $keys)) {
-                        $index = ", KEY({$field['name']})";
+                }
+                if ($field['length'] >= 0 && in_array($attribute, array('varchar', 'vartext'))) {
+                    $type .= '(' . intval($field['length']) . ')';
+                }
+                $column = (in_array($field['name'], $reserved) ? '"' . $field['name'] . '"' : $field['name']) . ' ' . $type;
+                if (!$ai && !is_null($field['default'])) {
+                    if (in_array($attribute, array('integer', 'int', 'timestamp', 'float', 'double'))) {
+                        if (!is_numeric($field['default'])) {
+                            return false;
+                        }
+                        $column .= ' DEFAULT ' . ($field['default'] + 0);
+                    } else {
+                        $column .= " DEFAULT '" . POD::escapeString($field['default']) . "'";
                     }
                 }
+                $column .= ($ai || $field['isnull'] == 0 || in_array($field['name'], $keys)) ? ' NOT NULL' : ' NULL';
+                array_push($columns, $column);
             }
-            $isNull = ($field['isnull'] == 0) ? ' NOT NULL ' : ' NULL ';
-            $noDefaultTypes = ['text','blob','longtext','mediumtext','tinytext','longblob','mediumblob','tinyblob','json'];
-            $hasDefault = !is_null($field['default']) && !in_array(strtolower($field['attribute']), $noDefaultTypes);
-            $defaultValue = $hasDefault ? " DEFAULT '" . POD::escapeString($field['default']) . "' " : '';
-            $fieldLength = ($field['length'] >= 0) ? "(" . $field['length'] . ")" : '';
-            $sentence = $field['name'] . " " . $field['attribute'] . $fieldLength . $isNull . $defaultValue . $ai . ",";
-            $query .= $sentence;
-        }
+            $primaryKeys = array('blogid');
+            foreach ($keys as $key) {
+                if (!preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/', $key)) {
+                    return false;
+                }
+                array_push($primaryKeys, in_array($key, $reserved) ? '"' . $key . '"' : $key);
+            }
+            // Textcube-NG: SQLite3 에서 자동 증가 열이 기본 키가 되었으면 (blogid, 키…)는 UNIQUE 제약 — 키 열은 모두 NOT NULL 이라 같은 묶음의 중복은 기본 키일 때처럼 거부된다(v3.210)
+            $keyConstraint = (POD::dbms() == 'SQLite3' && $isaiExists) ? 'UNIQUE' : 'PRIMARY KEY';
+            $query = "CREATE TABLE {$database['prefix']}{$name} (" . implode(', ', $columns) . ", {$keyConstraint} (" . implode(',', $primaryKeys) . "))";
+        } else {
+            $query = "CREATE TABLE {$database['prefix']}{$name} (blogid int(11) NOT NULL default 0,";
+            $isaiExists = false;
+            $index = '';
+            foreach ($fields as $field) {
+                $ai = '';
+                if (strtolower($field['attribute']) == 'int' || strtolower($field['attribute']) == 'mediumint') {
+                    if ($field['autoincrement'] == 1 && !$isaiExists) {
+                        $ai = ' AUTO_INCREMENT ';
+                        $isaiExists = true;
+                        if (!in_array($field['name'], $keys)) {
+                            $index = ", KEY({$field['name']})";
+                        }
+                    }
+                }
+                $isNull = ($field['isnull'] == 0) ? ' NOT NULL ' : ' NULL ';
+                $noDefaultTypes = ['text','blob','longtext','mediumtext','tinytext','longblob','mediumblob','tinyblob','json'];
+                $hasDefault = !is_null($field['default']) && !in_array(strtolower($field['attribute']), $noDefaultTypes);
+                $defaultValue = $hasDefault ? " DEFAULT '" . POD::escapeString($field['default']) . "' " : '';
+                $fieldLength = ($field['length'] >= 0) ? "(" . $field['length'] . ")" : '';
+                $sentence = $field['name'] . " " . $field['attribute'] . $fieldLength . $isNull . $defaultValue . $ai . ",";
+                $query .= $sentence;
+            }
 
-        array_unshift($keys, 'blogid');
-        $query .= " PRIMARY KEY (" . implode(',', $keys) . ")";
-        $query .= $index;
-        $query .= ") ";
-        $query .= (POD::charset() == 'utf8') ? 'DEFAULT CHARSET=utf8' : '';
+            array_unshift($keys, 'blogid');
+            $query .= " PRIMARY KEY (" . implode(',', $keys) . ")";
+            $query .= $index;
+            $query .= ") ";
+            $query .= (POD::charset() == 'utf8') ? 'DEFAULT CHARSET=utf8' : '';
+        }
         if (POD::execute($query)) {
-            $keyname = POD::escapeString(UTF8::lessenAsEncoding('Database_' . $name, 32));
-            $value = POD::escapeString(UTF8::lessenAsEncoding($plugin . '/' . $version, 255));
-            POD::execute("INSERT INTO {$database['prefix']}ServiceSettings SET name='$keyname', value ='$value'");
+            // Textcube-NG: 등록은 첫 분기와 같은 DBModel 꼴(VALUES·escape=true·Cubrid "value") — 원본 INSERT … SET 은 MySQL 전용. 만든 뒤 테이블 목록을 다시 읽고 색인을 만든다(v3.210)
+            $keyname = UTF8::lessenAsEncoding('Database_' . $name, 32);
+            $value = UTF8::lessenAsEncoding($plugin . '/' . $version, 255);
+            $query = DBModel::getInstance();
+            $query->reset('ServiceSettings');
+            $query->setAttribute('name', $keyname, true);
+            $query->setAttribute('value', $value, true);
+            $query->insert();
+            doesExistTable($database['prefix'] . $name, true);
+            createPluginTableIndexes($name, $fields, $indexes, false);
             return true;
         } else {
             return false;
         }
 
+    }
+    return true;
+}
+
+// Textcube-NG: index.xml <storage><table><index>열,…</index>(여러 개 가능)를 색인 정의로 바꾼다(v3.210). 값은 SQL 에 그대로 넣지 않는다 —
+// 열은 그 표의 <field> 이름(영숫자·밑줄)과 정확히 같은 것만 받고, 정의 안 된 이름·blogid·중복·빈 값이 하나라도 있으면 그 색인을 버린다. blogid 를 맨 앞에 붙인다.
+// 이름은 {접두어}{표 이름}_{열…}_idx(resources/setup/initialize.*.sql 의 색인 이름 관례), _idx 까지 63바이트(PostgreSQL 한도, MySQL 64)를 넘으면 버린다. 반환 array(색인 이름 => array('blogid', 열…))
+function getPluginTableIndexes($name, $fields, $indexes) {
+    global $database;
+    $result = array();
+    if (!is_array($fields) || !is_array($indexes) || !is_string($name) || !preg_match('/^[A-Za-z0-9_]+$/', $name)) {
+        return $result;
+    }
+    $defined = array();
+    foreach ($fields as $field) {
+        if (isset($field['name']) && is_string($field['name']) && preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/', $field['name'])) {
+            array_push($defined, $field['name']);
+        }
+    }
+    foreach ($indexes as $index) {
+        if (!is_string($index)) {
+            continue;
+        }
+        $columns = array();
+        $seen = array();
+        foreach (explode(',', $index) as $column) {
+            $column = trim($column);
+            if (!in_array($column, $defined, true) || strtolower($column) == 'blogid' || in_array(strtolower($column), $seen, true)) {
+                $columns = array();
+                break;
+            }
+            array_push($columns, $column);
+            array_push($seen, strtolower($column));
+        }
+        if (empty($columns)) {
+            continue;
+        }
+        $indexName = $database['prefix'] . $name . '_' . implode('_', $columns) . '_idx';
+        if (strlen($indexName) > 63 || !preg_match('/^[A-Za-z0-9_]+$/', $indexName) || array_key_exists($indexName, $result)) {
+            continue;
+        }
+        $result[$indexName] = array_merge(array('blogid'), $columns);
+    }
+    return $result;
+}
+
+// Textcube-NG: 색인 $indexName 의 열 이름들(없으면 빈 배열, 조회 실패면 null) — interface/blog/checkup.php(v3.185)와 같은 DBMS별 조회(v3.210)
+function getPluginTableIndexColumns($table, $indexName) {
+    $columns = null;
+    switch (POD::dbms()) {
+        case 'MySQL':
+        case 'MySQLi':
+            $rows = POD::queryAll("SHOW INDEX FROM $table WHERE Key_name = '" . POD::escapeString($indexName) . "'", 'assoc');
+            if (is_array($rows)) {
+                $columns = array();
+                foreach ($rows as $row) {
+                    array_push($columns, $row['Column_name']);
+                }
+            }
+            break;
+        case 'PostgreSQL':
+            $columns = POD::queryColumn("SELECT a.attname FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid"
+                . " JOIN pg_namespace n ON n.oid = c.relnamespace JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)"
+                . " WHERE n.nspname = current_schema() AND c.relname = '" . POD::escapeString(strtolower($indexName)) . "'", false);
+            break;
+        case 'SQLite3':
+            $rows = POD::queryAll("PRAGMA index_info('" . POD::escapeString($indexName) . "')", 'assoc');
+            if (is_array($rows)) {
+                $columns = array();
+                foreach ($rows as $row) {
+                    array_push($columns, $row['name']);
+                }
+            }
+            break;
+        case 'Cubrid':
+            $columns = POD::queryColumn("SELECT key_attr_name FROM db_index_key WHERE index_name = '" . POD::escapeString(strtolower($indexName))
+                . "' AND class_name = '" . POD::escapeString(strtolower($table)) . "'", false);
+            break;
+    }
+    return $columns;
+}
+
+// Textcube-NG: getPluginTableIndexes() 의 색인을 CREATE INDEX 이름 ON 테이블 (열…)(4 DBMS 공통 문법)로 만든다(v3.210). $onlyMissing 이면
+// getPluginTableIndexColumns() 로 같은 이름의 색인이 있는지 먼저 보고 없을 때(빈 배열)만 만든다 — 조회에 실패(null)하면 건너뛴다.
+// 예약어 열(Cubrid)은 테이블을 만들 때처럼 "로 감싼다. 색인은 최적화라 만들지 못해도 테이블 처리 결과는 바꾸지 않는다.
+function createPluginTableIndexes($name, $fields, $indexes, $onlyMissing) {
+    global $database;
+    $table = $database['prefix'] . $name;
+    $reserved = POD::reservedFieldNames();
+    if (!is_array($reserved)) {
+        $reserved = array();
+    }
+    foreach (getPluginTableIndexes($name, $fields, $indexes) as $indexName => $columns) {
+        if ($onlyMissing) {
+            $existing = getPluginTableIndexColumns($table, $indexName);
+            if (!is_array($existing) || !empty($existing)) {
+                continue;
+            }
+        }
+        foreach ($columns as $i => $column) {
+            if (in_array($column, $reserved)) {
+                $columns[$i] = '"' . $column . '"';
+            }
+        }
+        POD::execute("CREATE INDEX {$indexName} ON {$table} (" . implode(', ', $columns) . ")");
     }
     return true;
 }
@@ -282,9 +785,123 @@ function deletePluginTable($name) {
     if (getBlogId() !== 0) {
         return false;
     }
+    // Textcube-NG: 이름은 getPluginTableIndexes·treatPluginTable·getPluginTableList 와 같이 영숫자·밑줄만 받고, 아니면 SQL 없이 false — 식별자는 바인딩할 수 없고
+    // escapeString 은 따옴표만 다뤄, 'DROP TABLE' 로 바꾼 뒤 'PTY; DROP TABLE <접두어>Sentinel2' 같은 이름이 PostgreSQL·Cubrid·SQLite3 에서 둘째 문장까지 실행됐다(v3.210)
+    if (!is_string($name) || !preg_match('/^[A-Za-z0-9_]+$/', $name)) {
+        return false;
+    }
     $name = POD::escapeString($name);
-    POD::query("DROP {$database['prefix']}{$name}");
-    return true;
+    // Textcube-NG: 원본은 'DROP 이름'(TABLE 없음)으로 Cubrid 밖에서는 문법 오류였고 결과와 관계없이 true 를 돌려줬다(v3.210)
+    $result = POD::execute("DROP TABLE {$database['prefix']}{$name}");
+    if ($result) {
+        doesExistTable($database['prefix'] . $name, true);
+    }
+    return $result;
+}
+
+// Textcube-NG: 같은 데이터베이스를 쓰는 다른 설치의 코어 테이블로 보이는 이름이면 true — '{접두어}<단어>_<코어 테이블 이름>'(예: tc_ 설치에서 tc_b2_Entries).
+// 코어 이름은 getDefinedTableNames()(common.setting)에서 접두어를 뗀 것, <단어>는 영숫자·밑줄 1자 이상. 플러그인 데이터 관리 화면은 이런 테이블을
+// '다른 설치로 보임'으로 표시만 하고, 삭제(/control/plugin/table/delete)는 같은 판정으로 거부한다(v3.210)
+function isOtherInstallTableName($table, $caseInsensitive) {
+    global $database;
+    requireModel('common.setting');
+    $prefix = $database['prefix'];
+    $table = (string)$table;
+    if (strncmp($table, $prefix, strlen($prefix)) != 0) {
+        return false;
+    }
+    $suffix = (string)substr($table, strlen($prefix));
+    foreach (getDefinedTableNames() as $definedTable) {
+        $core = (string)substr($definedTable, strlen($prefix));
+        if ($core !== '' && preg_match('/^[A-Za-z0-9_]+_' . preg_quote($core, '/') . '$/' . ($caseInsensitive ? 'i' : ''), $suffix)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Textcube-NG: 플러그인이 만든 테이블 목록 — 서비스 관리 '플러그인 데이터 관리'(/control/plugin/table)의 목록과 삭제가 같은 기준을 쓴다(v3.210).
+// 반환 plugins['플러그인/버전'] = array('plugin', 'version', 'settings' => 등록 이름들, 'tables' => 실제 테이블 이름들, 'blogs' => 사용 블로그 수),
+// unknown = 등록과 이어지지 않은 실제 테이블 이름들, others = 다른 설치로 보이는 테이블 이름들(isOtherInstallTableName, 등록과 잇기 전에 뺀다),
+// caseInsensitive = 테이블 이름 대소문자 무시 여부. 테이블은 접두어로 시작하고 나머지가 영숫자·밑줄이며 코어 테이블(getDefinedTableNames)이 아닌 것만.
+// 등록 이름은 treatPluginTable 과 같이 UTF8::lessenAsEncoding('Database_' . 이름, 32)로 잇는다(잘린 이름도 이어진다).
+function getPluginTableList() {
+    global $database;
+    requireModel('common.setting');
+    $prefix = $database['prefix'];
+    if (in_array(POD::dbms(), array('MySQL', 'MySQLi'))) {
+        $result = POD::queryRow("SHOW VARIABLES LIKE 'lower_case_table_names'");
+        $dbCaseInsensitive = (is_array($result) && isset($result['Value']) && $result['Value'] == 1);
+    } else {
+        $dbCaseInsensitive = true;
+    }
+    $definedTables = getDefinedTableNames();
+    if ($dbCaseInsensitive) {
+        $definedTables = array_map('strtolower', $definedTables);
+    }
+    $tables = array();
+    $others = array();
+    foreach (POD::tableList($prefix) as $table) {
+        $table = (string)$table;
+        if (strncmp($table, $prefix, strlen($prefix)) != 0) {
+            continue;
+        }
+        $suffix = (string)substr($table, strlen($prefix));
+        if (!preg_match('/^[A-Za-z0-9_]+$/', $suffix)) {
+            continue;
+        }
+        if (in_array($dbCaseInsensitive ? strtolower($table) : $table, $definedTables)) {
+            continue;
+        }
+        if (isOtherInstallTableName($table, $dbCaseInsensitive)) {
+            array_push($others, $table);
+            continue;
+        }
+        $settingName = UTF8::lessenAsEncoding('Database_' . $suffix, 32);
+        array_push($tables, array($table, $dbCaseInsensitive ? strtolower($settingName) : $settingName));
+    }
+
+    $blogs = array();
+    $query = DBModel::getInstance();
+    $query->reset('Plugins');
+    $rows = $query->getAll('name');
+    if (is_array($rows)) {
+        foreach ($rows as $row) {
+            $blogs[$row['name']] = isset($blogs[$row['name']]) ? $blogs[$row['name']] + 1 : 1;
+        }
+    }
+
+    $plugins = array();
+    $query->reset('ServiceSettings');
+    $query->setQualifier('name', 'like', 'Database', true);
+    $rows = $query->getAll('name,value');
+    if (is_array($rows)) {
+        foreach ($rows as $row) {
+            if (strncmp($row['name'], 'Database_', 9) != 0) {
+                continue;
+            }
+            $values = explode('/', $row['value'], 2);
+            $version = isset($values[1]) ? $values[1] : '';
+            $id = $values[0] . '/' . $version;
+            if (!array_key_exists($id, $plugins)) {
+                $plugins[$id] = array('plugin' => $values[0], 'version' => $version, 'settings' => array(), 'tables' => array(),
+                    'blogs' => isset($blogs[$values[0]]) ? $blogs[$values[0]] : 0);
+            }
+            array_push($plugins[$id]['settings'], $row['name']);
+            $settingName = $dbCaseInsensitive ? strtolower($row['name']) : $row['name'];
+            foreach ($tables as $index => $table) {
+                if ($table[1] === $settingName) {
+                    array_push($plugins[$id]['tables'], $table[0]);
+                    unset($tables[$index]);
+                }
+            }
+        }
+    }
+    $unknown = array();
+    foreach ($tables as $table) {
+        array_push($unknown, $table[0]);
+    }
+    return array('plugins' => $plugins, 'unknown' => $unknown, 'others' => $others, 'caseInsensitive' => $dbCaseInsensitive);
 }
 
 function getPluginTableName() {
@@ -292,11 +909,8 @@ function getPluginTableName() {
 
     global $database;
 
-    $likeEscape = array('/_/', '/%/');
-    $likeReplace = array('\\_', '\\%');
-    $escapename = preg_replace($likeEscape, $likeReplace, $database['prefix']);
-
-    $dbtables = POD::tableList($escapename);
+    // Textcube-NG: tableList() 는 접두어를 글자 그대로 앞에서 비교한다(어댑터 모두 strpos() === 0). 원본은 LIKE 용으로 escape 한 접두어(tc\_)를 넘겨 '_'·'%' 가 든 접두어(기본 tc_)에서 플러그인 테이블이 하나도 맞지 않았다(r3-15)
+    $dbtables = POD::tableList($database['prefix']);
 
     $dbCaseInsensitive = getServiceSetting('lowercaseTableNames');
     if ($dbCaseInsensitive === null) {
@@ -344,6 +958,10 @@ function fireEvent($event, $target = null, $mother = null, $condition = true) {
         return $target;
     }
     foreach ($eventMappings[$event] as $mapping) {
+        // Textcube-NG: include 직전 재검증(이름 규칙·활성 목록·허용 목록·권한·PDO·파일 무결성·엄격 모드)(v3.211)
+        if (!pluginGuardIsLoadable($mapping['plugin'])) {
+            continue;
+        }
         include_once(ROOT . "/plugins/{$mapping['plugin']}/index.php");
         if (function_exists($mapping['listener'])) {
             if (!empty($configMappings[$mapping['plugin']]['config'])) {
@@ -364,6 +982,8 @@ function fireEvent($event, $target = null, $mother = null, $condition = true) {
             if (is_dir($pluginPath . '/locale/')) {
                 $locale = Locales::getInstance();
                 $languageDomain = $locale->domain;
+                // Textcube-NG: setDirectory() 로 바꾼 directory 도 domain 과 함께 되돌린다(common.module.php v3.188 과 같음)(r3-5)
+                $languageDirectory = $locale->directory;
 
                 // Event listener language setting as scope defined.
                 if (strpos($event, "/plugin/") === 0) {
@@ -386,6 +1006,7 @@ function fireEvent($event, $target = null, $mother = null, $condition = true) {
             /// unload.
             if (!is_null($languageDomain)) {
                 $locale->domain = $languageDomain;
+                $locale->directory = $languageDirectory;
             }
             $pluginURL = $pluginPath = $pluginName = "";
             $context->unsetProperty('plugin.uri');
@@ -407,6 +1028,10 @@ function handleTags(& $content) {
             }
             $target = '';
             foreach ($tagMappings[$tag] as $mapping) {
+                // Textcube-NG: include 직전 재검증(v3.211)
+                if (!pluginGuardIsLoadable($mapping['plugin'])) {
+                    continue;
+                }
                 include_once(ROOT . "/plugins/{$mapping['plugin']}/index.php");
                 if (function_exists($mapping['handler'])) {
                     if (!empty($configMappings[$mapping['plugin']]['config'])) {
@@ -427,6 +1052,8 @@ function handleTags(& $content) {
                     if (is_dir($pluginPath . '/locale/')) {
                         $locale = Locales::getInstance();
                         $languageDomain = $locale->domain;
+                        // Textcube-NG: setDirectory() 로 바꾼 directory 도 domain 과 함께 되돌린다(common.module.php v3.188 과 같음)(r3-5)
+                        $languageDirectory = $locale->directory;
                         if (file_exists($pluginPath . '/locale/' . $locale->defaultLanguage . '.php')) {
                             $locale->setDirectory($pluginPath . '/locale');
                             $locale->set($locale->defaultLanguage, $mapping['plugin']);
@@ -436,6 +1063,7 @@ function handleTags(& $content) {
                     $target = call_user_func($mapping['handler'], $target);
                     if (!is_null($languageDomain)) {
                         $locale->domain = $languageDomain;
+                        $locale->directory = $languageDirectory;
                     }
                     $pluginURL = $pluginPath = $pluginName = "";
                     $context->unsetProperty('plugin.uri');
@@ -455,6 +1083,10 @@ function handleCenters($mapping) {
 
     $target = '';
 
+    // Textcube-NG: include 직전 재검증(v3.211)
+    if (!pluginGuardIsLoadable($mapping['plugin'])) {
+        return $target;
+    }
     include_once(ROOT . "/plugins/{$mapping['plugin']}/index.php");
     if (function_exists($mapping['handler'])) {
         if (!empty($configMappings[$mapping['plugin']]['config'])) {
@@ -475,6 +1107,8 @@ function handleCenters($mapping) {
         if (is_dir($pluginPath . '/locale/')) {
             $locale = Locales::getInstance();
             $languageDomain = $locale->domain;
+            // Textcube-NG: setDirectory() 로 바꾼 directory 도 domain 과 함께 되돌린다(common.module.php v3.188 과 같음)(r3-5)
+            $languageDirectory = $locale->directory;
             if (file_exists($pluginPath . '/locale/' . $locale->defaultLanguage . '.php')) {
                 $locale->setDirectory($pluginPath . '/locale');
                 $locale->set($locale->defaultLanguage, $pluginName);
@@ -484,6 +1118,7 @@ function handleCenters($mapping) {
         $target = call_user_func($mapping['handler'], $target);
         if (!is_null($languageDomain)) {
             $locale->domain = $languageDomain;
+            $locale->directory = $languageDirectory;
         }
         $pluginURL = $pluginPath = $pluginName = "";
         $context->unsetProperty('plugin.uri');
@@ -622,6 +1257,8 @@ function handleCoverpages(& $obj, $previewMode = false) {
                         if (is_dir($pluginPath . '/locale/')) {
                             $locale = Locales::getInstance();
                             $languageDomain = $locale->domain;
+                            // Textcube-NG: setDirectory() 로 바꾼 directory 도 domain 과 함께 되돌린다(common.module.php v3.188 과 같음)(r3-5)
+                            $languageDirectory = $locale->directory;
                             if (file_exists($pluginPath . '/locale/' . $locale->defaultLanguage . '.php')) {
                                 $locale->setDirectory($pluginPath . '/locale');
                                 $locale->set($locale->defaultLanguage, $plugin);
@@ -631,6 +1268,7 @@ function handleCoverpages(& $obj, $previewMode = false) {
                         $obj->coverpageStorage["temp_coverpage_element_{$i}_{$j}"] = call_user_func($handler, $parameters);
                         if (!is_null($languageDomain)) {
                             $locale->domain = $languageDomain;
+                            $locale->directory = $languageDirectory;
                         }
                         $pluginURL = $pluginPath = $pluginName = "";
                         $context->unsetProperty('plugin.uri');
@@ -684,6 +1322,8 @@ function handleDataSet($plugin, $DATA) {
             if (is_dir($pluginPath . '/locale/')) {
                 $locale = Locales::getInstance();
                 $languageDomain = $locale->domain;
+                // Textcube-NG: setDirectory() 로 바꾼 directory 도 domain 과 함께 되돌린다(common.module.php v3.188 과 같음)(r3-5)
+                $languageDirectory = $locale->directory;
                 if (file_exists($pluginPath . '/locale/' . $locale->defaultLanguage . '.php')) {
                     $locale->setDirectory($pluginPath . '/locale');
                     $locale->set($locale->defaultLanguage, $pluginName);
@@ -699,6 +1339,7 @@ function handleDataSet($plugin, $DATA) {
             $context->unsetProperty('plugin.config',array());
             if (!is_null($languageDomain)) {
                 $locale->domain = $languageDomain;
+                $locale->directory = $languageDirectory;
             }
         }
         if (true !== $reSetting) {
@@ -754,6 +1395,8 @@ function handleConfig($plugin) {
             if (is_dir($pluginPath . '/locale/')) {
                 $locale = Locales::getInstance();
                 $languageDomain = $locale->domain;
+                // Textcube-NG: setDirectory() 로 바꾼 directory 도 domain 과 함께 되돌린다(common.module.php v3.188 과 같음)(r3-5)
+                $languageDirectory = $locale->directory;
                 if (file_exists($pluginPath . '/locale/' . $locale->defaultLanguage . '.php')) {
                     $locale->setDirectory($pluginPath . '/locale');
                     $locale->set($locale->defaultLanguage, $pluginName);
@@ -773,9 +1416,12 @@ function handleConfig($plugin) {
 
 
                 $manifest = call_user_func($handler, $plugin);
-                if (!is_null($languageDomain)) {
-                    $locale->domain = $languageDomain;
-                }
+            }
+            // Textcube-NG: 플러그인 locale 로드는 function_exists 밖인데 domain 복원은 안에 있어, manifestHandler 함수가 없으면
+            // domain 이 플러그인으로 남아 이후 owner 문구가 번역되지 않았다. 복원을 function_exists 블록 바로 뒤로 옮긴다(v3.187)
+            if (!is_null($languageDomain)) {
+                $locale->domain = $languageDomain;
+                $locale->directory = $languageDirectory;
             }
             $newXmls = new XMLStruct();
             if ($newXmls->open($manifest)) {
@@ -784,7 +1430,8 @@ function handleConfig($plugin) {
             }
             unset($newXmls);
         }
-        if (is_null($config['fieldset'])) {
+        // Textcube-NG: config 노드를 찾지 못해 $config 가 null 이면 'array offset on null' 경고가 났다. 값은 같다(v3.187)
+        if (is_null($config['fieldset'] ?? null)) {
             return array('code' => _t('설정 값이 없습니다.'), 'script' => '[]');
         }
         foreach ($config['fieldset'] as $fieldset) {
@@ -852,7 +1499,8 @@ function treatDefaultValue($value, $default, $allowZero = true) {
 }
 
 function textTreat($cmd, $dfVal, $name) {
-    $dfVal = (!is_null($dfVal[$name])) ? $dfVal[$name] : ((!isset($cmd['.attributes']['value']) || (empty($cmd['.attributes']['value']) && $cmd['.attributes']['value'] !== 0)) ? null : $cmd['.attributes']['value']);
+    // Textcube-NG: 저장된 설정이 없으면 $dfVal 이 null 이라 'array offset on null' 경고가 났다. 값은 같다(v3.187)
+    $dfVal = (!is_null($dfVal[$name] ?? null)) ? $dfVal[$name] : ((!isset($cmd['.attributes']['value']) || (empty($cmd['.attributes']['value']) && $cmd['.attributes']['value'] !== 0)) ? null : $cmd['.attributes']['value']);
     $DSP = TAB . TAB . TAB . TAB . '<input type="text" class="textcontrol" ';
     $DSP .= ' id="' . $name . '" ';
     $DSP .= empty($cmd['.attributes']['size']) ? '' : 'size="' . $cmd['.attributes']['size'] . '"';
@@ -862,7 +1510,8 @@ function textTreat($cmd, $dfVal, $name) {
 }
 
 function textareaTreat($cmd, $dfVal, $name) {
-    $dfVal = (!is_null($dfVal[$name])) ? $dfVal[$name] : ((!isset($cmd['.value']) || (empty($cmd['.value']) && $cmd['.value'] !== 0)) ? null : $cmd['.value']);
+    // Textcube-NG: 저장된 설정이 없으면 $dfVal 이 null 이라 'array offset on null' 경고가 났다. 값은 같다(v3.187)
+    $dfVal = (!is_null($dfVal[$name] ?? null)) ? $dfVal[$name] : ((!isset($cmd['.value']) || (empty($cmd['.value']) && $cmd['.value'] !== 0)) ? null : $cmd['.value']);
     $DSP = TAB . TAB . TAB . TAB . '<textarea class="textareacontrol"';
     $DSP .= ' id="' . $name . '"';
     $DSP .= ' rows="' . ((!isset($cmd['.attributes']['rows']) || (empty($cmd['.attributes']['rows']) && $cmd['.attributes']['rows'] !== 0)) ? '2' : $cmd['.attributes']['rows']) . '"';
@@ -875,9 +1524,9 @@ function textareaTreat($cmd, $dfVal, $name) {
 
 function selectTreat($cmd, $dfVal, $name) {
     $DSP = TAB . TAB . TAB . TAB . '<select id="' . $name . '" class="selectcontrol">' . CRLF;
-    $df = ((!isset($dfVal[$name]) || (empty($dfVal[$name]) && $dfVal[$name] !== 0)) ? null : $dfVal[$name]);
+    $df = ((!isset($dfVal[$name]) || (empty($dfVal[$name]) && $dfVal[$name] != '0')) ? null : $dfVal[$name]);
     foreach ($cmd['op'] as $option) {
-        $ov = ((!isset($option['.attributes']['value']) || (empty($option['.attributes']['value']) && $option['.attributes']['value'] !== 0)) ? null : $option['.attributes']['value']);
+        $ov = ((!isset($option['.attributes']['value']) || (empty($option['.attributes']['value']) && $option['.attributes']['value'] != '0')) ? null : $option['.attributes']['value']);
         $oc = ((!isset($option['.attributes']['checked']) || (empty($option['.attributes']['checked']) && $option['.attributes']['checked'] !== 0)) ? null : $option['.attributes']['checked']);
 
         $DSP .= TAB . TAB . TAB . TAB . TAB . '<option ';

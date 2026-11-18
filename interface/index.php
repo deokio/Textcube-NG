@@ -2,6 +2,14 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 if (isset($_POST['page']))
 	$_GET['page'] = $_POST['page'];
 if (!empty($_POST['mode']) && $_POST['mode'] == 'fb') {
@@ -76,6 +84,7 @@ if(empty($suri['id'])) {  // Without id.
 			define('__TEXTCUBE_LINE__',true);
 			$lineobj = Model_Line::getInstance();
 			$lineobj->reset();
+			$lineobj->setFilter(array('blogid','equals',getBlogId()));	// Textcube-NG: 이 블로그 라인만(멀티블로그에서 다른 블로그 공개 라인이 섞이던 원본 결함, v3.163)
 			$lineobj->setFilter(array('category','equals','public',true));
 			$lineobj->setLimit(20);
 			$lineobj->setOrder('created','desc');

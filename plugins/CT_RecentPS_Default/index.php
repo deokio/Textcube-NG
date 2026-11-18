@@ -60,7 +60,8 @@ function CT_RecentPS_Default($target) {
 	$context = Model_Context::getInstance();
 
 	$target .= '<ol>'.CRLF;
-	$target .= _getRecentEntriesView(_getRecentEntries($context->getProperty('blog.id')),'											<li><a class="edit-link" href="[##_rctps_rep_edit_link_##]" style="background-image: url(\'' . $context->getProperty('plugin.uri','') . '/images/edit.gif\'); background-position: left center; background-repeat: no-repeat; display: block; float: left; height: 12px; margin: 2px 5px 0 0; width: 12px;" title="' . _t('이 포스트를 편집합니다.') . '"><span class="text" style="display: none;">[편집하기]</span></a> <a href="[##_rctps_rep_link_##]" title="' . _t('포스트를 보여줍니다.') . '">[##_rctps_rep_title_##]</a> <span class="cnt">[##_rctps_rep_rp_cnt_##]</span></li>'.CRLF);
+	// Textcube-NG: 위젯 문구는 HTML escape 해서 넣는다(v3.193)
+	$target .= _getRecentEntriesView(_getRecentEntries($context->getProperty('blog.id')),'											<li><a class="edit-link" href="[##_rctps_rep_edit_link_##]" style="background-image: url(\'' . $context->getProperty('plugin.uri','') . '/images/edit.gif\'); background-position: left center; background-repeat: no-repeat; display: block; float: left; height: 12px; margin: 2px 5px 0 0; width: 12px;" title="' . htmlspecialchars(_t('이 포스트를 편집합니다.'), ENT_QUOTES, 'UTF-8') . '"><span class="text" style="display: none;">[편집하기]</span></a> <a href="[##_rctps_rep_link_##]" title="' . htmlspecialchars(_t('포스트를 보여줍니다.'), ENT_QUOTES, 'UTF-8') . '">[##_rctps_rep_title_##]</a> <span class="cnt">[##_rctps_rep_rp_cnt_##]</span></li>'.CRLF);
 	$target .= '										</ol>'.CRLF;
 
 	return $target;

@@ -2,57 +2,18 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
-$IV = array(
-	'POST' => array(
-		'visibility' => array('int', 0, 3),
-		'starred   ' => array('int', 0, 2),
-		'category'   => array('int', 'default' => 0),
-		'title'      => array('string'),
-		'content'    => array('string'),
-		'contentformatter' => array('string'),
-		'contenteditor' => array('string'),
-		'permalink'  => array('string', 'default' => ''),
-		'location'   => array('string', 'default' => '/'),
-		'latitude'   => array('number', 'default' => null, 'min' => -90.0, 'max' => 90.0, 'bypass'=>true),
-		'longitude'   => array('number', 'default' => null, 'min' => -180.0, 'max' => 180.0, 'bypass'=>true),
-		'tag'        => array('string', 'default' => ''),
-		'acceptcomment'   => array(array('0', '1'), 'default' => '0'),
-		'accepttrackback' => array(array('0', '1'), 'default' => '0'),
-		'published'  => array('int', 0, 'default' => 1)
-	)
-);
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
+/* Textcube-NG: 실행 차단(r3-14) — 저장된 글을 고치는 핸들러였으나 부르는 곳이 없다(편집기 저장은 add·draft·finish).
+   원본에서부터 남아 있던 경로이고, 원본은 입력 검사 키 오타('starred   ')로 모든 요청이 404 였다(v3.186 에서 키를 고쳐
+   실행되게 됨). 권한 검사(preprocessor)만 거친 뒤 DB 작업 없이 404 를 돌려준다. framework/boot/30-Auth.php 의
+   '/owner/entry/update*' 항목도 지웠다(표에 없는 /owner 경로는 관리자 이상만 통과). */
 require ROOT . '/library/preprocessor.php';
-requireModel('blog.entry');
-
-requireStrictRoute();
-$updateDraft = 0;
-$entry = getEntry($blogid, $suri['id']);
-if(is_null($entry)) {
-	$entry = getEntry($blogid, $suri['id'],true);
-	$updateDraft = 1;
-}
-if (!is_null($entry)) {
-	$entry['visibility'] = $_POST['visibility'];
-	$entry['starred'] = $_POST['starred'];
-	$entry['category'] = $_POST['category'];
-	$entry['location'] = empty($_POST['location']) ? '/' : $_POST['location'];
-	$entry['latitude'] = empty($_POST['latitude']) ? null : $_POST['latitude'];
-	$entry['longitude'] = empty($_POST['longitude']) ? null : $_POST['longitude'];
-	$entry['tag'] = empty($_POST['tag']) ? '' : $_POST['tag'];
-	$entry['title'] = $_POST['title'];
-	$entry['content'] = $_POST['content'];
-	$entry['contentformatter'] = $_POST['contentformatter'];
-	$entry['contenteditor'] = $_POST['contenteditor'];
-	$entry['slogan'] = $_POST['permalink'];
-	$entry['acceptcomment'] = empty($_POST['acceptcomment']) ? 0 : 1;
-	$entry['accepttrackback'] = empty($_POST['accepttrackback']) ? 0 : 1;
-	$entry['published'] = empty($_POST['published']) ? 0 : $_POST['published'];
-
-	if($id = updateEntry($blogid, $entry, $updateDraft)) {
-		fireEvent('UpdatePost', $id, $entry);
-		setBlogSetting('LatestEditedEntry_user'.getUserId(),$suri['id']);
-		Respond::ResultPage(0);
-	}
-}
-Respond::ResultPage(-1);
+Respond::NotFoundPage();
 ?>

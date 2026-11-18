@@ -4,6 +4,9 @@
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
 
 require ROOT . '/library/preprocessor.php';
+// Textcube-NG: 플러그인 데이터 관리는 서비스 관리 화면(/control/plugin/table)으로 옮겼다(v3.210)
+header("Location: $blogURL/control/plugin/table");
+exit;
 require ROOT . '/interface/common/owner/header.php';
 
 
@@ -13,8 +16,7 @@ if (Acl::check('group.creators')) {
 						<script type="text/javascript">
 							//<![CDATA[
 								function deletePluginTable(name, type) {
-									if(!confirm("<?php echo _t('해당 테이블을 정말 삭제하시겠습니까? 사용중인 플러그인은 자동으로 해제됩니다.');?>"))
-											return;								
+									tcConfirm("<?php echo _t('해당 테이블을 정말 삭제하시겠습니까? 사용중인 플러그인은 자동으로 해제됩니다.');?>", function () {	// Textcube-NG: 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396)
 									var queryURL = "<?php echo $blogURL;?>/owner/plugin/tableSetting/delete";
 									queryURL += '?name=' + encodeURI(name);
 									queryURL += '&type=' + type;
@@ -27,6 +29,7 @@ if (Acl::check('group.creators')) {
 										alert("<?php echo _t('테이블을 지우지 못했습니다.');?>");
 									}
 									request.send();
+									});
 								}
 
 								function changeList() {
@@ -95,6 +98,8 @@ $query = DBModel::getInstance();
 $query->reset('ServiceSettings');
 $query->setQualifier('name','like','Database%',true);
 $plugintablesraw = $query->getAll('name,value');
+// Textcube-NG: DBModel::getAll() 은 쿼리가 실패하면 null 을 돌려준다(POD::queryAll) — foreach(null) 은 원본 5.6 부터 경고(PHP 8: foreach() argument must be of type array|object). 배열이 아니면 빈 배열로 둔다(원본 5.6 결과와 같음)(v3.222)
+if (!is_array($plugintablesraw)) $plugintablesraw = array();
 $plugintables = array();
 foreach($plugintablesraw as $table) {
 	$dbname = $database['prefix'] . substr($table['name'], 9);

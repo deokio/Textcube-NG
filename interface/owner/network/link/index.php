@@ -2,6 +2,14 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 require ROOT . '/library/preprocessor.php';
 requireModel("blog.link");
 
@@ -14,9 +22,8 @@ $tabsClass['list'] = true;
 						<script type="text/javascript">
 							//<![CDATA[
 								function deleteLink(id) {
-									if (!confirm("<?php echo _t('링크를 삭제하시겠습니까?');?>"))
-										return;
-									var request = new HTTPRequest("GET", "<?php echo $blogURL;?>/owner/network/link/delete/" + id);
+									tcConfirm("<?php echo _t('링크를 삭제하시겠습니까?');?>", function () {	// Textcube-NG: 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396)
+									var request = new HTTPRequest("POST", "<?php echo $blogURL;?>/owner/network/link/delete/" + id);
 									request.onSuccess = function () {
 										PM.removeRequest(this);
 										PM.showMessage("<?php echo _t('링크가 삭제되었습니다.');?>", "center", "bottom");
@@ -33,6 +40,7 @@ $tabsClass['list'] = true;
 									}
 									PM.addRequest(request, "<?php echo _t('링크를 삭제하고 있습니다.');?>");
 									request.send();
+									});
 								}
 								
 								function setLinkVisibility(id, command) {

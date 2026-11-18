@@ -118,7 +118,9 @@ class Paging {
 		$paging['total'] = POD::queryCell("SELECT COUNT(*) $from");
 		if ($paging['total'] === null)
 			return array(array(), $paging);
-		if (empty($count)) $count = 1;
+		// [보안] $count·$countItem 은 LIMIT 절에 그대로 들어가므로 정수로 강제(위젯 매개변수 등 호출자 값이 문자열일 수 있음)
+		$count = (int)$count;
+		if ($count < 1) $count = 1;
 		$paging['pages'] = intval(ceil($paging['total'] / $count));
 		$paging['page'] = is_numeric($page) ? $page : 1;
 		if ($paging['page'] > $paging['pages']) {
@@ -132,7 +134,7 @@ class Paging {
 			$paging['next'] = $paging['page'] + 1;
 		$offset = ($paging['page'] - 1) * $count;
 		if ($offset < 0) $offset = 0;
-		if ($countItem !== null) $count = $countItem;
+		if ($countItem !== null) $count = (int)$countItem;
 		return array(POD::queryAll("$sql LIMIT $count OFFSET $offset"), $paging);
 	}
 	/** Legacy methods **/

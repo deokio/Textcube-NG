@@ -64,7 +64,7 @@ class Autoload_Legacy {
 			'Session','RSS');
 	}		
 	public function load($name) {
-		global $service, $database;
+		global $service, $database, $memcache;
 		$name = ucfirst($name);
 		if(!isset($this->data)) {
 			$this->initialize();	
@@ -82,7 +82,8 @@ class Autoload_Legacy {
 		} else if (in_array($name,$this->openid)) {
 			require_once(ROOT . "/framework/legacy/Textcube.Control.Openid.php");
 		} else if (in_array($name,$this->control)) {
-			if($name == 'Session' && isset($service['memcached']) && $service['memcached'] == true) 
+			// Textcube-NG: memcached 연결에 실패한 요청(preprocessor.php 가 $memcache 를 null 로 둠)은 DB 세션을 쓴다(r3-21, R-444)
+			if($name == 'Session' && isset($service['memcached']) && $service['memcached'] == true && isset($memcache) && is_object($memcache)) 
 				require_once(ROOT . "/framework/legacy/Textcube.Control.".$name.".Memcached.php");
 			else require_once(ROOT . "/framework/legacy/Textcube.Control.".$name.".php");
 		} else if (in_array($name,array('Syndication'))) {

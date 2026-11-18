@@ -38,6 +38,11 @@ if (getBlogId()) {
 
 	$pluginSettings = $pageCache->contents;
 	$context = Model_Context::getInstance();
+	// Textcube-NG: 플러그인 안전 검사(적재 재검증·파일 무결성·허용 목록·PDO·엄격 모드). 결과 묶음값을 바인딩 캐시 판단에 넣는다(v3.211)
+	require_once ROOT . '/library/model/common.plugin.guard.php';
+	$pluginGuardKey = pluginGuardEvaluate($activePlugins);
+	// Textcube-NG: 막힌 플러그인이 바뀌었을 때만 대시보드 알림(블로그 설정 pgn_notices)에 남긴다(v3.219)
+	pluginNoticeSync($pluginGuardBlocked);
 
 	$storageList = array('activePlugins','eventMappings','tagMappings',
 		'coverpageMappings','centerMappings',//'storageMappings','storageKeymappings',
@@ -54,7 +59,7 @@ if (getBlogId()) {
 		$dbActive = (array)$activePlugins;
 		sort($cachedActive);
 		sort($dbActive);
-		if ($cachedActive !== $dbActive) {
+		if ($cachedActive !== $dbActive || (string)($p['_guardKey'] ?? '') !== $pluginGuardKey) { // Textcube-NG: 검사 결과가 바뀌면 다시 바인딩(v3.211)
 			$pageCache->purge();
 			$p = array();
 		} else {
@@ -90,8 +95,10 @@ if (getBlogId()) {
 				// TODO : set the editor / formatter count while using plugin php cache.
 			} else {
 				foreach ($activePlugins as $plugin) {
+					if (!pluginGuardIsLoadable($plugin)) continue; // Textcube-NG: 막힌 플러그인은 바인딩하지 않는다(Plugins 행은 유지)(v3.211)
 					$version = '';
 					$disablePlugin= false;
+					$disableReason = 'version'; // Textcube-NG: 자동 꺼짐 사유(대시보드 알림 version·manifest)(v3.219)
 					$manifest = @file_get_contents(ROOT . "/plugins/$plugin/index.xml");
 					if ($manifest && $xmls->open($manifest)) {
 						$requiredTattertoolsVersion = $xmls->getValue('/plugin/requirements/tattertools');
@@ -149,10 +156,20 @@ if (getBlogId()) {
 											array_push($storageKeymappings, $key['.value']);
 										}
 									}
-									treatPluginTable($plugin, $tableName, $storageMappings, $storageKeymappings, $version);
+									// Textcube-NG: <index>열,…</index>(여러 개 가능) — 열 검사·blogid 앞붙임·CREATE INDEX 는 treatPluginTable(common.plugin)이 한다(v3.210)
+									$storageIndexmappings = array();
+									if (!empty($table['index'][0]['.value'])) {
+										foreach($table['index'] as $tableIndex) {
+											if (isset($tableIndex['.value'])) {
+												array_push($storageIndexmappings, $tableIndex['.value']);
+											}
+										}
+									}
+									treatPluginTable($plugin, $tableName, $storageMappings, $storageKeymappings, $version, $storageIndexmappings);
 									unset($tableName);
 									unset($storageMappings);
 									unset($storageKeymappings);
+									unset($storageIndexmappings);
 								}
 							}
 							if ($xmls->doesExist('/plugin/binding/listener')) {
@@ -255,6 +272,7 @@ if (getBlogId()) {
 												case 'skin':
 												case 'plugin':
 												case 'setting':
+												case 'control':	// Textcube-NG: 서비스 관리(/control) 메뉴에 붙는 플러그인 관리 화면 (v3.206)
 													break;
 												default:
 													$pluginTopMenuLocation = 'plugin';
@@ -296,7 +314,8 @@ if (getBlogId()) {
 											'params'   => $params,
 											'helpurl'  => $menuhelpurl,
 											'topMenu'  => $pluginTopMenuLocation,
-											'contentMenuOrder' => $pluginContentMenuOrder
+											'contentMenuOrder' => $pluginContentMenuOrder,
+											'privilege' => $xmls->getValue('/plugin/requirements/privilege')	// Textcube-NG: 서비스 관리자 전용 메뉴 구분 (v3.151)
 										);
 									}
 								}
@@ -388,14 +407,18 @@ if (getBlogId()) {
 						}
 					} else {
 						$disablePlugin = true;
+						$disableReason = 'manifest';
 					}
 					
 					if ($disablePlugin == true) {
-						deactivatePlugin($plugin);
+						// Textcube-NG: 자동으로 끈 플러그인을 대시보드 알림에 남긴다(v3.219)
+						if (deactivatePlugin($plugin)) {
+							pluginNoticeRecordDisable($plugin, $disableReason);
+						}
 					}
 				}
 				unset($xmls);
-				unset($currentTextcubeVersion, $disablePlugin, $plugin, $query, $requiredTattertoolsVersion, $requiredTextcubeVersion);
+				unset($currentTextcubeVersion, $disablePlugin, $disableReason, $plugin, $query, $requiredTattertoolsVersion, $requiredTextcubeVersion);
 			}
 		}
 		foreach ($storageList as $s) {
@@ -407,10 +430,12 @@ if (getBlogId()) {
 			if (file_exists($_xmlFile)) $maxXmlMtime = max($maxXmlMtime, (int)filemtime($_xmlFile));
 		}
 		$p['_xmlMtime'] = $maxXmlMtime;
+		$p['_guardKey'] = $pluginGuardKey; // Textcube-NG: 안전 검사 결과 묶음값(v3.211)
 		unset($maxXmlMtime, $_plugin, $_xmlFile);
 		$pageCache->contents = serialize($p);
 		$pageCache->update();
 	}
+	pluginGuardFilterMappings(); // Textcube-NG: 캐시·코드 캐시에서 복원한 매핑에서도 막힌 플러그인을 뺀다(v3.211)
 	if(!array_key_exists('ttml',$formatterMappings)) { // Any formatter is used, add the ttml formatter.
 		activatePlugin('FM_TTML');
 	}

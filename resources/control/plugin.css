@@ -44,6 +44,8 @@
 	background-color                 : #F9F9F9;
 	padding-left                     : 10px;
 	position                         : static;
+	float                            : none;	/* Textcube-NG: undo the float:left and clear:left that basic.css dl dt has had since r3-1 (R-164), so the plugin title row spans the full width again as in the original (r3-16) */
+	clear                            : none;
 }
 
 #part-plugin-list fieldset dl dd

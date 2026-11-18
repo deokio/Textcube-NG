@@ -2,6 +2,14 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 
 final class Model_Config extends Singleton {
 	public $database, $service, $memcached;
@@ -21,14 +29,19 @@ final class Model_Config extends Singleton {
 		if (file_exists(ROOT.'/framework/id/load')) $id = trim(file_get_contents(ROOT.'/framework/id/load'));
 		require_once(ROOT.'/framework/id/'.$id.'/config.default.php');	// Loading default configuration
 		if (file_exists(__TEXTCUBE_CONFIG_FILE__)) @include(__TEXTCUBE_CONFIG_FILE__);	// Override configuration
+		// Textcube-NG: Host 헤더 검사 — config.php 에 적은 포트(요청 포트로 덮어쓰기 전)를 남긴다(v3.205)
+		$service['configuredPort'] = isset($service['port']) ? $service['port'] : null;
 		// Map port setting.
-		if (@is_numeric($_SERVER['SERVER_PORT']) && ($_SERVER['SERVER_PORT'] != 80) && ($_SERVER['SERVER_PORT'] != 443))
+		// Textcube-NG: Host 헤더 검사 — useConfigPort 가 켜져 있고 config.php 에 포트를 적었으면 요청 포트로 덮어쓰지 않는다(v3.205)
+		if (@is_numeric($_SERVER['SERVER_PORT']) && ($_SERVER['SERVER_PORT'] != 80) && ($_SERVER['SERVER_PORT'] != 443) && !(!empty($service['useConfigPort']) && !empty($service['configuredPort'])))
 			$service['port'] = $_SERVER['SERVER_PORT'];
 		
 		// Include installation configuration.
 		if(!isset($service['session_cookie_path'])) $service['session_cookie_path'] = '/';
 		// Set service path.
-		if(isset($serviceURL)) $service['serviceURL'] = $serviceURL;
+		// Textcube-NG: 빈 값('')은 서비스 주소를 강제 지정하지 않은 것(자동)으로 본다. 서비스 설정 화면에서 비워 저장하면 '' 로 기록되는데
+		// 그대로 쓰면 스킨·피드 등의 주소가 호스트 없는 경로가 된다(v3.139)
+		if(isset($serviceURL) && $serviceURL !== '') $service['serviceURL'] = $serviceURL;
 		// Set resource path.
 		if($service['externalresources']) {
 			if(isset($service['resourceURL']) && !empty($service['resourceURL'])) 
@@ -52,6 +65,8 @@ final class Model_Config extends Singleton {
 		}
 		if ($service['session_cookie_domain'] == 'localhost')
 			$service['session_cookie_domain'] = null;
+		// Textcube-NG: Host 헤더 검사 — IPv6 주소 Host([…])는 쿠키 domain 속성에 쓸 수 없으므로 지정하지 않는다(v3.205)
+		if (substr($_SERVER['HTTP_HOST'], 0, 1) === '[') $service['session_cookie_domain'] = null;
 
 		$this->database = $database;
 		$this->service = $service;

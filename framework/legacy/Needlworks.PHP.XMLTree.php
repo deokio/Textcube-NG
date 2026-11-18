@@ -30,11 +30,11 @@ class XMLTree {
 				$xml = substr($xml, 3);
 		}
 		$p = xml_parser_create();
-		xml_set_object($p, $this);
+		// PHP 8.4: xml_set_object() 및 메서드명 문자열 핸들러 deprecated → 메서드 Closure 를 직접 등록
 		xml_parser_set_option($p, XML_OPTION_CASE_FOLDING, 0);
-		xml_set_element_handler($p, 'o', 'c');
-		xml_set_character_data_handler($p, 'd');
-		xml_set_default_handler($p, 'x');
+		xml_set_element_handler($p, Closure::fromCallable(array($this, 'o')), Closure::fromCallable(array($this, 'c')));
+		xml_set_character_data_handler($p, Closure::fromCallable(array($this, 'd')));
+		xml_set_default_handler($p, Closure::fromCallable(array($this, 'x')));
 		$this->tree = array('children' => array());
 		$this->_cursor = &$this->tree;
 		$this->_cdata = false;
@@ -42,7 +42,6 @@ class XMLTree {
 		unset($this->_cursor);
 		unset($this->_cdata);
 		$this->error = xml_get_error_code($p);
-		xml_parser_free($p);
 		return ($this->error == XML_ERROR_NONE);
 	}
 	

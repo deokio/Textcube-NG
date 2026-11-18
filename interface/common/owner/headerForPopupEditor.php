@@ -59,6 +59,8 @@ unset($tempPluginDir);
 		//<![CDATA[
 			var servicePath = "<?php echo $service['path'];?>";
 			var blogURL = "<?php echo $blogURL;?>";
+			var csrfToken = "<?php echo getCSRFToken();?>";	// Textcube-NG: CSRF 토큰 — EAF4.js 가 같은 출처 XHR(GET·HEAD 외)·POST 폼에 붙인다(v3.147)
+			var ngForbiddenNotice = "<?php echo escapeJSInCData(_t('서버가 요청을 거부했습니다(HTTP 403). 웹 방화벽(mod_security 등)이 보낸 내용을 공격으로 판단했을 수 있습니다. 서버 관리자에게 알리거나 documents/setup_modsecurity.txt 4.9절을 참고하십시오.'));?>";	// Textcube-NG: EAF4.js 가 관리 요청의 403 응답에 띄우는 안내(r3-14)
 			var adminSkin = "<?php echo $adminSkinSetting['skin'];?>";
 <?php
 if (file_exists(ROOT.$adminSkinSetting['editorTemplate'])) {
@@ -75,12 +77,12 @@ include ROOT . '/resources/locale/messages.php';
 ?>
 		//]]>
 	</script>
-	<script type="text/javascript" src="<?php echo $service['path'];?>/resources/locale/messages.php"></script>
+<?php // Textcube-NG: messages.php 는 위 include 로 이미 출력된다. 직접 요청은 .htaccess 에서 403 이라 <script src> 를 지움(v3.192) ?>
 	<script type="text/javascript" src="<?php echo $service['path'];?>/resources/script/byTextcube.js"></script>
 	<script type="text/javascript" src="<?php echo $service['path'];?>/resources/script/jquery/jquery-<?php echo JQUERY_VERSION;?>.js"></script>
 	<script type="text/javascript">jQuery.noConflict();</script>
-	<script type="text/javascript" src="<?php echo $service['path'];?>/resources/script/EAF4.js"></script>
-	<script type="text/javascript" src="<?php echo $service['path'];?>/resources/script/common3.js"></script>
+	<script type="text/javascript" src="<?php echo $service['path'];?>/resources/script/EAF4.js?v=<?php echo filemtime(ROOT . '/resources/script/EAF4.js');?>"></script>
+	<script type="text/javascript" src="<?php echo $service['path'];?>/resources/script/common3.js?v=<?php echo filemtime(ROOT . '/resources/script/common3.js');?>"></script>
 	<script type="text/javascript" src="<?php echo $service['path'];?>/resources/script/gallery.js"></script>
 	<script type="text/javascript" src="<?php echo $service['path'];?>/resources/script/owner.js"></script>
 	<script type="text/javascript" src="<?php echo $service['path'];?>/resources/script/editor3.js"></script> 

@@ -2,6 +2,14 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 
 /***** Automatic menu location routine. *****/
 $blogMenu = array();
@@ -17,8 +25,9 @@ if(isset($urlFragments[2])&&strncmp($urlFragments[2],'adminMenu',9) == 0) {
 	} else {
 		$plugin = isset($_GET['name']) ? $_GET['name'] : '';
 	}
-	$pluginDir = strtok($plugin,'/');
-	$blogMenu['topMenu'] = $adminMenuMappings[$plugin]['topMenu'];
+	// Textcube-NG: name 이 배열이면 PHP 8 에서 strtok() 가 TypeError(원본 5.6 은 경고 뒤 null) — 문자열이 아니면 원본 5.6 결과(null)와 같게 둔다. 없는 이름도 경고 없이 null (v3.221)
+	$pluginDir = is_string($plugin) ? strtok($plugin,'/') : null;
+	$blogMenu['topMenu'] = (is_string($plugin) && isset($adminMenuMappings[$plugin]['topMenu'])) ? $adminMenuMappings[$plugin]['topMenu'] : null;
 }
 
 if($urlFragments[0] == 'control' && Acl::check('group.creators')) {
@@ -121,7 +130,7 @@ if ($blogMenu['topMenu'] == 'center' && $blogMenu['contentMenu'] == 'dashboard')
 			array_push($pluginListForCSS, $tempPlugin['plugin']);
 		}
 	}
-} else if (isset($pluginDir)) {
+} else if (isset($pluginDir) && isset($adminMenuMappings[$plugin])) {
 	array_push($pluginListForCSS, $pluginDir);
 }
 unset($tempPlugin);
@@ -206,7 +215,7 @@ if(isset($blogMenu['topMenu'])) {
 		$blogContentMenuItem['plugin'] = array(
 			array('menu'=>'plugin','title'=>_t('플러그인 목록'),'link'=>'/owner/plugin')
 		);
-		if(Acl::check('group.creators')) array_push($blogContentMenuItem['plugin'], array('menu'=>'tableSetting','title'=>_t('플러그인 데이터 관리'),'link'=>'/owner/plugin/tableSetting'));
+		// Textcube-NG: '플러그인 데이터 관리'는 서비스 관리(/control/plugin/table)로 옮겼다(v3.210)
 	}
 	if(Acl::check('group.administrators')) {
 		$blogContentMenuItem['setting'] = array(
@@ -225,6 +234,8 @@ if(isset($blogMenu['topMenu'])) {
 			array('menu'=>'blog','title'=>_t('블로그'),'link'=>'/control/blog'),
 			array('menu'=>'user','title'=>_t('사용자'),'link'=>'/control/user'),
 			array('menu'=>'server','title'=>_t('서버'),'link'=>'/control/server'),
+			array('menu'=>'plugin','title'=>_t('플러그인'),'link'=>'/control/plugin'), // Textcube-NG: 플러그인 허용 목록·엄격 모드(v3.211)
+			array('menu'=>'table','title'=>_t('플러그인 데이터 관리'),'link'=>'/control/plugin/table'),	// Textcube-NG: 옛 /owner/plugin/tableSetting(v3.210)
 			array('menu'=>'system','title'=>_t('시스템 정보'),'link'=>'/control/system')
 		);
 	}
@@ -236,6 +247,8 @@ if( empty($blogContentMenuItem) ) {
 }
 
 foreach($adminMenuMappings as $path => $pluginAdminMenuitem) {
+	// Textcube-NG: 서비스 관리자 전용 플러그인(<privilege>administrator</privilege>)의 메뉴는 서비스 관리자에게만 (v3.151)
+	if(isset($pluginAdminMenuitem['privilege']) && $pluginAdminMenuitem['privilege'] == 'administrator' && !Acl::check('group.creators')) continue;
 	if(isset($blogContentMenuItem[$pluginAdminMenuitem['topMenu']])) {
 		if(count($blogContentMenuItem[$pluginAdminMenuitem['topMenu']]) < $pluginAdminMenuitem['contentMenuOrder']
 		  || $pluginAdminMenuitem['contentMenuOrder'] < 1)
@@ -312,11 +325,16 @@ unset($tempPluginDir);
 	<![endif]-->
 	<script type="text/javascript">
 		//<![CDATA[
-			var servicePath = "<?php echo $service['path'];?>";
-			var blogURL = "<?php echo $blogURL;?>";
-			var adminSkin = "<?php echo $adminSkinSetting['skin'];?>";
-			var displayMode = "<?php echo $context->getProperty('blog.displaymode','desktop');?>";
-			var workMode = "<?php echo $context->getProperty('blog.workmode','enhanced');?>";
+<?php
+	// Textcube-NG: servicePath·blogURL·adminSkin·displayMode·workMode 를 json_encode() 로 JS 문자열 escape(v3.181 view.php 와 같은 방식). 원본처럼 JS 문자열로 나간다(r3-3)
+?>
+			var servicePath = <?php echo json_encode((string)$service['path'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?: '""';?>;
+			var blogURL = <?php echo json_encode((string)$blogURL, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?: '""';?>;
+			var csrfToken = "<?php echo getCSRFToken();?>";	// Textcube-NG: CSRF 토큰 — EAF4.js 가 같은 출처 XHR(GET·HEAD 외)·POST 폼에 붙인다(v3.147)
+			var ngForbiddenNotice = "<?php echo escapeJSInCData(_t('서버가 요청을 거부했습니다(HTTP 403). 웹 방화벽(mod_security 등)이 보낸 내용을 공격으로 판단했을 수 있습니다. 서버 관리자에게 알리거나 documents/setup_modsecurity.txt 4.9절을 참고하십시오.'));?>";	// Textcube-NG: EAF4.js 가 관리 요청의 403 응답에 띄우는 안내(r3-14)
+			var adminSkin = <?php echo json_encode((string)$adminSkinSetting['skin'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?: '""';?>;
+			var displayMode = <?php echo json_encode((string)$context->getProperty('blog.displaymode','desktop'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?: '""';?>;
+			var workMode = <?php echo json_encode((string)$context->getProperty('blog.workmode','enhanced'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?: '""';?>;
 <?php
 if (in_array($blogMenu['contentMenu'],array('post','edit'))) {
 	if(file_exists(ROOT.$adminSkinSetting['editorTemplate'])) {
@@ -335,17 +353,17 @@ include ROOT . '/resources/locale/messages.php';
 	</script>
 	<script type="text/javascript" src="<?php echo $service['path'];?>/resources/script/byTextcube.js"></script>
 	<script type="text/javascript" src="<?php echo $service['path'];?>/resources/script/jquery/jquery-<?php echo JQUERY_VERSION;?>.js"></script>
-	<script type="text/javascript" src="<?php echo  $context->getProperty('service.path');?>/resources/script/jquery/jquery.bpopup-<?php echo JQUERY_BPOPUP_VERSION;?>.js"></script>
+	<script type="text/javascript" src="<?php echo  $context->getProperty('service.path');?>/resources/script/jquery/jquery.bpopup-<?php echo JQUERY_BPOPUP_VERSION;?>.js?v=<?php echo filemtime(ROOT . '/resources/script/jquery/jquery.bpopup-' . JQUERY_BPOPUP_VERSION . '.js');?>"></script>
 	<script type="text/javascript">jQuery.noConflict();</script>
-	<script type="text/javascript" src="<?php echo $service['path'];?>/resources/script/EAF4.js"></script>
-	<script type="text/javascript" src="<?php echo $service['path'];?>/resources/script/common3.js"></script>
+	<script type="text/javascript" src="<?php echo $service['path'];?>/resources/script/EAF4.js?v=<?php echo filemtime(ROOT . '/resources/script/EAF4.js');?>"></script>
+	<script type="text/javascript" src="<?php echo $service['path'];?>/resources/script/common3.js?v=<?php echo filemtime(ROOT . '/resources/script/common3.js');?>"></script>
 	<script type="text/javascript" src="<?php echo $service['path'];?>/resources/script/owner.js"></script>
-	<script type="text/javascript" src="<?php echo $service['path'];?>/resources/script/orphan-check.js"></script>
+	<script type="text/javascript" src="<?php echo $service['path'];?>/resources/script/orphan-check.js?v=<?php echo filemtime(ROOT . '/resources/script/orphan-check.js');?>"></script>
 <?php
 if(!in_array($blogMenu['contentMenu'],array('post','edit'))) {
+	// PHP port(Textcube-NG): MOOdalBox 는 jQuery 로 동작 — MooTools 1.0(mootools10.js) 로드 제거
 ?>
-	<script type="text/javascript" src="<?php echo $service['path'];?>/resources/script/mootools10.js"></script>
-	<script type="text/javascript" src="<?php echo $service['path'];?>/resources/script/moodalbox/moodalbox.js"></script>
+	<script type="text/javascript" src="<?php echo $service['path'];?>/resources/script/moodalbox/moodalbox.js?v=<?php echo filemtime(ROOT . '/resources/script/moodalbox/moodalbox.js');?>"></script>
 	<link rel="stylesheet" href="<?php echo $service['path'];?>/resources/style/helper/moodalbox.css" type="text/css" media="screen" />
 <?php
 }
@@ -354,13 +372,7 @@ if (file_exists(ROOT . $context->getProperty('panel.skin')."/custom.js")) {
 	<script type="text/javascript" src="<?php echo $context->getProperty('service.path').$context->getProperty('panel.skin');?>/custom.js"></script>
 <?php
 }
-if($service['interface'] == 'simple') {
-	if(!in_array($blogMenu['contentMenu'],array('post','edit'))) {
-?>
-	<script type="text/javascript" src="<?php echo $service['path'];?>/resources/script/mootools.js"></script>
-<?php
-	}
-}
+// PHP port(Textcube-NG): simple 모드 접는 패널(library/model/blog.fx.php)은 jQuery slideDown 으로 동작하므로 MooTools 1.2b2(mootools.js)를 싣지 않음
 if( isset($service['admin_script']) ) {
 	if( is_array($service['admin_script']) ) {
 		foreach( $service['admin_script'] as $src ) {
@@ -415,7 +427,8 @@ $writer = POD::queryCell("SELECT name FROM {$database['prefix']}Users WHERE user
 <?php if(Acl::check('group.creators')) { ?>
 						<li id="action-move-to-control-panel"><a href="<?php echo $blogURL.'/control';?>" title="<?php echo _t('관리 패널로 이동합니다.');?>"><span class="text"><?php echo _t('텍스트큐브 관리');?></span></a></li>
 <?php } ?>
-						<li id="action-helper"><a href="<?php echo getHelpURL($helpURL);?>" onclick="window.open(this.href); return false;"><span class="text"><?php echo _t('도우미');?></span></a></li>
+<?php // Textcube-NG: 도우미 링크 href 는 getHelpURL() 값(service.helpURL 설정을 쓸 수 있음)을 htmlspecialchars(ENT_QUOTES | ENT_SUBSTITUTE) 로 escape 해서 출력한다(v3.220) ?>
+						<li id="action-helper"><a href="<?php echo htmlspecialchars(getHelpURL($helpURL), ENT_QUOTES | ENT_SUBSTITUTE);?>" onclick="window.open(this.href); return false;"><span class="text"><?php echo _t('도우미');?></span></a></li>
 						<li id="action-move-to-blog"><a href="<?php echo $blogURL;?>/" title="<?php echo _t('블로그 메인으로 이동합니다.');?>"><span class="text"><?php echo _t('블로그로 이동');?></span></a></li>
 						<li id="action-logout"><a href="<?php echo $blogURL;?>/logout" title="<?php echo _t('로그아웃하고 블로그 메인으로 이동합니다.');?>"><span class="text"><?php echo _t('로그아웃');?></span></a></li>
 					</ul>

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<plugin version="1.0">
+  <title xml:lang="ko">소셜 로그인</title>
+  <title xml:lang="en">Social Login</title>
+  <link>http://www.textcube.org/</link>
+  <version>1.0</version>
+  <description xml:lang="ko"><![CDATA[카카오·네이버·페이스북 등 소셜 OAuth 로그인을 지원합니다. 기본 비활성 — 플러그인 활성화 후, 설정에서 사용할 프로바이더를 켜고 Client ID/Secret 을 입력해야 동작합니다. 관리자/구성원 로그인과 게스트 댓글 작성자 신원에 사용됩니다. 계정 연결은 명시적 연결만 지원합니다(자동 계정생성 없음).]]></description>
+  <description xml:lang="en"><![CDATA[Social OAuth login (Kakao/Naver/Facebook and more). Disabled by default — after activating the plugin, enable a provider and enter its Client ID/Secret in settings. Used for owner/member login and guest comment identity. Account mapping is explicit-link only (no auto account creation).]]></description>
+  <license>GPL</license>
+  <author xml:lang="ko" link="http://deok.io/"><![CDATA[@deokio]]></author>
+  <author xml:lang="en" link="http://deok.io/">@deokio</author>
+  <safety changeData="yes" exposeData="no" accessLocal="yes" accessRemote="yes" accessRaw="no" />
+  <scope>blog</scope>
+  <requirements>
+    <textcube>
+      <minVersion>1.8</minVersion>
+    </textcube>
+  </requirements>
+  <binding>
+    <listener event="LOGIN_add_form" handler="CL_SocialLogin_LoginForm" />
+    <listener event="ViewCommenter" handler="CL_SocialLogin_ViewCommenter" />
+    <listener event="ViewGuestCommenter" handler="CL_SocialLogin_ViewCommenter" />
+    <listener event="ViewCommentGuestForm" handler="CL_SocialLogin_CommentGuestForm" />
+    <listener event="ViewCommentOpenIDOnlyForm" handler="CL_SocialLogin_CommentForm" />
+    <tag name="SocialLogin" handler="CL_SocialLogin_LoginTag" />
+
+    <config manifestHandler="CL_SocialLogin_ConfigHandler" />
+  </binding>
+</plugin>

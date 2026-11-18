@@ -67,6 +67,13 @@ class Misc {
 					return 'image/tiff';
 				case 'bmp':
 					return 'image/bmp';
+				// Textcube-NG: webp·avif·svg(r3-20)
+				case 'webp':
+					return 'image/webp';
+				case 'avif':
+					return 'image/avif';
+				case 'svg':
+					return 'image/svg+xml';
 				// Sound
 				case 'wav':
 					return 'audio/x-wav';
@@ -233,7 +240,7 @@ class Misc {
 	}
 	
 	static function escapeJSInAttribute($str) {
-		return htmlspecialchars(str_replace(array('\\', '\r', '\n', '\''), array('\\\\', '\\r', '\\n', '\\\''), $str));
+		return htmlspecialchars(str_replace(array('\\', "\r", "\n", '\''), array('\\\\', '\\r', '\\n', '\\\''), $str));
 	}
 
 	static function escapeCData($str) {
@@ -282,7 +289,7 @@ class Misc {
 	}
 
 	static function removeBlogSettingGlobal($name, $blogid = null) {
-		return Setting::removeBlogSettingsGlobal($name, $blogid);
+		return Setting::removeBlogSettingGlobal($name, $blogid);	// Textcube-NG: r3-44 R-579 없는 메서드 removeBlogSettingsGlobal(오타)을 부르던 것을 같은 이름의 Setting 메서드로 바로잡음
 	}
 
 	// For plugin-specific use.

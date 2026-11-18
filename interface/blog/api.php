@@ -2,7 +2,18 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 define('__TEXTCUBE_LOGIN__',true);
+// [보안] XML-RPC 는 호출마다 인증하므로 세션을 사용하지 않음(원본은 인증 정보가 IP 공유 익명 세션에 기록됨)
+define('NO_SESSION', true);
+define('__TEXTCUBE_XMLRPC__', true);	// Textcube-NG: XML-RPC 본문(text/xml·application/xml) POST 허용(preprocessor 요청 본문 형식 검사, r3-20)
 require ROOT . '/library/preprocessor.php';
 
 requireModel( "blog.api" );

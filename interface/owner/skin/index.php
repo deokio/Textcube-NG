@@ -65,18 +65,33 @@ function writeValue($value, $label, $className) {
 						<script type="text/javascript">
 							//<![CDATA[
 								var isSkinModified = <?php echo ($skinSetting['skin'] == "customize/$blogid") ? 'true' : 'false';?>;
+								// PHP port(Textcube-NG): r3-12 스킨 바꾸기 요청이 끝날 때까지(성공·실패) 적용 버튼을 막고 다시 부르지 않는다. 짧은 시간에 여러 번 바꿔 스킨 바꾸기와
+								// 편집기 전용 CSS 다시 만들기가 겹치지 않게 한다(사용자 결정 11-08 ②)
+								var skinChangeBusy = false;
+								function skinChangeLock(on) {
+									var list = document.querySelectorAll('a.apply-button'), i;
+									skinChangeBusy = on;
+									for (i = 0; i < list.length; i++) {
+										list[i].style.pointerEvents = on ? 'none' : '';
+										list[i].style.opacity = on ? '0.5' : '';
+										if (on) list[i].setAttribute('aria-disabled', 'true'); else list[i].removeAttribute('aria-disabled');
+									}
+								}
 								
 								function selectSkin(name) {
+									if (skinChangeBusy) return;	// PHP port(Textcube-NG): r3-12 앞 요청이 끝나지 않음
 									if(isSkinModified) {
-										if(!confirm("<?php echo _t('수정된 스킨을 사용중입니다. 새로운 스킨을 선택하면 수정된 스킨의 내용과 스킨에 적용된 출력 설정, 사이드바의 변경점은 모두 지워집니다.\n스킨을 적용하시겠습니까?');?>"))
-											return;
+										tcConfirm("<?php echo _t('수정된 스킨을 사용중입니다. 새로운 스킨을 선택하면 수정된 스킨의 내용과 스킨에 적용된 출력 설정, 사이드바의 변경점은 모두 지워집니다.\n스킨을 적용하시겠습니까?');?>", tcSelectSkinGo);	// Textcube-NG: 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396)
+										return;
 									} else {
-										if(!confirm("<?php echo _t('새로운 스킨을 선택하면 이전 스킨에 적용된 출력 설정들과 사이드바의 변경점은 모두 지워집니다.\n스킨을 적용하시겠습니까?');?>"))
-											return;
+										tcConfirm("<?php echo _t('새로운 스킨을 선택하면 이전 스킨에 적용된 출력 설정들과 사이드바의 변경점은 모두 지워집니다.\n스킨을 적용하시겠습니까?');?>", tcSelectSkinGo);	// Textcube-NG: 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396)
+										return;
 									}
+									function tcSelectSkinGo() {	// Textcube-NG: 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396)
 									try {
 										var request = new HTTPRequest("POST", "<?php echo $blogURL;?>/owner/skin/change/");
 										request.onSuccess = function() {
+											skinChangeLock(false);
 											isSkinModified = false;
 											PM.showMessage("<?php echo _t('성공적으로 변경했습니다.');?>", "center", "bottom");
 											document.getElementById('currentPreview').innerHTML = document.getElementById('preview_'+name).innerHTML;
@@ -90,14 +105,18 @@ function writeValue($value, $label, $className) {
 											*/
 										}
 										request.onError = function() {
+											skinChangeLock(false);
 											msg = this.getText("/response/msg");
 											if (this.getText("/response/msg") == null)
 												msg = "<?php echo _t('올바른 스킨 디렉토리명이 아닙니다.\n디렉토리명에는 알파벳, 숫자, 언더바(_), 공백문자, 대쉬(-)만 사용하실 수 있습니다.');?>";
 											alert(msg);
 										}
+										skinChangeLock(true);
 										request.send("skinName=" + encodeURIComponent(name));
 									} catch(e) {
+										skinChangeLock(false);
 										alert(e.message);
+									}
 									}
 								}
 								function changeList(obj) {	

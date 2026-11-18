@@ -52,6 +52,9 @@ $selectedStatus = explode('|', Setting::getBlogSettingGlobal("pluginListStatusTy
 // get the list type.
 $listType = Setting::getBlogSettingGlobal('pluginViewType', 'iconview');
 
+// Textcube-NG: r3-42 끌 때 보관해 둔 설정 목록(꺼진 플러그인의 [보관 설정 지우기] 표시용)
+$pluginKeptSettings = pluginKeptSettingsLoad();
+
 // get all plugin list.
 $plugins = array();
 $pluginAttrs = array();
@@ -111,7 +114,22 @@ for ($i=0; $i<count($pluginKeys); $i++) {
 }
 ?>
 								
+								// Textcube-NG: r3-42 플러그인 작업(켜기·끄기·다시 검사·보관 설정 지우기) 처리 중 표시. 처리 중에 다시 누르면 막고 안내한다(서버도 블로그별 잠금으로 거절한다)
+								var pluginOpBusy = false;
+								function pluginOpBegin() {
+									if (pluginOpBusy) {
+										PM.showMessage("<?php echo escapeJSInCData(_t('앞서 요청한 플러그인 작업을 처리하고 있습니다. 끝난 뒤 다시 누르십시오.'));?>", "center", "bottom");
+										return false;
+									}
+									pluginOpBusy = true;
+									return true;
+								}
+								function pluginOpEnd() {
+									pluginOpBusy = false;
+								}
+								
 								function togglePlugin(plugin, num, width, height, obj, force) {
+									if (!pluginOpBegin()) return false;	// Textcube-NG: r3-42 처리 중이면 막는다(응답이 오면 onSuccess·onError 에서 푼다)
 									var currentIcon = document.getElementById('pluginIcon'+num);
 									var currentSettingButton = document.getElementById('pluginSettingButton'+num);
 									
@@ -128,6 +146,11 @@ for ($i=0; $i<count($pluginKeys); $i++) {
 									if (command) {
 										var request = new HTTPRequest("POST", "<?php echo $blogURL;?>/owner/plugin/activate");
 										request.onSuccess = function() {												
+											pluginOpEnd();	// Textcube-NG: r3-42
+											var guardMsg = this.getText("/response/message"); // Textcube-NG: 활성화 경고(v3.211)
+											if (guardMsg) alert(guardMsg);
+											var keptButton = document.getElementById('pluginKeptButton'+num);	// Textcube-NG: r3-42 다시 켜면 보관 설정이 돌아가므로 [보관 설정 지우기]를 없앤다
+											if (keptButton && keptButton.parentNode) keptButton.parentNode.removeChild(keptButton);
 											currentIcon.setAttribute('alt', '<?php echo _t('켜짐');?>');
 											currentIcon.setAttribute('title', '<?php echo _t('이 플러그인은 사용중입니다. 클릭하시면 사용을 중지합니다.');?>');
 											document.getElementById('pluginStatus'+num).value = 1;
@@ -163,13 +186,16 @@ for ($i=0; $i<count($pluginKeys); $i++) {
 											}
 										}
 										request.onError = function() {
-											alert("<?php echo _t('플러그인을 활성화하는데 실패했습니다.');?>");
+											pluginOpEnd();	// Textcube-NG: r3-42
+											var guardMsg = this.getText("/response/message"); // Textcube-NG: 활성화 거부 사유(v3.211)
+											alert(guardMsg ? guardMsg : "<?php echo _t('플러그인을 활성화하는데 실패했습니다.');?>");
 										}
 										request.send("name=" + plugin);
 									} else {
 										var request = new HTTPRequest("POST", "<?php echo $blogURL;?>/owner/plugin/deactivate");
 
 										request.onSuccess = function() {
+											pluginOpEnd();	// Textcube-NG: r3-42
 											currentIcon.setAttribute('alt', '<?php echo _t('꺼짐');?>');
 											currentIcon.setAttribute('title', '<?php echo _t('이 플러그인은 사용중지 상태입니다. 클릭하시면 사용을 시작합니다.');?>');
 											document.getElementById('pluginStatus'+num).value = 0;
@@ -199,6 +225,12 @@ for ($i=0; $i<count($pluginKeys); $i++) {
 											}
 										}
 										request.onError = function() {
+											pluginOpEnd();	// Textcube-NG: r3-42
+											var opMsg = this.getText("/response/message");	// Textcube-NG: r3-42 서버가 사유를 보냈으면(다른 작업 처리 중 등) 그것을 보인다
+											if (opMsg) {
+												alert(opMsg);
+												return;
+											}
 											switch(parseInt(this.getText("/response/error"))) {
 												case 1:
 													alert("<?php echo _t('플러그인을 비활성화하지 못하였습니다.');?>");
@@ -281,6 +313,105 @@ for ($i=0; $i<count($pluginKeys); $i++) {
 									window.open('<?php echo $blogURL;?>/owner/plugin/currentSetting/?Name='+plugin+'&Tab='+tab, 'CurrentSetting', 'width='+width+', height='+height+', scrollbars=1, status=0, resizable=1');	
 									return;
 								}								
+
+								// Textcube-NG: 차단 풀기(r3-13). r3-42 끄지 않고 켜진 채로 지금 파일을 다시 검사해 무결성 기록을 새로 남긴다(owner/plugin/recheck 한 번 호출 — 설정은 그대로 둔다)
+								function recheckPlugin(plugin) {
+									if (pluginOpBusy) {
+										PM.showMessage("<?php echo escapeJSInCData(_t('앞서 요청한 플러그인 작업을 처리하고 있습니다. 끝난 뒤 다시 누르십시오.'));?>", "center", "bottom");
+										return false;
+									}
+									tcConfirm("<?php echo escapeJSInCData(_t('이 플러그인을 지금 파일로 다시 검사합니다. 무결성 기록을 새로 남기므로, 파일을 바꾼 사람이 본인이거나 믿을 수 있는 사람일 때만 진행하십시오. 플러그인은 켜진 채로 두고 설정도 그대로 둡니다. 계속하시겠습니까?'));?>", function () {	// Textcube-NG: 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396)
+										if (!pluginOpBegin()) return false;
+										var request = new HTTPRequest("POST", "<?php echo $blogURL;?>/owner/plugin/recheck");
+										request.onSuccess = function() {
+											pluginOpEnd();
+											var guardMsg = this.getText("/response/message");
+											if (guardMsg) alert(guardMsg);
+											document.getElementById('part-plugin-list').submit();
+										}
+										request.onError = function() {
+											pluginOpEnd();
+											var guardMsg = this.getText("/response/message");
+											alert(guardMsg ? guardMsg : "<?php echo escapeJSInCData(_t('다시 검사하지 못했습니다.'));?>");
+										}
+										request.send("name=" + encodeURIComponent(plugin));
+										return false;
+									});
+									return false;
+								}
+								
+								// Textcube-NG: r3-42 꺼진 플러그인의 보관 설정 지우기(owner/plugin/resetSetting, scope=kept)
+								function clearKeptPluginSetting(plugin, num) {
+									if (pluginOpBusy) {
+										PM.showMessage("<?php echo escapeJSInCData(_t('앞서 요청한 플러그인 작업을 처리하고 있습니다. 끝난 뒤 다시 누르십시오.'));?>", "center", "bottom");
+										return false;
+									}
+									tcConfirm("<?php echo escapeJSInCData(_t('플러그인을 끌 때 보관해 둔 설정을 지웁니다. 다시 켜면 기본값으로 시작합니다. 되돌릴 수 없습니다. 계속하시겠습니까?'));?>", function () {
+										if (!pluginOpBegin()) return false;
+										var request = new HTTPRequest("POST", "<?php echo $blogURL;?>/owner/plugin/resetSetting");
+										request.onSuccess = function() {
+											pluginOpEnd();
+											var keptButton = document.getElementById('pluginKeptButton'+num);
+											if (keptButton && keptButton.parentNode) keptButton.parentNode.removeChild(keptButton);
+											PM.showMessage("<?php echo escapeJSInCData(_t('보관 설정을 지웠습니다.'));?>", "center", "bottom");
+										}
+										request.onError = function() {
+											pluginOpEnd();
+											var guardMsg = this.getText("/response/message");
+											alert(guardMsg ? guardMsg : "<?php echo escapeJSInCData(_t('보관 설정을 지우지 못했습니다.'));?>");
+										}
+										request.send("name=" + encodeURIComponent(plugin) + "&scope=kept");
+										return false;
+									});
+									return false;
+								}
+<?php
+if (Acl::check('group.creators')) {
+?>
+
+								// Textcube-NG: 허용 목록에 추가(r3-13). 서비스 관리자에게만 낸다(서버는 control/plugin/allow 가 POST·CSRF·group.creators 를 다시 검사)
+								function allowPlugin(plugin) {
+									tcConfirm("<?php echo escapeJSInCData(_t('이 플러그인을 서비스 허용 목록에 추가합니다. 모든 블로그에서 이 플러그인을 켤 수 있게 됩니다. 계속하시겠습니까?'));?>", function () {	// Textcube-NG: 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396)
+									var request = new HTTPRequest("POST", "<?php echo $blogURL;?>/control/plugin/allow/");
+									request.onSuccess = function() {
+										document.getElementById('part-plugin-list').submit();
+									}
+									request.onError = function() {
+										alert("<?php echo escapeJSInCData(_t('허용 목록에 추가하지 못했습니다.'));?>");
+									}
+									request.send("name=" + encodeURIComponent(plugin));
+									return false;
+									});
+									return false;
+								}
+
+								// Textcube-NG: 무결성 검사 면제(r3-14). 서비스 관리자에게만 낸다(서버는 control/plugin/exempt 가 POST·CSRF·group.creators·이름을 다시 검사)
+								function setPluginExempt(plugin, box) {
+									var on = box.checked;
+									if (on) {
+										tcConfirm("<?php echo escapeJSInCData(_t('이 플러그인의 무결성 검사를 모든 블로그에서 건너뜁니다(엄격 모드 포함). 남긴 기록과 파일이 달라도 막지 않으므로, 플러그인 폴더를 바꿀 수 있는 사람을 모두 믿을 수 있을 때만 고르십시오. 허용 목록·서비스 관리자 전용·PDO 모드 검사는 그대로 합니다. 계속하시겠습니까?'));?>", function () {	// Textcube-NG: 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396)
+											box.checked = true;
+											tcPluginExemptSend();
+										});
+										return false;
+									}
+									tcPluginExemptSend();
+									return true;
+									function tcPluginExemptSend() {
+									var request = new HTTPRequest("POST", "<?php echo $blogURL;?>/control/plugin/exempt/");
+									request.onSuccess = function() {
+										document.getElementById('part-plugin-list').submit();
+									}
+									request.onError = function() {
+										box.checked = !on;
+										alert("<?php echo escapeJSInCData(_t('무결성 검사 면제를 바꾸지 못했습니다.'));?>");
+									}
+									request.send("name=" + encodeURIComponent(plugin) + "&exempt=" + (on ? "1" : "0"));
+									}
+								}
+<?php
+}
+?>
 							//]]>
 						</script>
 						
@@ -382,6 +513,9 @@ if (defined('__TAB_CENTER__') || defined('__TAB_COVERPAGE__')) {
 								<ol class="data-inbox">
 <?php
 list($currentTextcubeVersion) = explode(' ', TEXTCUBE_VERSION, 2);
+// Textcube-NG: 무결성 검사 면제 목록(r3-14, 서비스 전체). 목록 보기의 '무결성 검사 없이 항상 허용' 칸에 쓴다. 바꾸기는 서비스 관리자만
+$pluginGuardExemptList = pluginGuardExemptList();
+$pluginGuardExemptEditable = Acl::check('group.creators');
 
 for ($i=0; $i<count($pluginKeys); $i++) {
 	$pluginDir = $pluginKeys[$i];
@@ -406,6 +540,9 @@ for ($i=0; $i<count($pluginKeys); $i++) {
 	$className = $active ? 'active-class' : 'inactive-class';
 	$className .= $requirements ? NULL : ' disabled-class';
 	$className .= $i == (count($pluginKeys) - 1) ? ' last-item' : NULL;
+	// Textcube-NG: 차단 화면 개선 — 차단 사유·풀기 방법(아이콘 보기 배지·흐림, 목록 보기 경고 상자)(r3-13)
+	$pluginGuardInfo = pluginGuardBlockInfo($pluginDir, $active);
+	$className .= $pluginGuardInfo !== null ? ' guard-blocked-class' : NULL;
 ?>
 									<li class="<?php echo $className;?>">
 <?php
@@ -440,6 +577,19 @@ for ($i=0; $i<count($pluginKeys); $i++) {
 <?php
 	}
 ?>
+<?php
+	if ($pluginGuardInfo !== null) {
+		// Textcube-NG: r3-42 아이콘 보기 배지를 누르면(Enter·Space 포함) 다시 검사한다(목록 보기의 [다시 검사하고 풀기]와 같은 recheckPlugin)
+		$pluginGuardBadgeAttr = '';
+		if ($pluginGuardInfo['action'] === 'recheck') {
+			$pluginGuardBadgeCall = 'recheckPlugin(\'' . escapeJSInAttribute($pluginDir) . '\'); return false;';
+			$pluginGuardBadgeAttr = ' role="button" tabindex="0" onclick="' . $pluginGuardBadgeCall . '" onkeydown="if (event.keyCode == 13 || event.keyCode == 32) { ' . $pluginGuardBadgeCall . ' }"';
+		}
+?>
+										<span class="plugin-guard-badge" title="<?php echo htmlspecialchars($pluginGuardInfo['title'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');?>"<?php echo $pluginGuardBadgeAttr;?>><?php echo htmlspecialchars($pluginGuardInfo['badge'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');?></span>
+<?php
+	}
+?>
 										</div>
 										<div class="summary">
 											<div class="plugin-title">
@@ -462,13 +612,13 @@ for ($i=0; $i<count($pluginKeys); $i++) {
 						htmlspecialchars($link),
 						htmlspecialchars($title),
 						_t('판번호') . ' ' . $version,
-						$listType == 'listview' ? $title : htmlspecialchars(UTF8::lessenAsEm($title, 20))
+						$listType == 'listview' ? htmlspecialchars($title) : htmlspecialchars(UTF8::lessenAsEm($title, 20))
 					);
 	} else {
 		echo sprintf('<span title="%s - %s">%s</span>',
 						htmlspecialchars($title),
 						_t('판번호') . ' ' . $version,
-						$listType == 'listview' ? $title : htmlspecialchars(UTF8::lessenAsEm($title, 20))
+						$listType == 'listview' ? htmlspecialchars($title) : htmlspecialchars(UTF8::lessenAsEm($title, 20))
 					);
 	}
 ?>
@@ -477,7 +627,56 @@ for ($i=0; $i<count($pluginKeys); $i++) {
 												<li class="author"><span class="label"><?php echo _t('제작자');?> : </span><a href="<?php echo htmlspecialchars($authorLink);?>" title="<?php echo htmlspecialchars($author);?>"><?php echo htmlspecialchars($author);?></a></li>
 												<li class="version"><span class="label"><?php echo _t('판번호');?> : </span><?php echo $version;?></li>
 												<li class="description"><span class="label"><?php echo _t('설명');?> : </span><?php echo htmlspecialchars($description);?></li>
+<?php
+	// Textcube-NG: 안전 검사 결과(차단 사유·차단(무결성)·PDO 사용 불가·직접 SQL·판정 불가 호출·검토된 번들 예외) 표시(v3.211)
+	$pluginGuardLabel = pluginGuardListLabel($pluginDir, $active);
+	if ($pluginGuardLabel !== '') {
+?>
+												<li class="plugin-guard"><span class="label"><?php echo _t('검사');?> : </span><?php echo htmlspecialchars($pluginGuardLabel, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');?></li>
+<?php
+	}
+?>
+<?php
+	// Textcube-NG: 무결성 검사 면제(r3-14). 고르면 모든 블로그에서 이 플러그인의 무결성 검사를 건너뛴다(엄격 모드 포함, 허용 목록·서비스 관리자 전용·PDO 검사는 그대로).
+	// 서비스 관리자만 바꿀 수 있다. 다른 관리자에게는 지금 값을 보이되 칸을 막고 안내를 단다
+	if ($requirements) {
+		$pluginGuardExempt = in_array($pluginDir, $pluginGuardExemptList, true);
+?>
+												<li class="plugin-guard-exempt"><label for="pluginExempt<?php echo $i;?>"<?php echo $pluginGuardExemptEditable ? '' : ' title="' . htmlspecialchars(_t('서비스 관리자만 바꿀 수 있습니다.'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '"';?>><input type="checkbox" class="checkbox" id="pluginExempt<?php echo $i;?>"<?php echo $pluginGuardExemptEditable ? ' onclick="return setPluginExempt(\'' . escapeJSInAttribute($pluginDir) . '\', this);"' : ' disabled="disabled"';?><?php echo $pluginGuardExempt ? ' checked="checked"' : '';?> /> <?php echo htmlspecialchars(_t('무결성 검사 없이 항상 허용'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');?></label></li>
+<?php
+	}
+?>
 											</ul>
+<?php
+	if ($pluginGuardInfo !== null) {
+		// Textcube-NG: 차단 경고 상자(목록 보기). 아이콘 보기에서는 CSS 로 숨긴다(r3-13)
+?>
+											<div class="plugin-guard-box">
+												<p class="plugin-guard-title"><?php echo htmlspecialchars($pluginGuardInfo['title'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');?></p>
+<?php
+		if ($pluginGuardInfo['text'] !== '') {
+?>
+												<p class="plugin-guard-text"><?php echo htmlspecialchars($pluginGuardInfo['text'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');?></p>
+<?php
+		}
+		if ($pluginGuardInfo['action'] === 'recheck') {
+?>
+												<p class="plugin-guard-action"><input type="button" class="input-button" value="<?php echo htmlspecialchars(_t('다시 검사하고 풀기'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');?>" onclick="recheckPlugin('<?php echo escapeJSInAttribute($pluginDir);?>'); return false;" /></p>
+<?php
+		} else if ($pluginGuardInfo['action'] === 'allow' && Acl::check('group.creators')) {
+?>
+												<p class="plugin-guard-action"><input type="button" class="input-button" value="<?php echo htmlspecialchars(_t('허용 목록에 추가'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');?>" onclick="allowPlugin('<?php echo escapeJSInAttribute($pluginDir);?>'); return false;" /></p>
+<?php
+		} else if ($pluginGuardInfo['action'] === 'privilege') {
+?>
+												<p class="plugin-guard-action"><a href="<?php echo htmlspecialchars($blogURL . '/control/plugin', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');?>"><?php echo htmlspecialchars(_t('플러그인 보호 설정'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');?></a></p>
+<?php
+		}
+?>
+											</div>
+<?php
+	}
+?>
 											<div class="plugin-buttons">
 <?php
 	if ($requirements == false) {
@@ -496,6 +695,14 @@ for ($i=0; $i<count($pluginKeys); $i++) {
 			} else {
 ?>
 												<span id="pluginSettingButton<?php echo $i;?>" class="dimmed"><?php echo _t('환경설정');?></span>
+<?php
+				// Textcube-NG: r3-42 끌 때 보관해 둔 설정이 있으면 [보관 설정 지우기]를 단다(다시 켜면 돌아가는 설정)
+				if (isset($pluginKeptSettings[$pluginDir])) {
+?>
+												<span id="pluginKeptButton<?php echo $i;?>"><span class="divider">|</span> <a href="#void" title="<?php echo htmlspecialchars(_t('끌 때 보관해 둔 설정이 있습니다. 다시 켜면 이 설정으로 돌아갑니다.'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');?>" onclick="clearKeptPluginSetting('<?php echo escapeJSInAttribute($pluginDir);?>', <?php echo $i;?>); return false;"><?php echo htmlspecialchars(_t('보관 설정 지우기'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');?></a></span>
+<?php
+				}
+?>
 <?php
 			}
 		} else {

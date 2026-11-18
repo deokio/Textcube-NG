@@ -2,6 +2,14 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 if (isset($_POST['page']))
 	$_GET['page'] = $_POST['page'];
 
@@ -57,11 +65,13 @@ if (isset($_POST['deleteItemsFromSameIP'])) {
 }
 
 $tabsClass = array();
+/* [보안] postfix 는 탭 링크(interface/common/owner/communicationTab.php)의 href 에 그대로 출력된다.
+   원본은 검색어·이름 등 GET 값을 인코딩 없이 이어 붙였다 → 값마다 URL 인코딩 */
 $tabsClass['postfix'] = null;
-$tabsClass['postfix'] .= isset($_POST['category']) ? '&amp;category='.$_POST['category'] : '';
-$tabsClass['postfix'] .= isset($_POST['name']) ? '&amp;name='.$_POST['name'] : '';
-$tabsClass['postfix'] .= isset($_POST['ip']) ? '&amp;ip='.$_POST['ip'] : '';
-$tabsClass['postfix'] .= isset($_POST['search']) ? '&amp;search='.$_POST['search'] : '';
+$tabsClass['postfix'] .= isset($_POST['category']) ? '&amp;category='.rawurlencode($_POST['category']) : '';
+$tabsClass['postfix'] .= isset($_POST['name']) ? '&amp;name='.rawurlencode($_POST['name']) : '';
+$tabsClass['postfix'] .= isset($_POST['ip']) ? '&amp;ip='.rawurlencode($_POST['ip']) : '';
+$tabsClass['postfix'] .= isset($_POST['search']) ? '&amp;search='.rawurlencode($_POST['search']) : '';
 if(!empty($tabsClass['postfix'])) $tabsClass['postfix'] = ltrim($tabsClass['postfix'],'/');
 
 if (isset($_POST['status'])) {
@@ -105,11 +115,11 @@ if($tabsClass['received'] == true) {
 										var command 	= 'block';
 									}
 									var name 		= caller.id.replace(/\-[0-9]+$/, '');
-									param  	=  '?value='	+ encodeURIComponent(value);
+									param  	=  'value='	+ encodeURIComponent(value);
 									param 	+= '&mode=' 	+ mode;
 									param 	+= '&command=' 	+ command;
 
-									var request = new HTTPRequest("GET", "<?php echo $blogURL;?>/owner/communication/filter/change/" + param);
+									var request = new HTTPRequest("POST", "<?php echo $blogURL;?>/owner/communication/filter/change/");
 									var iconList = document.getElementsByTagName("a");
 									for (var i = 0; i < iconList.length; i++) {
 										icon = iconList[i];
@@ -127,16 +137,15 @@ if($tabsClass['received'] == true) {
 											}
 										}
 									}
-									request.send();
+									request.send(param);
 								} catch(e) {
 									alert(e.message);
 								}
 							}
 
 							trashTrackback = function(id) {
-								if (!confirm("<?php echo _t('선택된 걸린글을 휴지통으로 옮깁니다. 계속 하시겠습니까?');?>"))
-									return;
-								var request = new HTTPRequest("GET", "<?php echo $blogURL;?>/owner/communication/trackback/delete/" + id);
+								tcConfirm("<?php echo _t('선택된 걸린글을 휴지통으로 옮깁니다. 계속 하시겠습니까?');?>", function () {	// Textcube-NG: 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396)
+								var request = new HTTPRequest("POST", "<?php echo $blogURL;?>/owner/communication/trackback/delete/" + id);
 								request.onSuccess = function() {
 									PM.removeRequest(this);
 									PM.showMessage("<?php echo _t('걸린글을 삭제하였습니다.');?>","center", "bottom");
@@ -148,11 +157,11 @@ if($tabsClass['received'] == true) {
 								}
 								PM.addRequest(request, "<?php echo _t('걸린글을 삭제하고 있습니다.');?>");
 								request.send();
+								});
 							}
 
 							sendTrackbackResponse = function(id,entryId) {
-								if (!confirm("<?php echo _t('선택된 걸린글에 답글로 글을 겁니다. 계속 하시겠습니까?');?>"))
-									return;
+								tcConfirm("<?php echo _t('선택된 걸린글에 답글로 글을 겁니다. 계속 하시겠습니까?');?>", function () {	// Textcube-NG: 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396)
 								var request = new HTTPRequest("POST", "<?php echo $blogURL;?>/owner/communication/trackback/reply/" + entryId);
 								request.onSuccess = function() {
 									PM.removeRequest(this);
@@ -165,12 +174,12 @@ if($tabsClass['received'] == true) {
 								}
 								PM.addRequest(request, "<?php echo _t('글을 걸고 있습니다.');?>");
 								request.send("url="+URLinfo[id]);
+								});
 							}
 
 							trashTrackbacks = function() {
+								tcConfirm("<?php echo _t('선택된 걸린글을 지웁니다. 계속 하시겠습니까?');?>", function () {	// Textcube-NG: 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396)
 								try {
-									if (!confirm("<?php echo _t('선택된 걸린글을 지웁니다. 계속 하시겠습니까?');?>"))
-										return false;
 									var oElement;
 									var alsoDeleteWithSameIP = document.getElementById('deleteTrackbacksFromSameIP').checked;
 									var targets = new Array();
@@ -196,13 +205,15 @@ if($tabsClass['received'] == true) {
 								} catch(e) {
 									alert(e.message);
 								}
+								});
+								return false;
 							}
 <?php
 } else {
 ?>
 							removeTrackbackLog = function(id) {
-								if (confirm("<?php echo _t('선택된 글걸기 기록을 지웁니다. 계속 하시겠습니까?');?>")) {
-									var request = new HTTPRequest("<?php echo $blogURL;?>/owner/communication/trackback/log/remove/" + id);
+								tcConfirm("<?php echo _t('선택된 글걸기 기록을 지웁니다. 계속 하시겠습니까?');?>", function () {	// Textcube-NG: 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396)
+									var request = new HTTPRequest("POST", "<?php echo $blogURL;?>/owner/communication/trackback/log/remove/" + id);
 									request.onSuccess = function () {
 										document.getElementById('list-form').submit();
 									}
@@ -210,13 +221,12 @@ if($tabsClass['received'] == true) {
 										alert("<?php echo _t('글걸기 기록을 지우지 못했습니다.');?>");
 									}
 									request.send();
-								}
+								});
 							}
 
 							trashTrackbacks = function() {
+								tcConfirm("<?php echo _t('선택된 걸린글 기록을 지웁니다. 계속 하시겠습니까?');?>", function () {	// Textcube-NG: 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396)
 								try {
-									if (!confirm("<?php echo _t('선택된 걸린글 기록을 지웁니다. 계속 하시겠습니까?');?>"))
-										return false;
 									var oElement;
 									var targets = new Array();
 									for (i = 0; document.getElementById('list-form').elements[i]; i ++) {
@@ -234,6 +244,8 @@ if($tabsClass['received'] == true) {
 								} catch(e) {
 									alert(e.message);
 								}
+								});
+								return false;
 							}
 <?php
 }
@@ -294,7 +306,7 @@ require ROOT . '/interface/common/owner/communicationTab.php';
 
 							<form id="category-form" class="category-box" method="post" action="<?php echo $blogURL;?>/owner/communication/trackback">
 								<div class="section">
-									<input type="hidden" name="page" value="<?php echo $suri['page'];?>" />
+									<input type="hidden" name="page" value="<?php echo htmlspecialchars((string)$suri['page'], ENT_QUOTES);?>" />
 <?php
 	if(!isset($tabsClass['received'])) {
 ?>
@@ -399,7 +411,7 @@ if (sizeof($trackbacks) == 0) {
                                             <td class="selection">
                                                 <input id="trackbackCheckId<?php echo $trackbackRow['id']; ?>" type="checkbox" class="checkbox"
                                                        name="entry" value="<?php echo $trackbackRow['id']; ?>"
-                                                       ip="<?php echo urlencode($trackbackRow['ip']); ?>"/>
+                                                       ip="<?php echo urlencode($trackbackRow['ip'] ?? ''); ?>"/>
                                                 <label for="trackbackCheckId<?php echo $trackbackRow['id']; ?>"></label>
                                             </td>
                                             <td class="date"><?php echo Timestamp::formatDate($trackbackRow['written']); ?></td>
@@ -528,7 +540,7 @@ echo "									</tbody>";
 								<hr class="hidden" />
 
 								<div class="data-subbox">
-									<input type="hidden" name="page" value="<?php echo $suri['page'];?>" />
+									<input type="hidden" name="page" value="<?php echo htmlspecialchars((string)$suri['page'], ENT_QUOTES);?>" />
 									<input type="hidden" name="site" value="" />
 									<input type="hidden" name="ip" value="" />
 									<input type="hidden" name="deleteItemsFromSameIP" value="<?php echo ($deleteTrackbacksFromSameIP ? "1" : "0");?>" />

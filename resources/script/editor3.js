@@ -191,7 +191,7 @@ function editorAddObject(editor, mode) {
 		for (var i = 0; i < oSelect.options.length; i++) {
 			if (oSelect.options[i].selected) {
 				var value = oSelect.options[i].value.split("|");
-				if(new RegExp("\\.(gif|jpe?g|png|bmp)$", "i").test(value[0])) objects.push(value);
+				if(new RegExp("\\.(gif|jpe?g|png|bmp|webp|avif|svg)$", "i").test(value[0])) objects.push(value);	// Textcube-NG: webp·avif·svg 도 이미지(r3-20)
 			}
 		}
 		break;

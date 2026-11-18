@@ -25,7 +25,7 @@
 	<listener event="/plugin/teamContentsSave/">getTeamContentsSave</listener>
 	<listener event="/plugin/teamFileUpload/">getImageFileUpload</listener>
 	<listener event="/plugin/teamBlogStyle/">getTeamBlogStyleSet</listener>
-	<config dataValHandler = "getTeamBlog_DataSet" >
+	<config dataValHandler = "getTeamBlog_DataSet" xml:lang="ko" >
 		<window width="500" height="550" />
 		<fieldset legend="작성자 프로필" >
 			<field title="적용 대상:" name="postCheck" type="checkbox"  >
@@ -43,6 +43,46 @@
 		<fieldset legend="게시물 프로필 HTML">
 			<field title="# 헤더" name="postHeader" cols="52" rows="1"  type="textarea" titledirection="bk" ><![CDATA[<fieldset><legend>작성자 프로필</legend>]]></field>
 			<field title="# 푸터" name="postFooter" cols="52" rows="1"  type="textarea" titledirection="bk" ><![CDATA[</fieldset>]]></field>
+		</fieldset>
+	</config>
+	<config dataValHandler = "getTeamBlog_DataSet" xml:lang="en" >
+		<window width="500" height="550" />
+		<fieldset legend="Writer profile" >
+			<field title="Apply to:" name="postCheck" type="checkbox"  >
+				<op name="p1" value="1" checked="checked"><![CDATA[Content&nbsp;(]]></op>
+				<op name="p2" value="1"><![CDATA[Use Textcube function tag)]]></op>
+				<caption><![CDATA[* Function tag: <b>[##_TeamBlogProfileTag_##]</b><br>* Insert the function tag into skin.html of the theme in use]]></caption>
+			</field>
+			<field title="Image size:" name="imageSize" type="text" size="5" value="80" />
+			<field title="Border color:" name="lineColor" type="text" size="10" value="#e3e3e3" />
+			<field title="Apply CSS:" name="cssSelect" type="radio"  >
+				<op value="1" checked="checked">Apply</op>
+				<op value="2">Do not apply</op>
+			</field>
+		</fieldset>
+		<fieldset legend="Post profile HTML">
+			<field title="# Header" name="postHeader" cols="52" rows="1"  type="textarea" titledirection="bk" ><![CDATA[<fieldset><legend>Writer profile</legend>]]></field>
+			<field title="# Footer" name="postFooter" cols="52" rows="1"  type="textarea" titledirection="bk" ><![CDATA[</fieldset>]]></field>
+		</fieldset>
+	</config>
+	<config dataValHandler = "getTeamBlog_DataSet" xml:lang="ja" >
+		<window width="500" height="550" />
+		<fieldset legend="作成者紹介" >
+			<field title="適用対象:" name="postCheck" type="checkbox"  >
+				<op name="p1" value="1" checked="checked"><![CDATA[本文&nbsp;(]]></op>
+				<op name="p2" value="1"><![CDATA[Textcube用の機能タグを利用)]]></op>
+				<caption><![CDATA[* 機能タグ: <b>[##_TeamBlogProfileTag_##]</b><br>* 機能タグは利用中のテーマのskin.htmlに挿入]]></caption>
+			</field>
+			<field title="画像サイズ:" name="imageSize" type="text" size="5" value="80" />
+			<field title="縁色:" name="lineColor" type="text" size="10" value="#e3e3e3" />
+			<field title="CSS適用 :" name="cssSelect" type="radio"  >
+				<op value="1" checked="checked">適用</op>
+				<op value="2">非適用</op>
+			</field>
+		</fieldset>
+		<fieldset legend="記事の作成者紹介HTML">
+			<field title="# Header" name="postHeader" cols="52" rows="1"  type="textarea" titledirection="bk" ><![CDATA[<fieldset><legend>作成者紹介</legend>]]></field>
+			<field title="# Footer" name="postFooter" cols="52" rows="1"  type="textarea" titledirection="bk" ><![CDATA[</fieldset>]]></field>
 		</fieldset>
 	</config>
     <adminMenu>

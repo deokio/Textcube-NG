@@ -2,6 +2,14 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 
 $ajaxcall = (isset($_REQUEST['ajaxcall']) && $_REQUEST['ajaxcall'] == true) ? true : false;
 
@@ -57,12 +65,14 @@ foreach($parameters as $item)
 			case 'string':
 				break;
 			case 'int':
+				/* [보안] 원본의 숫자 검사는 'continue;'(switch 안에서는 break 와 같음, 이식본은 break 로 표기)라 무효였다
+				   → 숫자가 아니면 저장하지 않고, 숫자면 정수로 저장(위젯 플러그인이 이 값을 SQL LIMIT 등에 그대로 쓰는 경우 대비) */
 				if (!is_numeric($_REQUEST[$item['name']])) {
-					continue;
+					continue 2;
 				}
-				break;
+				$newParameter[$item['name']] = (int)$_REQUEST[$item['name']];
+				continue 2;
 			default:
-				continue;
 				break;
 		}	
         $newParameter[$item['name']] = $_REQUEST[$item['name']];

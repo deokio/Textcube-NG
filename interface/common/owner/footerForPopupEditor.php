@@ -6,7 +6,7 @@
 			
 			<div id="layout-footer">
 				<div id="copyright"><span class="text"><?php echo TEXTCUBE_COPYRIGHT;?></span></div>
-				<div id="version"><span class="text"><?php echo TEXTCUBE_NAME;?> <?php echo TEXTCUBE_VERSION;?></span></div>
+				<div id="version"><span class="text"><?php echo TEXTCUBE_NAME;?> <?php echo TEXTCUBE_VERSION;?> (NG <?php echo TEXTCUBE_NG_VERSION;?>)</span></div>
 			</div>
 		</div>
 	</div>

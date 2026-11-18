@@ -2,6 +2,14 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 
 $IV = array(
 	'REQUEST' => array(
@@ -37,7 +45,7 @@ function correctSidebarImage( $subject ) {
 } 
 
 function correctImagePath($match ) {
-	global $skinSetting, $serviceURL;
+	global $skinSetting, $serviceURL, $service;
 	$pathArr = explode( "/" , $match[1]);
 	if( false === $pathArr  ) 
 		return $match[0];
@@ -50,7 +58,9 @@ function correctImagePath($match ) {
 		return $match[0] ; // full url의 경우 스킵
 	if( $pathArr[0] != '.'  && $pathArr[0] != '..' ) 
 		return $match[0] ; //첫 디렉토리가 현재 디렉토리가 아닌경우 스킵
-	return str_replace( $match[1],  $serviceURL . "/skin/{$skinSetting['skin']}/" . $match[1], $match[0]);
+	// Textcube-NG: 스킨 폴더는 skin/blog/<스킨>(__TEXTCUBE_SKIN_DIR__)이라 원본의 skin/<스킨> 은 없는 경로였다(sidebar/index.php 와 같게 고침).
+	// 서버 설정 useServiceURLonSkin 이 꺼져 있으면 도메인 없는 서비스 경로($service['path'])를 쓴다(blog.skin.php v3.206 과 같음)(r3-5)
+	return str_replace( $match[1],  ($service['useServiceURLonSkin'] ? $serviceURL : $service['path']) . "/skin/blog/{$skinSetting['skin']}/" . $match[1], $match[0]);
 }
 
 if (false) correctImagePath('');
@@ -152,11 +162,13 @@ function pretty_dress($view)
 	list($view, $authorList) = Skin::cutSkinTag($view, 'author_rep');
 	dress('author_rep', getAuthorListView($pd_authorList, $authorList), $view);
 	list($view, $recentEntry) = Skin::cutSkinTag($view, 'rctps_rep');	
-	dress('rctps_rep', getRecentEntriesView($pd_recentEntry, $recentEntry), $view);
+	/* Textcube-NG: getRecent*View($items, $view, $template) 는 인자 3개 — 원본은 2개로 불러 PHP 7.1+ ArgumentCountError(관리 화면 모듈 미리보기 빈칸·미리보기 500, pat.im 1201).
+	   coverpage/index.php·common/blog/end.php 와 같이 목록만 만들고($view = null) 아래 dress() 가 끼운다 */
+	dress('rctps_rep', getRecentEntriesView($pd_recentEntry, null, $recentEntry), $view);
 	list($view, $recentComments) = Skin::cutSkinTag($view, 'rctrp_rep');	
-	dress('rctrp_rep', getRecentCommentsView($pd_recentComment, $recentComments), $view);
+	dress('rctrp_rep', getRecentCommentsView($pd_recentComment, null, $recentComments), $view);
 	list($view, $recentTrackback) = Skin::cutSkinTag($view, 'rcttb_rep');	
-	dress('rcttb_rep', getRecentTrackbacksView($pd_recentTrackback, $recentTrackback), $view);
+	dress('rcttb_rep', getRecentTrackbacksView($pd_recentTrackback, null, $recentTrackback), $view);
 	list($view, $s_link_rep) = Skin::cutSkinTag($view, 'link_rep');	
 	dress('link_rep', getLinksView($pd_link, $s_link_rep), $view);
 	dress('rss_url', "$blogURL/rss", $view);

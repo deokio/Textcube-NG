@@ -1,5 +1,7 @@
 /* =============================================================
  * flatui-radio v0.0.3
+ * Textcube-NG: removeAttr('checked') -> prop('checked', false)
+ *   (jQuery 3.0: removeAttr no longer clears the checked property)
  * ============================================================ */
 
 !function ($) {
@@ -46,7 +48,7 @@
             , $parent = $(this).closest('.radio');
             
             if ($el.prop(d) == false) {
-              $parent.removeClass(ch) && $el.removeAttr(ch).trigger('change');
+              $parent.removeClass(ch) && $el.prop(ch, false).trigger('change');
             } 
         });
       
@@ -74,10 +76,10 @@
         var $el = $(this)
           , $parent = $(this).closest('.radio');
           
-          $parent.removeClass(ch) && $el.removeAttr(ch);
+          $parent.removeClass(ch) && $el.prop(ch, false);
       });
             
-      $parent[checkAction ? 'addClass' : 'removeClass'](ch) && checkAction ? $el.prop(ch, ch) : $el.removeAttr(ch);
+      $parent[checkAction ? 'addClass' : 'removeClass'](ch) && checkAction ? $el.prop(ch, ch) : $el.prop(ch, false);
       $el.trigger(e);  
           
       if (checked !== $el.prop(ch)) {

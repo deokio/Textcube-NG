@@ -2,6 +2,14 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 if( !defined( 'OPENID_REGISTERS' ) ) {
 	define('OPENID_REGISTERS', 10);
 }
@@ -63,6 +71,7 @@ require ROOT . '/interface/common/owner/header.php';
 									try {
 										var email = document.getElementById('email');
 										var nickname = document.getElementById('nickname');
+										var emailPassword = document.getElementById('emailConfirmativePassword');	// Textcube-NG: e-mail 을 바꿀 때 비밀번호 재확인(v3.149)
 										if(!checkMail(email.value)) {
 											alert("<?php echo _t('이메일 형식이 올바르지 않습니다.');?>");
 											email.select();
@@ -70,17 +79,28 @@ require ROOT . '/interface/common/owner/header.php';
 										}
 										if(nickname.value == '') {
 											alert("<?php echo _t('별칭을 입력해 주십시오.');?>");
-											nick.select();
+											nickname.select(); // Textcube-NG: 정의되지 않은 nick 대신 nickname(r3-8)
+											return false;
+										}
+										if(email.value != email.defaultValue && emailPassword.value == '') {
+											alert("<?php echo _t('비밀번호를 입력해 주십시오.');?>");
+											emailPassword.focus();
 											return false;
 										}
 										var request = new HTTPRequest("POST", "<?php echo $blogURL;?>/owner/setting/account/profile/");
 										request.onSuccess = function() {
 											PM.showMessage("<?php echo _t('저장되었습니다');?>", "center", "bottom");
+											email.defaultValue = email.value;
+											emailPassword.value = '';
 										}
 										request.onError = function() {
-											PM.showErrorMessage("<?php echo _t('저장하지 못했습니다');?>", "center", "bottom");
+											emailPassword.value = '';
+											if (parseInt(this.getText("/response/error")) == 9)
+												PM.showErrorMessage("<?php echo _t('비밀번호가 일치하지 않습니다.');?>", "center", "bottom");
+											else
+												PM.showErrorMessage("<?php echo _t('저장하지 못했습니다');?>", "center", "bottom");
 										}
-										request.send("&email=" + encodeURIComponent(email.value) + "&nickname=" + encodeURIComponent(nickname.value));
+										request.send("&email=" + encodeURIComponent(email.value) + "&nickname=" + encodeURIComponent(nickname.value) + (emailPassword.value != '' ? "&confirmativePassword=" + encodeURIComponent(emailPassword.value) : ""));
 									} catch(e) {
 									}
 								}
@@ -91,7 +111,7 @@ require ROOT . '/interface/common/owner/header.php';
 									var pwd2 = document.getElementById('pwd2');
 									
 									if(pwd.value != '' || prevPwd.value != '') {
-										if(confirm("<?php echo _t('비밀번호를 변경하시겠습니까?');?>")) {
+										tcConfirm("<?php echo _t('비밀번호를 변경하시겠습니까?');?>", function () {	// Textcube-NG: 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396)
 											if(pwd.value.length<6 || pwd2.value.length<6) {
 												alert("<?php echo _t('비밀번호는 6자리 이상입니다.');?>");
 												return false;
@@ -101,13 +121,14 @@ require ROOT . '/interface/common/owner/header.php';
 												select.pwd();
 												return false;
 											}
-										} else {
-											return false;
-										}
+											tcSavePwdSend();
+										});
+										return false;
 									} else {
 										PM.showMessage("<?php echo _t('비밀번호를 입력해 주십시오.');?>","center","top");
 										return false;
 									}
+									function tcSavePwdSend() {	// Textcube-NG: 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396)
 									var request = new HTTPRequest("POST", "<?php echo $blogURL;?>/owner/setting/account/password/");
 									request.onSuccess = function() {
 										PM.showMessage("<?php echo _t('변경했습니다.');?>", "center", "bottom");
@@ -119,19 +140,30 @@ require ROOT . '/interface/common/owner/header.php';
 										PM.showErrorMessage("<?php echo _t('변경하지 못했습니다.');?>", "center", "bottom");
 									}
 									request.send("prevPwd=" + encodeURIComponent(prevPwd.value) + "&pwd=" + encodeURIComponent(pwd.value));
+									}
 								}
 								
 								function saveAPIKey() {
 									var apiPasswd = document.getElementById('TCApiPassword');
-									
+									var password = document.getElementById('apiKeyConfirmativePassword');	// Textcube-NG: 비밀번호 재확인(v3.149)
+									if (password.value == '') {
+										alert("<?php echo _t('비밀번호를 입력해 주십시오.');?>");
+										password.focus();
+										return false;
+									}
 									var request = new HTTPRequest("POST", "<?php echo $blogURL;?>/owner/setting/account/apikey/");
 									request.onSuccess = function() {
 										PM.showMessage("<?php echo _t('변경했습니다.');?>", "center", "bottom");
+										password.value = '';
 									}
 									request.onError = function() {
-										PM.showErrorMessage("<?php echo _t('변경하지 못했습니다.');?>", "center", "bottom");
+										password.value = '';
+										if (parseInt(this.getText("/response/error")) == 9)
+											PM.showErrorMessage("<?php echo _t('비밀번호가 일치하지 않습니다.');?>", "center", "bottom");
+										else
+											PM.showErrorMessage("<?php echo _t('변경하지 못했습니다.');?>", "center", "bottom");
 									}
-									request.send("APIKey=" + encodeURIComponent(apiPasswd.value));
+									request.send("APIKey=" + encodeURIComponent(apiPasswd.value) + "&confirmativePassword=" + encodeURIComponent(password.value));
 								}
 								
 								function clearBlogPassword() {
@@ -141,9 +173,14 @@ require ROOT . '/interface/common/owner/header.php';
 								function chooseBlogPassword() {
 									var blogApiPassword = document.getElementById('TCApiPassword');
 									var value = "";
+									// [보안] Math.random() 은 예측 가능한 난수 → crypto.getRandomValues 로 16진 20자(원본과 같은 형식) 생성
+									var rnd = window.crypto || window.msCrypto;
+									if (!rnd || !rnd.getRandomValues) return;
+									var bytes = new Uint8Array(10);
+									rnd.getRandomValues(bytes);
 									var asciibase = "0123456789abcdef";
-									for( i=0;i<20;i++) {
-										value += "" + asciibase.charAt(Math.round((Math.random()*15)));
+									for (var i = 0; i < 10; i++) {
+										value += asciibase.charAt(bytes[i] >> 4) + asciibase.charAt(bytes[i] & 15);
 									}
 									blogApiPassword.value = value;
 								}
@@ -156,17 +193,54 @@ require ROOT . '/interface/common/owner/header.php';
 											alert( "<?php echo _t('블로그 주소를 오픈아이디로 사용하지 않습니다.') ?>");
 										}
 							
-										var request = new HTTPRequest("GET", "<?php echo $blogURL;?>/owner/setting/openid/delegate?openid_identifier=" + escape(delegatedid));
+										var request = new HTTPRequest("POST", "<?php echo $blogURL;?>/owner/setting/openid/delegate");
 										request.onSuccess = function() {
 											PM.showMessage("<?php echo _t('저장되었습니다');?>", "center", "bottom");
 										}
 										request.onError = function() {
 											PM.showErrorMessage("<?php echo _t('저장하지 못했습니다');?>","center","bottom");
 										}
-										request.send();
+										request.send("openid_identifier=" + escape(delegatedid));
 									} catch(e) {
 									}
 								}								
+								/// Textcube-NG: 오픈아이디·소셜 계정 연결/해제 전에 비밀번호를 다시 확인한다(v3.149). 해제는 비밀번호와 함께 POST,
+								/// 연결은 mode=prepare 로 재인증 표지(5분·1회)를 받은 뒤 기존 연결 주소로 이동한다.
+								var openidReauthMode = null, openidReauthURL = null;
+								function openidReauth(mode, url) {
+									openidReauthMode = mode;
+									openidReauthURL = url;
+									document.getElementById('openid-reauth').style.display = 'block';
+									var password = document.getElementById('openidConfirmativePassword');
+									password.value = '';
+									password.focus();
+									return false;
+								}
+								function openidReauthSubmit() {
+									var password = document.getElementById('openidConfirmativePassword');
+									if (openidReauthMode == null) return false;
+									if (password.value == '') {
+										alert("<?php echo _t('비밀번호를 입력해 주십시오.');?>");
+										password.focus();
+										return false;
+									}
+									if (openidReauthMode == 'del')
+										return postNavigate(openidReauthURL, {confirmativePassword: password.value});
+									var url = openidReauthURL;
+									var request = new HTTPRequest("POST", "<?php echo $blogURL;?>/owner/setting/account/openid");
+									request.onSuccess = function() {
+										window.location.href = url;
+									}
+									request.onError = function() {
+										password.value = '';
+										if (parseInt(this.getText("/response/error")) == 9)
+											alert("<?php echo _t('비밀번호가 일치하지 않습니다.');?>");
+										else
+											PM.showErrorMessage("<?php echo _t('저장하지 못했습니다');?>", "center", "bottom");
+									}
+									request.send("mode=prepare&confirmativePassword=" + encodeURIComponent(password.value));
+									return false;
+								}
 <?php
 if ($service['type'] != 'single' &&  Acl::check("group.creators")) {
 ?>
@@ -302,7 +376,7 @@ if ($service['type'] != 'single' &&  Acl::check("group.creators")) {
 								}
 								
 								function cancelInvite(userid, caller) {
-									if(!confirm('<?php echo _t('삭제하시겠습니까?');?>')) return false;
+									tcConfirm('<?php echo _t('삭제하시겠습니까?');?>', function () {	// Textcube-NG: 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396)
 									var request = new HTTPRequest("POST", "<?php echo $blogURL;?>/owner/setting/account/cancelInvite/");
 									request.onSuccess = function() {
 										//caller.parentNode.parentNode.removeNode();
@@ -312,6 +386,8 @@ if ($service['type'] != 'single' &&  Acl::check("group.creators")) {
 										PM.showErrorMessage('<?php echo _t('실패했습니다.');?>', "center", "bottom");
 									}
 									request.send("userid=" + userid);
+									});
+									return false;
 								}
 <?php
 }
@@ -347,6 +423,13 @@ if ($service['type'] != 'single' &&  Acl::check("group.creators")) {
 												<em><?php echo _t('(로그인시 ID로 사용됩니다)');?></em>
 											</dd>
 										</dl>
+										<dl id="blogger-email-password-line" class="line">
+											<dt><label for="emailConfirmativePassword"><?php echo _t('현재 비밀번호');?></label></dt>
+											<dd>
+												<input type="password" id="emailConfirmativePassword" class="input-text" value="" onkeydown="if(event.keyCode == 13) save();" />
+												<em><?php echo _t('(e-mail 을 바꿀 때만 입력합니다)');?></em>
+											</dd>
+										</dl>
 									</fieldset>
 									<div class="button-box">
 										<input type="submit" class="save-button input-button" value="<?php echo _t('저장하기');?>" onclick="save(); return false;" />
@@ -361,7 +444,7 @@ if ($service['type'] != 'single' &&  Acl::check("group.creators")) {
 										
 										<dl id="current-password-line" class="line">
 											<dt><label for="prevPwd"><?php echo _t('현재 비밀번호');?></label></dt>
-											<dd><input type="password" id="prevPwd" class="input-text" value="<?php echo (empty($_GET['password']) ? '' : $_GET['password']);?>" /></dd>
+											<dd><input type="password" id="prevPwd" class="input-text" value="<?php echo (empty($_GET['password']) ? '' : htmlspecialchars($_GET['password'], ENT_QUOTES));?>" /></dd>
 										</dl>
 										<dl id="new-password1-line" class="line">
 											<dt><label for="pwd"><?php echo _t('새로운 비밀번호');?></label></dt>
@@ -383,13 +466,17 @@ if ($service['type'] != 'single' &&  Acl::check("group.creators")) {
 										<dl id="blogapi-password-line" class="line">
 											<dt><span class="label"><?php echo _t('API 용 비밀번호');?></span></dt>
 											<dd>
-											<input type="text" style="width:14em" class="input-text" id="TCApiPassword" name="TCApiPassword" value="<?php echo Setting::getUserSettingGlobal('APIKey',null,getUserId());?>" />
+											<input type="text" style="width:14em" class="input-text" id="TCApiPassword" name="TCApiPassword" value="<?php echo htmlspecialchars((string)Setting::getUserSettingGlobal('APIKey',null,getUserId()), ENT_QUOTES | ENT_SUBSTITUTE); // Textcube-NG: API 키 값 escape(v3.203), 잘못된 UTF-8 이어도 빈 값이 되지 않게 ENT_SUBSTITUTE(r3-4) ?>" />
 												<input type="button" class="input-button" value="<?php echo _t('임의로 생성')?>" onclick="chooseBlogPassword()" />
 												<input type="button" class="input-button" value="<?php echo _t('관리자 비밀번호를 그대로 사용')?>" onclick="clearBlogPassword()" />
 											</dd>
 											<dd>
 												<p><label for="TCApiPassword"><?php echo _t('텍스트큐브 API에 사용할 비밀번호입니다.').'<br />'._t('이 API 키는 외부에서 댓글 알리미 RSS를 참조하거나 로그인이 필요한 기능에서 원래 비밀번호 대용으로 사용합니다.').'<br />'._t('관리자 로그인 비밀번호와 동일하게 사용하실 경우 비워두시기 바랍니다.');?></label></p>
 											</dd>
+										</dl>
+										<dl id="blogapi-confirm-password-line" class="line">
+											<dt><label for="apiKeyConfirmativePassword"><?php echo _t('현재 비밀번호');?></label></dt>
+											<dd><input type="password" id="apiKeyConfirmativePassword" class="input-text" value="" /></dd>
 										</dl>
 
 									</fieldset>
@@ -487,8 +574,8 @@ for ($i=0; $i<count($openid_list); $i++) {
 	$className .= ($i == count($openid_list) - 1) ? ' last-line' : '';
 ?>
 									<tr class="<?php echo $className;?> inactive-class" onmouseover="rolloverClass(this, 'over')" onmouseout="rolloverClass(this, 'out')">
-										<td><?php echo $openid_list[$i] ?></td>
-										<td><a href="<?php echo $blogURL?>/owner/setting/account/openid?mode=del&amp;openid_identifier=<?php echo urlencode($openid_list[$i])?>"><?php echo _t('삭제') ?></a></td>
+										<td><?php echo htmlspecialchars($openid_list[$i], ENT_QUOTES); ?></td>
+										<td><a href="<?php echo $blogURL?>/owner/setting/account/openid?mode=del&amp;openid_identifier=<?php echo urlencode($openid_list[$i])?>" onclick="return openidReauth('del', this.href);"><?php echo _t('삭제') ?></a></td>
 									</tr>
 <?php
 }
@@ -505,16 +592,51 @@ if( $i > 0 ) { /* 출력된것이 하나라도 있다면*/
 }
 ?>
 							<div class="data-subbox">
+								<div id="openid-reauth" class="container" style="display:none;">
+									<label for="openidConfirmativePassword"><?php echo _t('현재 비밀번호');?></label>
+									<input type="password" id="openidConfirmativePassword" class="input-text" value="" onkeydown="if(event.keyCode == 13) return openidReauthSubmit();" />
+									<input type="button" class="input-button" value="<?php echo _t('확인');?>" onclick="openidReauthSubmit();" />
+								</div>
 <?php
+// 소셜 로그인 연결/해제 — 활성 provider 별로 연결됨이면 "연결해제"(기존 openid del 흐름), 미연결이면 "연결".
+if( isActivePlugin('CL_SocialLogin') ) {
+	require_once ROOT . '/plugins/CL_SocialLogin/index.php';
+	$__sl_cfg    = CL_SocialLogin_config();
+	$__sl_rows   = '';
+	foreach( CL_SocialLogin_providers() as $__slk => $__slp ) {
+		if( !CL_SocialLogin_isEnabled($__slk, $__sl_cfg) ) continue;
+		// 이 provider 로 연결된 식별자 검색(openid.* 목록에서 '{provider}:' 접두).
+		$__linked = null;
+		foreach( $openid_list as $__oid ) { if( strpos($__oid, $__slk . ':') === 0 ) { $__linked = $__oid; break; } }
+		if( $__linked !== null ) {
+			$__delurl = $blogURL . '/owner/setting/account/openid?mode=del&openid_identifier=' . urlencode($__linked);
+			$__sl_rows .= '<div style="margin:4px 0;"><strong>' . htmlspecialchars($__slp['label']) . '</strong> — ' . _t('연결됨') . ' <span style="color:#888;">(' . htmlspecialchars($__linked) . ')</span> <a class="input-button" style="padding:3px 8px;text-decoration:none;" href="' . htmlspecialchars($__delurl, ENT_QUOTES) . '" onclick="return openidReauth(\'del\', this.href);">' . _t('연결해제') . '</a></div>';
+		} else {
+			// 돌아올 주소에 공급자를 붙인다 — 연결 화면(account/openid)이 이 공급자로 방금 인증한 신원인지 확인한다(v3.153).
+			$__sl_return = urlencode($blogURL . '/owner/setting/account/openid?mode=add&provider=' . rawurlencode($__slk));
+			$__slurl = $blogURL . '/login/social?provider=' . rawurlencode($__slk) . '&requestURI=' . $__sl_return;
+			$__sl_rows .= '<div style="margin:4px 0;"><strong>' . htmlspecialchars($__slp['label']) . '</strong> <a class="input-button" style="padding:3px 8px;text-decoration:none;background-color:' . htmlspecialchars($__slp['color'], ENT_QUOTES) . ';color:' . htmlspecialchars($__slp['textcolor'], ENT_QUOTES) . ';" href="' . htmlspecialchars($__slurl, ENT_QUOTES) . '" onclick="return openidReauth(\'add\', this.href);">' . _t('연결') . '</a></div>';
+		}
+	}
+	if( $__sl_rows !== '' ) {
+?>
+								<fieldset class="container">
+									<legend><?php echo _t('소셜 계정 연결');?></legend>
+									<div class="openid-account-help" style="margin-bottom:6px;"><?php echo _t('소셜 로그인으로 인증하면 본 계정에 연결됩니다. 연결하면 그 소셜 계정으로 로그인 시 본 계정 권한을 갖습니다. 연결해제하면 그 소셜 계정으로는 더 이상 본 계정에 로그인할 수 없습니다.');?></div>
+									<?php echo $__sl_rows; ?>
+								</fieldset>
+<?php
+	}
+}
 if( isActivePlugin( 'CL_OpenID' ) || Acl::check('group.administrators') ) {
 ?>
-								<form id="openid-section" class="section" method="get" action="<?php echo $blogURL;?>/owner/setting/account/openid">
+								<form id="openid-section" class="section" method="get" action="<?php echo $blogURL;?>/owner/setting/account/openid" onsubmit="return openidReauth('add', '<?php echo $blogURL;?>/owner/setting/account/openid?mode=add&amp;provider=oidc');">
 									<fieldset class="container">
 										<legend><?php echo _t('이 아이디에 오픈아이디를 연결하기');?></legend>
 										
 										<dl id="blogger-openid-line" class="line">
 											<dt><label for="openid_identifier"><?php echo _t('오픈아이디');?></label></dt>
-											<dd><input type="text" id="openid_identifier" name="openid_identifier" class="input-text" value="<?php echo $currentOpenID ?>" />
+											<dd><input type="text" id="openid_identifier" name="openid_identifier" class="input-text" value="<?php echo htmlspecialchars(OpenID::identityKind($currentOpenID) === 'oidc' ? $currentOpenID : '', ENT_QUOTES); ?>" />
 												<input type="submit" class="save-button input-button" value="<?php echo _t('연결하기');?>" />
 											</dd>
 										</dl>
@@ -621,7 +743,7 @@ if ($service['type'] != 'single' && Acl::check("group.creators")):
 											</div>
 														
 											<div id="letter-body">
-												<textarea id="invitation_comment" cols="60" rows="3" name="textarea"><?php echo _t('블로그를 준비해 두었습니다.\n지금 바로 입주하실 수 있습니다.');?></textarea>
+												<textarea id="invitation_comment" cols="60" rows="3" name="textarea"><?php echo _t("블로그를 준비해 두었습니다.\n지금 바로 입주하실 수 있습니다.");?></textarea>
 											</div>
 											
 											<div id="letter-foot">
@@ -671,7 +793,7 @@ $invitedList = getInvited(getUserId());
 		if ($value['lastlogin'] == 0) {
 ?>
 														<td class="status"><?php echo _f('%1 전', timeInterval($value['created'], time()));?></td>
-														<td class="password"><?php echo POD::queryCell("SELECT value FROM {$database['prefix']}UserSettings WHERE userid = {$value['userid']} AND name = 'AuthToken'");?></td>
+														<td class="password"><?php echo Auth::getValidAuthToken($value['userid']);?></td>
 														<td class="cancel"><a class="cancel-button button" href="#void" onclick="cancelInvite(<?php echo $value['userid'];?>,this);return false;" title="<?php echo _t('초대에 응하지 않은 사용자의 계정을 삭제합니다.');?>"><span class="text"><?php echo _t('초대취소');?></span></a></td>
 <?php
 		} else {

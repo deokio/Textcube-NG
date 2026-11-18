@@ -23,6 +23,62 @@
  (at your option) any later version.
 
 */
+/* Textcube-NG: 직접 SQL(POD 문자열 SQL)을 준비 문장(POD::prepare·bindAndExecute)으로 바꿨다. 값은 SQL 문장과 따로 보낸다(PDO 모드 호환)(v3.211)
+   행은 열 이름 키 배열(fetchAllStmt)이다. 실패하면 원래 POD 함수와 같이 null·false·0을 돌려준다. */
+function PN_Subscription_preparedRows($query, $types, $params) {
+	$stmt = POD::prepare($query);
+	if (!$stmt) return null;
+	$rows = POD::bindAndExecute($stmt, $types, ...$params) ? POD::fetchAllStmt($stmt) : null;
+	$stmt->close();
+	return $rows;
+}
+
+function PN_Subscription_preparedCell($query, $types, $params) {
+	$rows = PN_Subscription_preparedRows($query, $types, $params);
+	if (empty($rows)) return null;
+	$row = array_values($rows[0]);
+	return $row[0];
+}
+
+// Paging::fetch()와 같은 계산(url·prefix는 기본값). COUNT와 목록 질의를 모두 준비 문장으로 보낸다. ? 자리는 FROM … ORDER BY 사이에만 둔다
+function PN_Subscription_preparedPaging($sql, $types, $params, $page, $count) {
+	$context = Model_Context::getInstance();
+	$paging = array('url' => $context->getProperty('uri.folder'), 'prefix' => '?page=', 'postfix' => '', 'onclick' => null);
+	if (empty($sql))
+		return array(array(), $paging);
+	if (preg_match('/\s(FROM.*)(ORDER BY.*)$/si', $sql, $matches))
+		$from = $matches[1];
+	else
+		return array(array(), $paging);
+	$paging['total'] = PN_Subscription_preparedCell("SELECT COUNT(*) $from", $types, $params);
+	if ($paging['total'] === null)
+		return array(array(), $paging);
+	$count = (int)$count;
+	if ($count < 1) $count = 1;
+	$paging['pages'] = intval(ceil($paging['total'] / $count));
+	$paging['page'] = is_numeric($page) ? $page : 1;
+	if ($paging['page'] > $paging['pages']) {
+		$paging['page'] = $paging['pages'];
+		if ($paging['pages'] > 0)
+			$paging['prev'] = $paging['pages'] - 1;
+	}
+	if ($paging['page'] > 1)
+		$paging['prev'] = $paging['page'] - 1;
+	if ($paging['page'] < $paging['pages'])
+		$paging['next'] = $paging['page'] + 1;
+	$offset = ($paging['page'] - 1) * $count;
+	if ($offset < 0) $offset = 0;
+	return array(PN_Subscription_preparedRows("$sql LIMIT $count OFFSET $offset", $types, $params), $paging);
+}
+
+function PN_Subscription_preparedCount($query, $types, $params) {
+	$stmt = POD::prepare($query);
+	if (!$stmt) return 0;
+	$count = POD::bindAndExecute($stmt, $types, ...$params) ? (int)$stmt->affected_rows : 0;
+	$stmt->close();
+	return $count;
+}
+
 function PN_Subscription_Default()
 {
 	global $pluginMenuURL, $pluginSelfParam, $totalSubscribers, $updatedSubscribers;
@@ -90,7 +146,7 @@ function PN_Subscription_Default()
 			echo '<span class="robot">'.htmlspecialchars($agent, ENT_QUOTES, 'UTF-8').'</span>';
 		else echo htmlspecialchars($agent, ENT_QUOTES, 'UTF-8');
 ?></td>
-										<td class="count"><?php echo $info["subscribers"];?>명</td>
+										<td class="count"><?php echo _f("%1명",$info["subscribers"]);?></td>
 										<td class="subscribed"><?php echo Timestamp::formatDate($info["subscribed"]);?></td>
 										<td class="referred"><?php echo Timestamp::formatDate($info["referred"]);?></td>
 									</tr>
@@ -290,7 +346,7 @@ function getSubscriptionLogsWithPage($page, $count) {
 	global $database;
 	$blogid = getBlogId();
 	requireComponent( "Textcube.Model.Paging");
-	return Paging::fetch("SELECT ip, host, useragent, referred FROM {$database['prefix']}SubscriptionLogs WHERE blogid = ".(int)$blogid." ORDER BY referred DESC", $page, $count);
+	return PN_Subscription_preparedPaging("SELECT ip, host, useragent, referred FROM {$database['prefix']}SubscriptionLogs WHERE blogid = ? ORDER BY referred DESC", 'i', array((int)$blogid), $page, $count);
 }
 
 function getSubscriptionLogs() {
@@ -310,13 +366,14 @@ function updateSubscriptionStatistics($target, $mother) {
 	requireComponent('Textcube.Data.Filter');
 	if (Filter::isFiltered('ip', $_SERVER['REMOTE_ADDR']))
 		return;
-	$ip = POD::escapeString($_SERVER['REMOTE_ADDR']);
-	$host = POD::escapeString(isset($_SERVER['REMOTE_HOST']) ? $_SERVER['REMOTE_HOST'] : '');
-	$useragent = POD::escapeString(isset($_SERVER['HTTP_USER_AGENT']) ? $_SERVER['HTTP_USER_AGENT'] : '');
-	POD::query("INSERT INTO {$database['prefix']}SubscriptionLogs values($blogid, '$ip', '$host', '$useragent', UNIX_TIMESTAMP())");
-	POD::query("DELETE FROM {$database['prefix']}SubscriptionLogs WHERE referred < UNIX_TIMESTAMP() - 604800");
-	if (!POD::queryCount("UPDATE {$database['prefix']}SubscriptionStatistics SET referred = UNIX_TIMESTAMP() WHERE blogid = $blogid AND ip = '$ip' AND host = '$host' AND useragent = '$useragent'"))
-		POD::query("INSERT INTO {$database['prefix']}SubscriptionStatistics VALUES ($blogid, '$ip', '$host', '$useragent', UNIX_TIMESTAMP(),UNIX_TIMESTAMP())");
+	// Textcube-NG: 값은 준비 문장으로 따로 보내므로 escapeString을 쓰지 않는다(v3.211)
+	$ip = $_SERVER['REMOTE_ADDR'];
+	$host = isset($_SERVER['REMOTE_HOST']) ? $_SERVER['REMOTE_HOST'] : '';
+	$useragent = isset($_SERVER['HTTP_USER_AGENT']) ? $_SERVER['HTTP_USER_AGENT'] : '';
+	PN_Subscription_preparedCount("INSERT INTO {$database['prefix']}SubscriptionLogs values(?, ?, ?, ?, UNIX_TIMESTAMP())", 'isss', array($blogid, $ip, $host, $useragent));
+	PN_Subscription_preparedCount("DELETE FROM {$database['prefix']}SubscriptionLogs WHERE referred < UNIX_TIMESTAMP() - 604800", '', array());
+	if (!PN_Subscription_preparedCount("UPDATE {$database['prefix']}SubscriptionStatistics SET referred = UNIX_TIMESTAMP() WHERE blogid = ? AND ip = ? AND host = ? AND useragent = ?", 'isss', array($blogid, $ip, $host, $useragent)))
+		PN_Subscription_preparedCount("INSERT INTO {$database['prefix']}SubscriptionStatistics VALUES (?, ?, ?, ?, UNIX_TIMESTAMP(),UNIX_TIMESTAMP())", 'isss', array($blogid, $ip, $host, $useragent));
 	return $target;
 }
 

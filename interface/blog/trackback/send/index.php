@@ -2,6 +2,14 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 
 define('__TEXTCUBE_ADMINPANEL__',true);
 
@@ -11,6 +19,8 @@ if (is_null($entry)) {
 	Respond::NotFoundPage();
 	exit;
 }
+// Textcube-NG: 관리 팝업(ADMINPANEL)은 같은 출처 frame 에만 표시 — 클릭재킹 방지(v3.147)
+header('X-Frame-Options: SAMEORIGIN');
 ?>
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="ko">
@@ -20,34 +30,46 @@ if (is_null($entry)) {
 	<link rel="stylesheet" type="text/css" href="<?php echo $service['path'] . $adminSkinSetting['skin'];?>/popup-trackback.css" />
 	<script type="text/javascript" src="<?php echo $service['path'];?>/resources/script/jquery/jquery-<?php echo JQUERY_VERSION;?>.js"></script>
 	<script type="text/javascript">jQuery.noConflict();</script>
-	<script type="text/javascript" src="<?php echo $service['resourcepath'];?>/script/common3.js"></script>
-	<script type="text/javascript" src="<?php echo $service['path'];?>/resources/script/EAF4.js"></script>
+<?php /* Textcube-NG: 이식본에서 고친 스크립트(EAF4.js·common3.js·gallery.js·jQuery, v3.147·v3.207)는 externalresources 설정과 관계없이 이 서버의 /resources 에서 읽는다 — 외부 리소스 주소의 원본 스크립트에는 CSRF 토큰 패치가 없다(r3-3) */ ?>
+	<script type="text/javascript" src="<?php echo $service['path'];?>/resources/script/common3.js?v=<?php echo filemtime(ROOT . '/resources/script/common3.js');?>"></script>
+	<script type="text/javascript" src="<?php echo $service['path'];?>/resources/script/EAF4.js?v=<?php echo filemtime(ROOT . '/resources/script/EAF4.js');?>"></script>
 	<!-- script type="text/javascript" src="<?php echo $service['resourcepath'];?>/script/EAF4.js"></script -->
 	<script type="text/javascript">
 		//<![CDATA[
 			var servicePath = "<?php echo $service['path'];?>";
 			var blogURL = "<?php echo $blogURL;?>";
+<?php
+	if (doesHaveOwnership()) {	// Textcube-NG: 소유자에게만 CSRF 토큰 출력 — EAF4.js 가 같은 출처 XHR(GET·HEAD 외)에 붙인다(v3.147)
+?>
+			var csrfToken = "<?php echo getCSRFToken();?>";
+<?php
+	}
+?>
 			var adminSkin = "<?php echo $adminSkinSetting['skin'];?>";
 			
 			function onclick_send(form) {
 				trim_all(form);
 				if (isNull(form.url,"<?php echo _text('전송할 주소를 입력하세요');?>")) return false;
-				if (!confirm("<?php echo _text('지정하신 주소로 글을 보내시겠습니까?');?>")) return false;
+				tcConfirm("<?php echo _text('지정하신 주소로 글을 보내시겠습니까?');?>", function () {	// Textcube-NG: 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396)
 				form.submit();
+				});
+				return false;
 			}
 
 			function onclick_delete(form, num) {
 				trim_all(form);
-				if (!confirm("<?php echo _text('지정하신 걸린글 기록을 삭제하시겠습니까?');?>")) return false;
+				tcConfirm("<?php echo _text('지정하신 걸린글 기록을 삭제하시겠습니까?');?>", function () {	// Textcube-NG: 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396)
 				form.mode.value = 'delete';
 				form.exenum.value = num;
 				form.submit();
+				});
+				return false;
 			}
 			
 			function sendTrackback(id) {
 				try {
 					var trackbackField = document.getElementById('url');
-					var request = new HTTPRequest("GET", "<?php echo $blogURL;?>/owner/communication/trackback/send/" + id + "?url=" + encodeURIComponent(trackbackField.value));
+					var request = new HTTPRequest("POST", "<?php echo $blogURL;?>/owner/communication/trackback/send/" + id);
 					request.onSuccess = function() {
 						showTrackbackSender(id);
 						trackbackField.value ='';
@@ -56,7 +78,7 @@ if (is_null($entry)) {
 					request.onError = function() {
 						alert("<?php echo _text('글을 걸 수 없었습니다.');?>");
 					}
-					request.send();
+					request.send("url=" + encodeURIComponent(trackbackField.value));
 				} catch(e) {
 					alert(e.message);
 				}
@@ -96,8 +118,8 @@ if (is_null($entry)) {
 			}
 			
 			function removeTrackbackLog(id,entry) {
-				if(confirm("<?php echo _text('선택된 걸린글을 지웁니다. 계속 하시겠습니까?');?>")) {
-					var request = new HTTPRequest("GET", "<?php echo $blogURL;?>/owner/communication/trackback/log/remove/" + id);
+				tcConfirm("<?php echo _text('선택된 걸린글을 지웁니다. 계속 하시겠습니까?');?>", function () {	// Textcube-NG: 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396)
+					var request = new HTTPRequest("POST", "<?php echo $blogURL;?>/owner/communication/trackback/log/remove/" + id);
 					request.onSuccess = function() {
 						showTrackbackSender(entry);
 					}
@@ -105,7 +127,7 @@ if (is_null($entry)) {
 						alert('<?php echo _text('실패했습니다.');?>');
 					}
 					request.send();
-				}
+				});
 			}
 
 			function resize() {

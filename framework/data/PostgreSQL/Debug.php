@@ -2,6 +2,14 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 
 define( 'TCDEBUG', true );
 
@@ -33,7 +41,7 @@ function __tcSqlLogBegin( $sql )
 	array_shift($backtrace);
 	array_shift($backtrace);
 
-	$__tcSqlLog[$__tcSqlLogCount] = array( 'sql' => trim($sql), 'backtrace' => $backtrace );
+	$__tcSqlLog[$__tcSqlLogCount] = array( 'sql' => trim($sql ?? ''), 'backtrace' => $backtrace );	// Textcube-NG: PHP 8.1 부터 trim() 에 null 을 넘기면 deprecated — null 은 빈 문자열로
 	$__tcSqlQueryBeginTime = explode(' ', microtime());
 }
 function __tcSqlLogEnd( $result, $cachedResult = 0 )
@@ -42,15 +50,15 @@ function __tcSqlLogEnd( $result, $cachedResult = 0 )
 	static $client_encoding = '';
 	$tcSqlQueryEndTime = explode(' ', microtime());
 	$elapsed = ($tcSqlQueryEndTime[1] - $__tcSqlQueryBeginTime[1]) + ($tcSqlQueryEndTime[0] - $__tcSqlQueryBeginTime[0]);
-	if( !$client_encoding ) {
-		$client_encoding = str_replace('_','-',pg_client_encoding());
+	if( !$client_encoding && isset(POD::$dbProperties['handle']) ) {	// pg_* 함수에 연결 명시(PHP 8.x 에서 연결 생략은 E_DEPRECATED)
+		$client_encoding = str_replace('_','-',DBAdapter::__clientEncoding());
 	}
 
 //	if( $client_encoding != 'utf8' && function_exists('iconv') ) {
 //		$__tcSqlLog[$__tcSqlLogCount]['error'] = iconv( $client_encoding, 'utf-8', pg_last_error());
 //	}
 //	else {
-		$__tcSqlLog[$__tcSqlLogCount]['error'] = pg_last_error();
+		$__tcSqlLog[$__tcSqlLogCount]['error'] = DBAdapter::__lastErrorMessage();	// 드라이버(native/pdo)별 오류
 //	}
 	$__tcSqlLog[$__tcSqlLogCount]['errno'] = 0; //mysql_errno();
 
@@ -64,16 +72,17 @@ function __tcSqlLogEnd( $result, $cachedResult = 0 )
 	$__tcSqlLog[$__tcSqlLogCount]['rows'] = 0;
 	$__tcSqlLog[$__tcSqlLogCount]['endtime'] = ($tcSqlQueryEndTime[1] - $__tcPageStartTime[1]) + ($tcSqlQueryEndTime[0] - $__tcPageStartTime[0]);
 	$__tcSqlLog[$__tcSqlLogCount]['endtime'] = sprintf("%4.1f",ceil($__tcSqlLog[$__tcSqlLogCount]['endtime'] * 10000) / 10);
-	if( ! $cachedResult ) { //&& mysql_errno() == 0 ) {
+	/* 실패한 질의(false)는 행 수를 세지 않는다(원본은 false 를 pg_num_rows()·pg_affected_rows() 에 넘겨 PHP 8 에서 TypeError, 7.4 에서 Warning). */
+	if( ! $cachedResult && $result ) { //&& mysql_errno() == 0 ) {
 		switch( strtolower(substr($__tcSqlLog[$__tcSqlLogCount]['sql'], 0, 6 )) )
 		{
 			case 'select':
-				$__tcSqlLog[$__tcSqlLogCount]['rows'] = pg_num_rows($result);
+				$__tcSqlLog[$__tcSqlLogCount]['rows'] = DBAdapter::__numRows($result);
 				break;
 			case 'insert':
 			case 'delete':
 			case 'update':
-				$__tcSqlLog[$__tcSqlLogCount]['rows'] = pg_affected_rows($result);
+				$__tcSqlLog[$__tcSqlLogCount]['rows'] = DBAdapter::__affectedRows($result);
 				break;
 		}
 	}
@@ -127,7 +136,7 @@ function __tcSqlLogDump()
 	global $service;
 	static $sLogPumped = false;
 	
-	if (!empty($sLogPumped)) return;
+	if (!empty($sLogPumped) || !empty($GLOBALS['__preventSqlLogDump'])) return;
 	$sLogPumped = true;
 	
 	__tcSqlLogPoint('shutdown');
@@ -262,7 +271,7 @@ EOS;
 	$cached_count = 0;
 	foreach( $__tcSqlLog as $c => $log ) {
 		$elapsed[$count] = array( $log['elapsed'], $count, $log['cached'] ? "cached":"" );
-		$__tcSqlLog[$c]['percent'] = sprintf("%4.1f", $log['endtime']*100/$__tcPageEndTime);
+		$__tcSqlLog[$c]['percent'] = sprintf("%4.1f", ((float) $__tcPageEndTime > 0) ? $log['endtime']*100/$__tcPageEndTime : 0);
 		$count++;
 	}
 
@@ -318,7 +327,7 @@ THEAD;
 			$backtrace = '';
 		}
 		
-		$elapsed_total_db += $log['elapsed'];
+		$elapsed_total_db += (float) $log['elapsed'];
 		$elapsed_total = $log['endtime'];
 		$progress_bar = $log['percent'] / 2; //Max 50px;
 		if (!$commentBlosk) {

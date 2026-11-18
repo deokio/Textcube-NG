@@ -21,7 +21,7 @@ $tabsClass['edit'] = true;
 										return false;		
 									}
 							
-									if(document.getElementById('editForm').rss.value.indexOf('http://')==-1) {
+									if(!/^https?:\/\//i.test(document.getElementById('editForm').rss.value)) { // Textcube-NG: https 주소도 그대로(r3-8)
 										uri = 'http://'+document.getElementById('editForm').rss.value;
 									} else {
 										uri = document.getElementById('editForm').rss.value;

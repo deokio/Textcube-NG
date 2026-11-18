@@ -18,12 +18,21 @@
   </requirements>
   <binding>
 	<tag name="SKIN_head_end" handler="URLkeeper" />
-	<config dataValHandler="">
+	<config dataValHandler="" xml:lang="ko">
 			<window width="500" height="525" />
 			<fieldset legend="설정">
 				<field title="처리방식" name="viewForm" type="select">
 					<op value="0" checked="checked">경고창을 띄운 후, 방문자가 선택합니다</op>
 					<op value="1">프레임을 제거하고, 내 블로그주소로 이동합니다.</op>
+				</field>
+			</fieldset>
+		</config>	
+	<config dataValHandler="" xml:lang="en">
+			<window width="500" height="525" />
+			<fieldset legend="Settings">
+				<field title="Handling method" name="viewForm" type="select">
+					<op value="0" checked="checked">Show a warning dialog, then let the visitor choose</op>
+					<op value="1">Remove the frame and go to my blog URL.</op>
 				</field>
 			</fieldset>
 		</config>	

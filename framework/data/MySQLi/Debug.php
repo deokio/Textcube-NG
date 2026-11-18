@@ -41,7 +41,7 @@ function __tcSqlLogBegin( $sql )
 	array_shift($backtrace);
 	array_shift($backtrace);
 
-	$__tcSqlLog[$__tcSqlLogCount] = array( 'sql' => trim($sql), 'backtrace' => $backtrace );
+	$__tcSqlLog[$__tcSqlLogCount] = array( 'sql' => trim($sql ?? ''), 'backtrace' => $backtrace );	// Textcube-NG: PHP 8.1 부터 trim() 에 null 을 넘기면 deprecated — null 은 빈 문자열로
 	$__tcSqlQueryBeginTime = explode(' ', microtime());
 	//dumpAsFile($sql);
 }
@@ -52,16 +52,16 @@ function __tcSqlLogEnd( $result, $cachedResult = 0 )
 	$tcSqlQueryEndTime = explode(' ', microtime());
 	$elapsed = ($tcSqlQueryEndTime[1] - $__tcSqlQueryBeginTime[1]) + ($tcSqlQueryEndTime[0] - $__tcSqlQueryBeginTime[0]);
 	if( !$client_encoding ) {
-		$client_encoding = str_replace('_','-',POD::$db->character_set_name());
+		$client_encoding = str_replace('_','-',DBAdapter::__charsetName());
 	}
 
 	if( $client_encoding != 'utf8' && function_exists('iconv') ) {
-		$__tcSqlLog[$__tcSqlLogCount]['error'] = iconv( $client_encoding, 'utf-8', POD::$db->error);
+		$__tcSqlLog[$__tcSqlLogCount]['error'] = iconv( $client_encoding, 'utf-8', DBAdapter::__lastErrorMessage());
 	}
 	else {
-		$__tcSqlLog[$__tcSqlLogCount]['error'] = POD::$db->error;
+		$__tcSqlLog[$__tcSqlLogCount]['error'] = DBAdapter::__lastErrorMessage();	// 드라이버(native/pdo)별 오류
 	}
-	$__tcSqlLog[$__tcSqlLogCount]['errno'] = POD::$db->errno;
+	$__tcSqlLog[$__tcSqlLogCount]['errno'] = DBAdapter::__lastErrorCode();
 
 	if( $cachedResult == 0 ) {
 		$__tcSqlLog[$__tcSqlLogCount]['elapsed'] = ceil($elapsed * 10000) / 10;
@@ -73,16 +73,16 @@ function __tcSqlLogEnd( $result, $cachedResult = 0 )
 	$__tcSqlLog[$__tcSqlLogCount]['rows'] = 0;
 	$__tcSqlLog[$__tcSqlLogCount]['endtime'] = ($tcSqlQueryEndTime[1] - $__tcPageStartTime[1]) + ($tcSqlQueryEndTime[0] - $__tcPageStartTime[0]);
 	$__tcSqlLog[$__tcSqlLogCount]['endtime'] = sprintf("%4.1f",ceil($__tcSqlLog[$__tcSqlLogCount]['endtime'] * 10000) / 10);
-	if( ! $cachedResult && POD::$db->errno == 0 ) {
+	if( ! $cachedResult && DBAdapter::__lastErrorCode() == 0 ) {
 		switch( strtolower(substr($__tcSqlLog[$__tcSqlLogCount]['sql'], 0, 6 )) )
 		{
 			case 'select':
-				$__tcSqlLog[$__tcSqlLogCount]['rows'] = $result->num_rows;
+				$__tcSqlLog[$__tcSqlLogCount]['rows'] = DBAdapter::__numRows($result);
 				break;
 			case 'insert':
 			case 'delete':
 			case 'update':
-				$__tcSqlLog[$__tcSqlLogCount]['rows'] = POD::$db->affected_rows;
+				$__tcSqlLog[$__tcSqlLogCount]['rows'] = DBAdapter::__affectedRows();
 				break;
 		}
 	}
@@ -135,7 +135,7 @@ function __tcSqlLogDump()
 	global $__tcSqlLog, $__tcPageEndTime;
 	global $service, $memcache;
 	static $sLogPumped = false;
-	if (!empty($sLogPumped)) return;
+	if (!empty($sLogPumped) || !empty($GLOBALS['__preventSqlLogDump'])) return;
 	$sLogPumped = true;
 
 	__tcSqlLogPoint('shutdown');
@@ -270,7 +270,7 @@ EOS;
 	$cached_count = 0;
 	foreach( $__tcSqlLog as $c => $log ) {
 		$elapsed[$count] = array( $log['elapsed'], $count, $log['cached'] ? "cached":"" );
-		$__tcSqlLog[$c]['percent'] = sprintf("%4.1f", $log['endtime']*100/$__tcPageEndTime);
+		$__tcSqlLog[$c]['percent'] = sprintf("%4.1f", ((float) $__tcPageEndTime > 0) ? $log['endtime']*100/$__tcPageEndTime : 0);
 		$count++;
 	}
 
@@ -326,7 +326,7 @@ THEAD;
 			$backtrace = '';
 		}
 
-		$elapsed_total_db += $log['elapsed'];
+		$elapsed_total_db += (float) $log['elapsed'];
 		$elapsed_total = $log['endtime'];
 		$progress_bar = $log['percent'] / 2; //Max 50px;
 		if (!$commentBlosk) {
@@ -385,6 +385,8 @@ TFOOT;
 	print '<h4>SSL support : </h4>'.CRLF;
 	if(isset($service['useSSL']) && $service['useSSL'] == true) print '<p>Enabled</p>'.CRLF;
 	else print '<p>Disabled</p>'.CRLF;
+	if(isset($service['hsts']) && $service['hsts'] === true) print '<p>HSTS Enabled (max-age='.(int)(isset($service['hstsMaxAge']) ? $service['hstsMaxAge'] : 31536000).')</p>'.CRLF;
+	else print '<p>HSTS Disabled</p>'.CRLF;
 	print '<h4>Cache system :</h4>'.CRLF;
 	if(isset($service['pagecache']) && $service['pagecache'] == true) print '<p>Page cache Enabled</p>'.CRLF;
 	else print '<p>Page cache Disabled</p>'.CRLF;

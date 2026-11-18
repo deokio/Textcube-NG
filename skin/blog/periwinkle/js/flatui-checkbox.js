@@ -1,5 +1,7 @@
 /* =============================================================
  * flatui-checkbox v0.0.3
+ * Textcube-NG: removeAttr('checked') -> prop('checked', false)
+ *   (jQuery 3.0: removeAttr no longer clears the checked property)
  * ============================================================ */
  
 !function ($) {
@@ -39,7 +41,7 @@
         , e = $.Event('toggle')
       
       if ($el.prop('disabled') == false) {
-        $parent.toggleClass(ch) && checked ? $el.removeAttr(ch) : $el.prop(ch, ch);
+        $parent.toggleClass(ch) && checked ? $el.prop(ch, false) : $el.prop(ch, ch);
         $el.trigger(e).trigger('change'); 
       }
     }  
@@ -52,7 +54,7 @@
         , checkAction = option == 'check' ? true : false
         , e = $.Event(option)
       
-      $parent[checkAction ? 'addClass' : 'removeClass' ](ch) && checkAction ? $el.prop(ch, ch) : $el.removeAttr(ch);
+      $parent[checkAction ? 'addClass' : 'removeClass' ](ch) && checkAction ? $el.prop(ch, ch) : $el.prop(ch, false);
       $el.trigger(e).trigger('change');       
     }  
       

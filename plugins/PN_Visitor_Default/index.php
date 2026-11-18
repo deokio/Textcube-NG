@@ -39,7 +39,7 @@ function PN_Visitor_Default()
 	if(Acl::check('group.owners')) {
 ?>
 								function setTotalStatistics() {
-									if (confirm("방문자의 수를 초기화하면 방문객의 수가 0이 됩니다.\n정말 초기화하시겠습니까?")) {
+									tcConfirm(<?php echo json_encode(_t("방문자의 수를 초기화하면 방문객의 수가 0이 됩니다.\n정말 초기화하시겠습니까?"), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE); ?>, function () {	// Textcube-NG: 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396)
 										var request = new HTTPRequest("GET", <?php echo json_encode($pluginHandlerURL . '/PN_Visitor_Default_set&ajaxcall'); ?>);
 										request.onSuccess = function() {
 											//document.getElementById("total").innerHTML = 0;
@@ -47,11 +47,11 @@ function PN_Visitor_Default()
 											return true;
 										}
 										request.onError = function() {
-											alert("저장하지 못했습니다.");
+											alert(<?php echo json_encode(_t("저장하지 못했습니다."), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE); ?>);
 											return false;
 										}
 										request.send();
-									}
+									});
 								}
 <?php
 	}
@@ -81,18 +81,18 @@ function PN_Visitor_Default()
 					 		
 					 	<form method="post" action="<?php echo $safeHandlerURL;?>PN_Visitor_Default_set">
 					 		<div id="part-statistics-visitor" class="part">
-					 			<h2 class="caption"><span class="main-text">방문자 통계정보를 보여줍니다</span></h2>
+					 			<h2 class="caption"><span class="main-text"><?php echo _t("방문자 통계정보를 보여줍니다");?></span></h2>
 					 			
 						 		<div id="statistics-counter-inbox" class="data-inbox">
 									<div class="title">
-										<span class="label"><span class="text">현재까지의 방문자 수</span></span>
+										<span class="label"><span class="text"><?php echo _t("현재까지의 방문자 수");?></span></span>
 										<span class="divider"> : </span>
 										<span id="total"><?php echo number_format($stats['total']);?></span>
 									</div>
 <?php
 	if(Acl::check('group.owners')) {
 ?>
-									<a class="init-button button" href="<?php echo $safeHandlerURL;?>/PN_Visitor_Default_set" onclick="setTotalStatistics(); return false;"><span class="text">초기화</span></a>
+									<a class="init-button button" href="<?php echo $safeHandlerURL;?>/PN_Visitor_Default_set" onclick="setTotalStatistics(); return false;"><span class="text"><?php echo _t("초기화");?></span></a>
 <?php
 	}
 ?>
@@ -103,7 +103,7 @@ function PN_Visitor_Default()
 								<table id="statistics-month-inbox" class="data-inbox" cellspacing="0" cellpadding="0">
 									<thead>
 										<tr>
-											<th colspan="2"><span class="text">월별 방문자 수</span></th>
+											<th colspan="2"><span class="text"><?php echo _t("월별 방문자 수");?></span></th>
 										</tr>
 									</thead>
 									<tbody>
@@ -131,13 +131,14 @@ for ($i=0; $i<sizeof($temp); $i++) {
 								<table id="statistics-day-inbox" class="data-inbox" cellspacing="0" cellpadding="0">
 									<thead>
 										<tr>
-											<th colspan="2"><span class="text">일별 방문자 수</span></th>
+											<th colspan="2"><span class="text"><?php echo _t("일별 방문자 수");?></span></th>
 										</tr>
 									</thead>
 									<tbody>
 <?php
 if (isset($date)) {
 	$temp = Statistics::getDailyStatistics($date);
+	if (!is_array($temp)) $temp = array(); // query failure or rejected input returns null; sizeof(null) is a TypeError since PHP 8.0
 	for ($i=0; $i<sizeof($temp); $i++) {
 		$record = $temp[$i];
 		
@@ -146,7 +147,7 @@ if (isset($date)) {
 ?>
 										<tr class="<?php echo $className;?> inactive-class">
 											<td class="date"><?php echo Timestamp::formatDate(Misc::getTimeFromPeriod($record['datemark']));?></td>
-											<td class="count"><?php echo $record['visits'];?></td>
+											<td class="count"><?php echo (int)$record['visits']; // Textcube-NG: 월별 표와 같이 정수로 출력(v3.194) ?></td>
 										</tr>
 <?php
 	}
@@ -167,7 +168,9 @@ function PN_Visitor_Default_set()
 	$blogid = getBlogId();
 	$isAjaxRequest = isset($_REQUEST['ajaxcall']) ? true : false;
 	if ($isAjaxRequest) {
-		$result = Statistics::setTotalStatistics($blogid) ? 0 : -1;
+		/* [보안] 원본은 권한을 확인하지 않아 /owner/plugin/adminHandler 에 접근 가능한 팀블로그 글쓴이도 방문자 수를
+		   초기화할 수 있었다 → 초기화 버튼 노출 조건(group.owners)과 같게 서버에서도 확인 */
+		$result = (Acl::check('group.owners') && Statistics::setTotalStatistics($blogid)) ? 0 : -1;
 		header('Content-Type: text/xml; charset=utf-8');
 		print ("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<response>\n<error>$result</error>\n</response>");
 		exit;

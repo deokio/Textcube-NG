@@ -115,7 +115,7 @@ CREATE TABLE [##_dbPrefix_##]CommentsNotifiedQueue (
   checkdate int(11) NOT NULL default '0',
   written int(11) NOT NULL default '0',
   PRIMARY KEY  (blogid, id),
-  UNIQUE KEY commentid (commentid)
+  UNIQUE KEY commentid (blogid, commentid)
 ) [##_charset_##];
 CREATE TABLE [##_dbPrefix_##]CommentsNotifiedSiteInfo (
   id int(11) NOT NULL,
@@ -158,7 +158,7 @@ CREATE TABLE [##_dbPrefix_##]Entries (
   comments int(11) NOT NULL default '0',
   trackbacks int(11) NOT NULL default '0',
   pingbacks int(11) NOT NULL default '0',
-  PRIMARY KEY (blogid, id, draft, category, published),
+  PRIMARY KEY (blogid, id, draft),
   KEY visibility (visibility),
   KEY userid (userid),
   KEY published (published),
@@ -358,7 +358,8 @@ CREATE TABLE [##_dbPrefix_##]Sessions (
   created int(11) NOT NULL default '0',
   updated int(11) NOT NULL default '0',
   PRIMARY KEY  (id,address),
-  KEY updated (updated)
+  KEY updated (updated),
+  KEY address (address)
 ) [##_charset_##];
 CREATE TABLE [##_dbPrefix_##]SkinSettings (
   blogid int(11) NOT NULL default '0',
@@ -426,7 +427,7 @@ CREATE TABLE [##_dbPrefix_##]TrashRemoteResponses (
 CREATE TABLE [##_dbPrefix_##]Users (
   userid int(11) NOT NULL default 1,
   loginid varchar(64) NOT NULL default '',
-  password varchar(32) default NULL,
+  password varchar(255) default NULL,
   name varchar(32) NOT NULL default '',
   created int(11) NOT NULL default '0',
   lastlogin int(11) NOT NULL default '0',

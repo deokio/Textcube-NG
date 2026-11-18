@@ -7,6 +7,7 @@ $IV = array(
 		'visibility' => array('int',0,3,'mandatory'=>false),
 		'acceptComments' => array('int',0,1,'mandatory'=>false),
 		'acceptTrackbacks' => array('int',0,1,'mandatory'=>false),
+		'acceptNotifiedComments' => array('int',0,1,'mandatory'=>false),
 		'useiPhoneUI' => array('int',0,1,'mandatory'=>false)
 	)
 );
@@ -29,6 +30,10 @@ if(isset($_POST['acceptComments'])) {
 
 if(isset($_POST['acceptTrackbacks'])) {
 	if(Setting::setBlogSettingGlobal('acceptTrackbacks',$_POST['acceptTrackbacks'])) $result = true;
+}
+// Textcube-NG: 댓글 알리미 받기 설정(0 = 받지 않음, 기본 1)(r3-3)
+if(isset($_POST['acceptNotifiedComments'])) {
+	if(Setting::setBlogSettingGlobal('acceptNotifiedComments',$_POST['acceptNotifiedComments'])) $result = true;
 }
 if(isset($_POST['useiPhoneUI'])) {
 	if($_POST['useiPhoneUI'] == 1) $useiPhoneUI = true;

@@ -1,0 +1,37 @@
+<?php
+//$__text['이 웹브라우저는 구글맵과 호환되지 않습니다.'] = '';
+$__text['위도 또는 경도의 값이 올바르지 않습니다.'] = 'Giá trị vĩ độ hoặc kinh độ không hợp lệ.';
+$__text['위도'] = 'Vĩ độ';
+$__text['경도'] = 'Kinh độ';
+$__text['구글맵 삽입하기'] = 'Chèn Google Map';
+$__text['마커 표시 모드'] = 'Chế độ hiển thị điểm đánh dấu';
+$__text['본문에 삽입하기'] = 'Chèn vào nội dung';
+$__text['지도 검색'] = 'Tìm bản đồ';
+$__text['위치 검색'] = 'Tìm vị trí';
+$__text['찾기'] = 'Tìm';
+$__text['기본 설정'] = 'Thiết lập mặc định';
+$__text['가로'] = 'Chiều rộng';
+$__text['세로'] = 'Chiều cao';
+$__text['적용'] = 'Áp dụng';
+//$__text['이용 안내'] = '';
+$__text['현재 위치 첨부하기'] = 'Đính kèm vị trí hiện tại';
+$__text['첨부된 위치 제거하기'] = 'Xoá vị trí đã đính kèm';
+$__text['첨부된 위치 정보를 제거하시겠습니까?'] = 'Bạn có muốn xoá thông tin vị trí đã đính kèm không?';
+//$__text['웹브라우저가 제공하는 Geolocation 서비스를 이용하여 현재 위치 정보를 가져옵니다. 정확도는 사용하고 계신 기기나 지역에 따라 다를 수 있습니다.'] = '';
+//$__text['자세히 알아보기'] = '';
+$__text['지도 삽입하기'] = 'Chèn bản đồ';
+$__text['권한 없음'] = 'Không có quyền';
+$__text['위치정보 없음'] = 'Không có thông tin vị trí';
+$__text['시간 제한 초과'] = 'Hết thời gian chờ';
+$__text['알 수 없는 오류'] = 'Lỗi không xác định';
+$__text['위치 정보를 가져오지 못하였습니다.'] = 'Không thể lấy thông tin vị trí.';
+$__text['현재 웹브라우저는 Geolocation 기능을 지원하지 않습니다.'] = 'Trình duyệt web hiện tại không hỗ trợ tính năng Geolocation.';
+$__text['검색 결과가 없습니다.'] = 'Không có kết quả tìm kiếm.';
+$__text['마커 고정시키기'] = 'Cố định điểm đánh dấu';
+$__text['오류가 발생하였습니다. (%1)'] = 'Đã xảy ra lỗi. (%1)';
+$__text['닫기'] = 'Đóng';
+$__text['제목 : '] = 'Tiêu đề : ';
+$__text['설명 : '] = 'Mô tả : ';
+$__text['삭제하기'] = 'Xóa';
+$__text['%1에 얽힌 이야기'] = 'Những câu chuyện về %1';
+?>

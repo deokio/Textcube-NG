@@ -123,6 +123,10 @@ function getRemoteResponseList($blogid, $search, $type = null) {
 	$list = array('title' => "$search", 'items' => array());
 	$search = escapeSearchString($search);
 	$authorized = doesHaveOwnership() ? '' : getPrivateCategoryExclusionQuery($blogid);
+	// Textcube-NG: 원본은 방문자 검색에도 비공개 글의 트랙백이 나왔다 — 방문자는 공개 글(getRecentRemoteResponses 방문자 조건과 같음),
+	// 글관리 권한(group.editors)이 없는 구성원은 자기 글의 트랙백만(getRecentComments 의 작성자 조건과 같음)(v3.145)
+	if (!doesHaveOwnership()) $authorized .= ' AND e.visibility >= 2';
+	else if (!Acl::check('group.editors')) $authorized .= ' AND e.userid = '.getUserId();
 	if ($result = POD::queryAll("SELECT t.id, t.entry, t.url, t.site, t.subject, t.excerpt, t.written, e.slogan
  		FROM {$database['prefix']}RemoteResponses t
 		LEFT JOIN {$database['prefix']}Entries e ON t.entry = e.id AND t.blogid = e.blogid AND e.draft = 0
@@ -140,12 +144,14 @@ function getRecentRemoteResponses($blogid, $count = false, $guestShip = false, $
 	global $database, $skinSetting;
 	if (!is_null($type)) $typeFilter = " AND t.responsetype = '".POD::escapeString($type)."'";
 	else $typeFilter = '';
+	// Textcube-NG: 글관리 권한(group.editors)이 없는 구성원은 자기 글의 트랙백만(getRecentComments 의 $userLimit 과 같음)(v3.145)
+	$userLimit = (doesHaveOwnership() && !Acl::check('group.editors')) ? ' AND e.userid = '.getUserId() : '';
 	$sql = (doesHaveOwnership() && !$guestShip) ? "SELECT t.*, e.slogan
 		FROM
 			{$database['prefix']}RemoteResponses t
 			LEFT JOIN {$database['prefix']}Entries e ON t.blogid = e.blogid AND t.entry = e.id AND e.draft = 0
 		WHERE
-			t.blogid = $blogid AND t.isfiltered = 0 $typeFilter
+			t.blogid = $blogid AND t.isfiltered = 0 $typeFilter $userLimit
 		ORDER BY
 			t.written
 		DESC LIMIT ".($count != false ? $count : $skinSetting['trackbacksOnRecent']) :
@@ -315,6 +321,9 @@ function getRecentTrackbacks($blogid, $count = false, $guestShip = false) {
 }
 
 function sendTrackbackPing($entryId, $permalink, $url, $site, $title) {
+	// Textcube-NG: TEXTCUBE_SYNC_URL 은 어디에서도 정의되지 않는다. PHP 7.2 부터 정의되지 않은 상수를 문자열로 보는 동작이 경고 대상이 되었고
+	// PHP 8.0 부터는 Error 라 트랙백 저장 뒤 응답 없이 끝났다. 정의되지 않았으면 원본 7.4 결과(요청 실패, 반환 null)와 같게 바로 돌아감(v3.158)
+	if (!defined('TEXTCUBE_SYNC_URL')) return;
 	$rpc = new XMLRPC();
 	$rpc->url = TEXTCUBE_SYNC_URL;
 	$summary = array(
@@ -414,17 +423,20 @@ function sendTrackback($blogid, $entryId, $url) {
 		|| strpos($url, 'cytb.cyworld.nate.com') !== false // 싸이 페이퍼
 		|| strpos($url, 'www.cine21.com/Movies/tb.php') !== false // cine21
 		;
+	// Textcube-NG: 트랙백 보낼 주소(글쓴이 입력)로 검사 없이 연결해 서버 안쪽 주소·임의 포트로 요청할 수 있었다. 공인 주소만(v3.79 HTTPRequest::$publicOnly)(v3.156)
 	if ($isNeedConvert) {
 		$title = UTF8::convert($title, 'EUC-KR');
 		$excerpt = UTF8::convert($excerpt, 'EUC-KR');
 		$blogTitle = UTF8::convert($blogTitle, 'EUC-KR');
 		$content = "url=" . rawurlencode($link) . "&title=" . rawurlencode($title) . "&blog_name=" . rawurlencode($blogTitle) . "&excerpt=" . rawurlencode($excerpt);
 		$request = new HTTPRequest('POST', $url);
+		$request->publicOnly = true;
 		$request->contentType = 'application/x-www-form-urlencoded; charset=euc-kr';
 		$isSuccess = $request->send($content);
 	} else {
 		$content = "url=" . rawurlencode($link) . "&title=" . rawurlencode($title) . "&blog_name=" . rawurlencode($blogTitle) . "&excerpt=" . rawurlencode($excerpt);
 		$request = new HTTPRequest('POST', $url);
+		$request->publicOnly = true;
 		$request->contentType = 'application/x-www-form-urlencoded; charset=utf-8';
 		$isSuccess = $request->send($content);
 	}
@@ -667,7 +679,7 @@ function getInfoFromURL($url) {
 		default:
 			$chunk = array_reverse(explode('.', $pieces['host']));
 
-			switch ($chunk[1].'.'.$chunk[0]) {
+			switch ((isset($chunk[1]) ? $chunk[1] : '').'.'.$chunk[0]) { // Textcube-NG: 점 없는 호스트의 $chunk[1] 미정의 방지(r3-8)
 				case 'egloos.com':
 					$result['service'] = 'egloos';
 					break;
@@ -692,6 +704,7 @@ function getInfoFromURL($url) {
 					requireComponent('Needlworks.PHP.HTTPRequest');
 
 					$request = new HTTPRequest($url);
+					$request->publicOnly = true;	// Textcube-NG: 트랙백 답장 주소(글쓴이 입력)를 공인 주소로만 읽음(getRDFfromURL 과 같음)(v3.156)
 					if ($request->send()) {
 						$html = $request->responseText;
 
@@ -835,6 +848,7 @@ function getRDFfromURL($url) {
 	requireComponent('Needlworks.PHP.HTTPRequest');
 
 	$request = new HTTPRequest($url);
+	$request->publicOnly = true;	// Textcube-NG: 트랙백 답장 주소(글쓴이 입력)를 공인 주소로만 읽음(v3.156)
 
 	if (!$request->send() || !$request->responseText) {
 		return false;
@@ -845,8 +859,9 @@ function getRDFfromURL($url) {
 	}
 
 	if (class_exists('DOMDocument')) {
-		$doc = DOMDocument::loadXML($match[0]);
-		if (!$doc) {
+		// Textcube-NG: DOMDocument::loadXML() 정적 호출은 PHP 8 에서 Error(비정적 메서드의 정적 호출, 7.4 는 Deprecated) — 인스턴스로 호출(v3.156)
+		$doc = new DOMDocument();
+		if (!@$doc->loadXML($match[0])) {
 			return false;
 		}
 		$desc = $doc->getElementsByTagNameNS('http://www.w3.org/1999/02/22-rdf-syntax-ns#', 'Description');

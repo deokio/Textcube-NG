@@ -556,17 +556,18 @@ TTModernEditor.prototype.html2ttml = function() {
 	}
 
 	// Object 처리
+	// Textcube-NG: width·height 는 속성 앞 공백까지 맞춰 주소 쿼리의 width= 를 건드리지 않음(r3-36 R-534, TTMLsupport R-537 과 같은 수정)
 	var regObject = new RegExp("<img[^>]*class=[\"']?tatterObject.*?>", "i");
 	while(result = regObject.exec(str)) {
 		var body = result[0];
 		var object = this.objectUnSerialize(this.parseAttribute(body, "longdesc"));
-		var widthString = new RegExp("width=[\"']?\\w+[\"']?","i").exec(object);
-		var heightString = new RegExp("height=[\"']?\\w+[\"']?","i").exec(object);
+		var widthString = new RegExp("(\\s)width=[\"']?\\w+[\"']?","i").exec(object);
+		var heightString = new RegExp("(\\s)height=[\"']?\\w+[\"']?","i").exec(object);
 		var size = this.parseImageSize(body, "array");
 		if(widthString)
-			object = object.replaceAll(widthString[0], 'width="' + size[0] + '"');
+			object = object.replaceAll(widthString[0], widthString[1] + 'width="' + size[0] + '"');
 		if(heightString)
-			object = object.replaceAll(heightString[0], 'height="' + size[1] + '"');
+			object = object.replaceAll(heightString[0], heightString[1] + 'height="' + size[1] + '"');
 		str = str.replaceAll(body, object);
 	}
 
@@ -650,7 +651,8 @@ TTModernEditor.prototype.showProperty = function(obj)
 		var size = this.parseImageSize(this.selectedElement, "array");
 		getObject(this.id + "propertyObject_width").value = size[0];
 		getObject(this.id + "propertyObject_height").value = size[1];
-		getObject(this.id + "propertyObject_chunk").value = this.objectUnSerialize(attribute);
+		// Textcube-NG: DOM 값(엔터티가 풀림)을 다시 인코드한 뒤 unserialize 해서 &quot;·&amp;·&lt; 가 코드 칸에서 풀리지 않게 한다 (r3-38 R-540)
+		getObject(this.id + "propertyObject_chunk").value = this.objectUnSerialize(this.objectEncodeEntities(attribute));
 		getObject(this.id + "propertyInsertObject").style.display = "none";
 		getObject(this.id + "propertyHyperLink").style.display = "none";
 		getObject(this.id + "propertyObject").style.display = "block";
@@ -696,7 +698,7 @@ TTModernEditor.prototype.showProperty = function(obj)
 			if(objectCount == 1) {
 				var size = this.parseImageSize(this.selectedElement, "array");
 
-				if(this.propertyCurrentImage == this.selectedElement.getAttribute("src")) {
+				if(this.propertyCurrentObject === this.selectedElement && this.propertyCurrentImage == this.selectedElement.getAttribute("src")) {	// Textcube-NG: r3-44 R-571 같은 이미지인지를 src 만이 아니라 선택한 요소로도 판정한다(같은 src 의 다른 이미지를 고르면 앞 이미지 비율로 크기가 바뀌던 것)
 					var newWidth = size[0];
 					var newHeight = parseInt(size[0] * this.propertyCurrentProportion1);
 					this.propertyCurrentProportion1 = newHeight / newWidth;
@@ -710,6 +712,7 @@ TTModernEditor.prototype.showProperty = function(obj)
 				else {
 					this.propertyCurrentProportion1 = size[1] / size[0];
 					this.propertyCurrentImage = this.selectedElement.getAttribute("src");
+					this.propertyCurrentObject = this.selectedElement;	// Textcube-NG: r3-44 R-571
 				}
 			}
 			else {
@@ -883,7 +886,8 @@ TTModernEditor.prototype.setProperty = function()
 		if(this.selectedElement.className == "tatterEmbed" || this.selectedElement.className == "tatterFlash")
 			this.selectedElement.setAttribute("longDesc", getObject(this.propertyWindowId + "_src").value);
 		else {
-			this.selectedElement.setAttribute("longDesc", this.objectSerialize(getObject(this.propertyWindowId + "_chunk").value));
+			// Textcube-NG: serialize 뒤 엔터티를 풀어 넣는다(삽입 경로에서 HTML 파서가 만든 DOM 값과 같게) (r3-38 R-540)
+			this.selectedElement.setAttribute("longDesc", this.objectDecodeEntities(this.objectSerialize(getObject(this.propertyWindowId + "_chunk").value)));
 		}
 	}
 	else if(this.selectedElement.tagName && this.selectedElement.tagName.toLowerCase() == "img" && attribute) {
@@ -1474,16 +1478,13 @@ TTModernEditor.prototype.command = function(command, value1, value2) {
 				var ext = new RegExp("\\.(\\w+)(?:$|\\?)").exec(url);
 				ext = (ext && ext.length == 2) ? ext[1].toLowerCase() : "";
 				var code = "";
-				if(ext == "swf" || ext == "") {
-					code = '<object classid="clsid:d27cdb6e-ae6d-11cf-96b8-444553540000" codebase="http://download.macromedia.com/pub/shockwave/cabs/flash/swflash.cab#version=7,0,0,0" width="400" height="300">' +
-							'<param name="wmode" value="transparent"/>' +
-							'<param name="movie" value="' + url + '"/>' +
-							'<!--[if !IE]> <-->' +
-							'<object type="application/x-shockwave-flash" transparent="yes" data="' + url + '" width="400" height="300">' +
-							'<p><a href="' + url + '">[Flash] ' + url + '</a></p>' +
-							'<\/object>' +
-							'<!--> <![endif]-->' +
-							'<\/object>';
+				// Textcube-NG: IE 전용 ActiveX(clsid)·Flash object 를 HTML5 audio·video 로 바꿈(r3-31 R-429 B). swf·확장자 없는 주소는 넣지 않고 알 수 없는 형식으로 알린다. 주소는 escape 한다
+				var _u = url.replace(/[&<>"']/g, function(c) { return {"&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;"}[c]; });
+				// Textcube-NG: objectSerialize 표지(__QUOT__·__LT__·__GT__)가 든 주소는 되돌릴 때 따옴표·꺾쇠로 바뀌어 속성이 주입되므로 넣지 않는다(TTMLsupport r3-32 E4와 같은 식, r3-37 R-533)
+				// Textcube-NG: 주소가 덜 끝난 표지(__QUOT·__QUOT_)로 끝나도 되돌릴 때 뒤에 붙는 표지와 이어져 src 가 잘리므로 함께 거부한다 (r3-38 R-535)
+				if(ext == "swf" || ext == "" || new RegExp("__(?:QUOT|LT|GT)__|__QUOT_?$").test(url)) {
+					alert(s_unknownFileType);
+					return;
 				}
 				else {
 					var type = null;
@@ -1511,30 +1512,11 @@ TTModernEditor.prototype.command = function(command, value1, value2) {
 						alert(s_unknownFileType);
 						return;
 					}
-					else if(type == "video/quicktime") {
-								code = '<object classid="clsid:02BF25D5-8C17-4B23-BC80-D3488ABDDC6B"codebase="http://www.apple.com/qtactivex/qtplugin.cab" width="320" height="260">' +
-								'<param name="src" value="' + url + '"/>' +
-								'<param name="controller" value="true"/>' +
-								'<param name="autoplay" value="false"/>' +
-								'<!--[if !IE]>-->' +
-								'<object type="video/quicktime" data="' + url + '" width="320" height="260">' +
-								'<param name="autoplay" value="false"/>' +
-								'<param name="controller" value="true"/>' +
-								'</object>' +
-								'<!--<![endif]-->' +
-								'</object>';
+					else if(type.indexOf("audio/") == 0) {
+						code = '<audio controls src="' + _u + '" style="width:320px;height:40px"></audio>';
 					}
 					else {
-						code = '<object classid="clsid:22D6F312-B0F6-11D0-94AB-0080C74C7E95">' +
-								'<param name="Filename" value="' + url + '"/>' +
-								'<param name="AutoStart" value="false"/>' +
-								'<!--[if !IE]> <-->' +
-								'<object type="' + type + '" data="' + url + '" width="320" height="' + (type == "audio/mpeg" ? "20" : "240") + '">' +
-								'<param name="AutoStart" value="0"/>' +
-								'<embed pluginspage="http://www.microsoft.com/Windows/Downloads/Contents/Products/MediaPlayer/" src="' + url + '" width="320" height="' + (type == "audio/mpeg" ? "20" : "240") + '" type="application/x-mplayer2" autostart="0"></embed>' +
-								'</object>' +
-								'<!--> <![endif]-->' +
-								'</object>';
+						code = '<video controls src="' + _u + '" width="320" height="240"></video>';
 					}
 				}
 			}
@@ -2056,6 +2038,15 @@ TTModernEditor.prototype.objectUnSerialize = function(str) {
 	return str;
 }
 
+// Textcube-NG: 속성 창 코드 칸 왕복용. DOM 의 longDesc 값은 HTML 파서가 엔터티를 푼 값이라, 코드 칸에 보일 때는 다시 인코드한 뒤 unserialize 하고, 반영할 때는 serialize 뒤 엔터티를 풀어 넣는다(삽입 경로가 만드는 DOM 값과 같게). 푸는 엔터티는 인코드한 4개와 &#39; 뿐이다 (r3-38 R-540)
+TTModernEditor.prototype.objectEncodeEntities = function(str) {
+	return str.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+TTModernEditor.prototype.objectDecodeEntities = function(str) {
+	return str.replace(/&(quot|amp|lt|gt|#39);/g, function(m, n) { return {"quot": "\"", "amp": "&", "lt": "<", "gt": ">", "#39": "'"}[n]; });
+}
+
 // HTML 문자열에서 attribute="value" 추출
 TTModernEditor.prototype.parseAttribute = function(str, name) {
 	var regAttribute1 = new RegExp("(^|\\W)" + name + '="([^"]*)"', "gi");
@@ -2288,6 +2279,7 @@ TTModernEditor.prototype.addObject = function(data) {
 
 // moved from library/view/ownerView.php, printEntryEditorPalette()
 
+// Textcube-NG: _t() 값은 HTML 문자열에 넣기 전에 htmlspecialchars 로 escape 한다(v3.193)
 TTModernEditor.prototype.getEditorPalette = function(htmlonly) {
 	var colors = ['008000', '009966', '99CC66', '999966', 'CC9900', 'D41A01',
 	              'FF0000', 'FF7635', 'FF9900', 'FF3399', '9B18C1', '993366',
@@ -2299,21 +2291,22 @@ TTModernEditor.prototype.getEditorPalette = function(htmlonly) {
 	var html = ////
 		'<dl class="font-relatives">' +
 			'<dt class="title">' +
-				'<span class="label">' + _t('폰트 설정') + '</span>' +
+				'<span class="label">' + this.htmlspecialchars(_t('폰트 설정')) + '</span>' +
 			'</dt>' +
 			'<dd class="command-box">' +
 				'<select id="__ID__fontFamilyChanger" class="moderneditor-fontFamilyChanger" onchange="__EDITOR__.execCommand(\'fontname\', false, this.value); this.selectedIndex=0;">' +
-					'<option class="head-option" value="">' + _t('글자체') + '</option>';
+					'<option class="head-option" value="">' + this.htmlspecialchars(_t('글자체')) + '</option>';
 	var fontset = _t('fontDisplayName:fontCode:fontFamily').split('|');
 	for (var i = 0; i < this.allFontList.length; ++i) {
 		var entry = this.allFontList[i];
-		html += '<option style="font-family: ' + entry[1] + ';" value="' + entry[1] + '">' + entry[0] + '</option>';
+		// Textcube-NG: 글꼴 이름·값은 번역 값(fontDisplayName:fontCode:fontFamily)에서 오므로 escape 한다(r3-4)
+		html += '<option style="font-family: ' + this.htmlspecialchars(entry[1]) + ';" value="' + this.htmlspecialchars(entry[1]) + '">' + this.htmlspecialchars(entry[0]) + '</option>';
 	}
 	html += ////
 				'</select>' +
 				'<select id="__ID__fontSizeChanger" class="moderneditor-fontSizeChanger" onchange="__EDITOR__.command(\'FontSize\', this.value); this.selectedIndex=0;">' +
-					'<option class="head-option" value="">' + _t('속성') + '</option>' +
-					'<optgroup class="size" label="' + _t('크기') + '">' +
+					'<option class="head-option" value="">' + this.htmlspecialchars(_t('속성')) + '</option>' +
+					'<optgroup class="size" label="' + this.htmlspecialchars(_t('크기')) + '">' +
 						'<option value="1">1 (8 pt)</option>' +
 						'<option value="2">2 (10 pt)</option>' +
 						'<option value="3">3 (12 pt)</option>' +
@@ -2322,7 +2315,7 @@ TTModernEditor.prototype.getEditorPalette = function(htmlonly) {
 						'<option value="6">6 (24 pt)</option>' +
 						'<option value="7">7 (36 pt)</option>' +
 					'</optgroup>' +
-					'<optgroup class="header" label="' + _t('제목') + '">' +
+					'<optgroup class="header" label="' + this.htmlspecialchars(_t('제목')) + '">' +
 						'<option value="h3">h3</option>' +
 						'<option value="h4">h4</option>' +
 						'<option value="h5">h5</option>' +
@@ -2333,14 +2326,14 @@ TTModernEditor.prototype.getEditorPalette = function(htmlonly) {
 		'</dl>' +
 		'<dl class="font-style">' +
 			'<dt class="title">' +
-				'<span class="label">' + _t('폰트 스타일') + '</span>' +
+				'<span class="label">' + this.htmlspecialchars(_t('폰트 스타일')) + '</span>' +
 			'</dt>' +
 			'<dd class="command-box">' +
-				'<a id="__ID__indicatorBold" class="inactive-class button moderneditor-indicatorBold" href="#void" onclick="__EDITOR__.command(\'Bold\'); return false" title="' + _t('굵게') + '"><span class="text">' + _t('굵게') + '</span></a>' +
-				'<a id="__ID__indicatorItalic" class="inactive-class button moderneditor-indicatorItalic" href="#void" onclick="__EDITOR__.command(\'Italic\'); return false" title="' + _t('기울임') + '"><span class="text">' + _t('기울임') + '</span></a>' +
-				'<a id="__ID__indicatorUnderline" class="inactive-class button moderneditor-indicatorUnderline" href="#void" onclick="__EDITOR__.command(\'Underline\'); return false" title="' + _t('밑줄') + '"><span class="text">' + _t('밑줄') + '</span></a>' +
-				'<a id="__ID__indicatorStrike" class="inactive-class button moderneditor-indicatorStrike" href="#void" onclick="__EDITOR__.command(\'StrikeThrough\'); return false" title="' + _t('취소선') + '"><span class="text">' + _t('취소선') + '</span></a>' +
-				'<a id="__ID__indicatorColorPalette" class="inactive-class button moderneditor-indicatorColorPalette" href="#void" onclick="hideLayer(\'__ID__markPalette\'); hideLayer(\'__ID__textBox\'); toggleLayer(\'__ID__colorPalette\'); __EDITOR__.changeButtonStatus(this, \'colorPalette\'); return false" title="' + _t('글자색') + '"><span class="text">' + _t('글자색') + '</span></a>' +
+				'<a id="__ID__indicatorBold" class="inactive-class button moderneditor-indicatorBold" href="#void" onclick="__EDITOR__.command(\'Bold\'); return false" title="' + this.htmlspecialchars(_t('굵게')) + '"><span class="text">' + this.htmlspecialchars(_t('굵게')) + '</span></a>' +
+				'<a id="__ID__indicatorItalic" class="inactive-class button moderneditor-indicatorItalic" href="#void" onclick="__EDITOR__.command(\'Italic\'); return false" title="' + this.htmlspecialchars(_t('기울임')) + '"><span class="text">' + this.htmlspecialchars(_t('기울임')) + '</span></a>' +
+				'<a id="__ID__indicatorUnderline" class="inactive-class button moderneditor-indicatorUnderline" href="#void" onclick="__EDITOR__.command(\'Underline\'); return false" title="' + this.htmlspecialchars(_t('밑줄')) + '"><span class="text">' + this.htmlspecialchars(_t('밑줄')) + '</span></a>' +
+				'<a id="__ID__indicatorStrike" class="inactive-class button moderneditor-indicatorStrike" href="#void" onclick="__EDITOR__.command(\'StrikeThrough\'); return false" title="' + this.htmlspecialchars(_t('취소선')) + '"><span class="text">' + this.htmlspecialchars(_t('취소선')) + '</span></a>' +
+				'<a id="__ID__indicatorColorPalette" class="inactive-class button moderneditor-indicatorColorPalette" href="#void" onclick="hideLayer(\'__ID__markPalette\'); hideLayer(\'__ID__textBox\'); toggleLayer(\'__ID__colorPalette\'); __EDITOR__.changeButtonStatus(this, \'colorPalette\'); return false" title="' + this.htmlspecialchars(_t('글자색')) + '"><span class="text">' + this.htmlspecialchars(_t('글자색')) + '</span></a>' +
 				'<div id="__ID__colorPalette" class="moderneditor-colorPalette" style="display: none;">' +
 					'<table cellspacing="0" cellpadding="0">' +
 						'<tr>';
@@ -2350,7 +2343,7 @@ TTModernEditor.prototype.getEditorPalette = function(htmlonly) {
 						'</tr>' +
 					'</table>' +
 				'</div>' +
-				'<a id="__ID__indicatorMarkPalette" class="inactive-class button moderneditor-indicatorMarkPalette" href="#void" onclick="hideLayer(\'__ID__colorPalette\');hideLayer(\'__ID__textBox\');toggleLayer(\'__ID__markPalette\'); __EDITOR__.changeButtonStatus(this, \'markPalette\'); return false" title="' + _t('배경색') + '"><span class="text">' + _t('배경색') + '</span></a>' +
+				'<a id="__ID__indicatorMarkPalette" class="inactive-class button moderneditor-indicatorMarkPalette" href="#void" onclick="hideLayer(\'__ID__colorPalette\');hideLayer(\'__ID__textBox\');toggleLayer(\'__ID__markPalette\'); __EDITOR__.changeButtonStatus(this, \'markPalette\'); return false" title="' + this.htmlspecialchars(_t('배경색')) + '"><span class="text">' + this.htmlspecialchars(_t('배경색')) + '</span></a>' +
 				'<div id="__ID__markPalette" class="moderneditor-markPalette" style="display: none;">' +
 					'<table cellspacing="0" cellpadding="0">' +
 						'<tr>';
@@ -2360,7 +2353,7 @@ TTModernEditor.prototype.getEditorPalette = function(htmlonly) {
 						'</tr>' +
 					'</table>' +
 				'</div>' +
-				'<a id="__ID__indicatorTextBox" class="inactive-class button moderneditor-indicatorTextBox" href="#void" onclick="hideLayer(\'__ID__markPalette\');hideLayer(\'__ID__colorPalette\');toggleLayer(\'__ID__textBox\'); __EDITOR__.changeButtonStatus(this, \'textBox\'); return false" title="' + _t('텍스트 상자') + '"><span class="text">' + _t('텍스트 상자') + '</span></a>' +
+				'<a id="__ID__indicatorTextBox" class="inactive-class button moderneditor-indicatorTextBox" href="#void" onclick="hideLayer(\'__ID__markPalette\');hideLayer(\'__ID__colorPalette\');toggleLayer(\'__ID__textBox\'); __EDITOR__.changeButtonStatus(this, \'textBox\'); return false" title="' + this.htmlspecialchars(_t('텍스트 상자')) + '"><span class="text">' + this.htmlspecialchars(_t('텍스트 상자')) + '</span></a>' +
 				'<div id="__ID__textBox" class="moderneditor-textBox" style="display: none;">' +
 					'<table cellspacing="0" cellpadding="0">' +
 						'<tr>';
@@ -2370,42 +2363,42 @@ TTModernEditor.prototype.getEditorPalette = function(htmlonly) {
 						'</tr>' +
 					'</table>' +
 				'</div>' +
-				'<a id="__ID__indicatorRemoveFormat" class="inactive-class button moderneditor-indicatorRemoveFormat" href="#void" onclick="__EDITOR__.command(\'RemoveFormat\'); return false;" title="' + _t('효과 제거') + '"><span class="text">' + _t('효과 제거') + '</span></a>' +
+				'<a id="__ID__indicatorRemoveFormat" class="inactive-class button moderneditor-indicatorRemoveFormat" href="#void" onclick="__EDITOR__.command(\'RemoveFormat\'); return false;" title="' + this.htmlspecialchars(_t('효과 제거')) + '"><span class="text">' + this.htmlspecialchars(_t('효과 제거')) + '</span></a>' +
 			'</dd>' +
 		'</dl>' +
 		'<dl class="paragraph">' +
 			'<dt class="title">' +
-				'<span class="label">' + _t('문단') + '</span>' +
+				'<span class="label">' + this.htmlspecialchars(_t('문단')) + '</span>' +
 			'</dt>' +
 			'<dd class="command-box">' +
-				'<a id="__ID__indicatorJustifyLeft" class="inactive-class button moderneditor-indicatorJustifyLeft" href="#void" onclick="__EDITOR__.command(\'JustifyLeft\'); return false" title="' + _t('왼쪽 정렬') + '"><span class="text">' + _t('왼쪽 정렬') + '</span></a>' +
-				'<a id="__ID__indicatorJustifyCenter" class="inactive-class button moderneditor-indicatorJustifyCenter" href="#void" onclick="__EDITOR__.command(\'JustifyCenter\'); return false" title="' + _t('가운데 정렬') + '"><span class="text">' + _t('가운데 정렬') + '</span></a>' +
-				'<a id="__ID__indicatorJustifyRight" class="inactive-class button moderneditor-indicatorJustifyRight" href="#void" onclick="__EDITOR__.command(\'JustifyRight\'); return false" title="' + _t('오른쪽 정렬') + '"><span class="text">' + _t('오른쪽 정렬') + '</span></a>' +
-				'<a id="__ID__indicatorUnorderedList" class="inactive-class button moderneditor-indicatorUnorderedList" href="#void" onclick="__EDITOR__.command(\'InsertUnorderedList\'); return false" title="' + _t('순서없는 리스트') + '"><span class="text">' + _t('순서없는 리스트') + '</span></a>' +
-				'<a id="__ID__indicatorOrderedList" class="inactive-class button moderneditor-indicatorOrderedList" href="#void" onclick="__EDITOR__.command(\'InsertOrderedList\'); return false" title="' + _t('번호 매긴 리스트') + '"><span class="text">' + _t('번호 매긴 리스트') + '</span></a>' +
-				'<a id="__ID__indicatorOutdent" class="inactive-class button moderneditor-indicatorOutdent" href="#void" onclick="__EDITOR__.command(\'Outdent\'); return false" title="' + _t('내어쓰기') + '"><span class="text">' + _t('내어쓰기') + '</span></a>' +
-				'<a id="__ID__indicatorIndent" class="inactive-class button moderneditor-indicatorIndent" href="#void" onclick="__EDITOR__.command(\'Indent\'); return false" title="' + _t('들여쓰기') + '"><span class="text">' + _t('들여쓰기') + '</span></a>' +
-				'<a id="__ID__indicatorBlockquote" class="inactive-class button moderneditor-indicatorBlockquote" href="#void" onclick="__EDITOR__.command(\'Blockquote\'); return false" title="' + _t('인용구') + '"><span class="text">' + _t('인용구') + '</span></a>' +
+				'<a id="__ID__indicatorJustifyLeft" class="inactive-class button moderneditor-indicatorJustifyLeft" href="#void" onclick="__EDITOR__.command(\'JustifyLeft\'); return false" title="' + this.htmlspecialchars(_t('왼쪽 정렬')) + '"><span class="text">' + this.htmlspecialchars(_t('왼쪽 정렬')) + '</span></a>' +
+				'<a id="__ID__indicatorJustifyCenter" class="inactive-class button moderneditor-indicatorJustifyCenter" href="#void" onclick="__EDITOR__.command(\'JustifyCenter\'); return false" title="' + this.htmlspecialchars(_t('가운데 정렬')) + '"><span class="text">' + this.htmlspecialchars(_t('가운데 정렬')) + '</span></a>' +
+				'<a id="__ID__indicatorJustifyRight" class="inactive-class button moderneditor-indicatorJustifyRight" href="#void" onclick="__EDITOR__.command(\'JustifyRight\'); return false" title="' + this.htmlspecialchars(_t('오른쪽 정렬')) + '"><span class="text">' + this.htmlspecialchars(_t('오른쪽 정렬')) + '</span></a>' +
+				'<a id="__ID__indicatorUnorderedList" class="inactive-class button moderneditor-indicatorUnorderedList" href="#void" onclick="__EDITOR__.command(\'InsertUnorderedList\'); return false" title="' + this.htmlspecialchars(_t('순서없는 리스트')) + '"><span class="text">' + this.htmlspecialchars(_t('순서없는 리스트')) + '</span></a>' +
+				'<a id="__ID__indicatorOrderedList" class="inactive-class button moderneditor-indicatorOrderedList" href="#void" onclick="__EDITOR__.command(\'InsertOrderedList\'); return false" title="' + this.htmlspecialchars(_t('번호 매긴 리스트')) + '"><span class="text">' + this.htmlspecialchars(_t('번호 매긴 리스트')) + '</span></a>' +
+				'<a id="__ID__indicatorOutdent" class="inactive-class button moderneditor-indicatorOutdent" href="#void" onclick="__EDITOR__.command(\'Outdent\'); return false" title="' + this.htmlspecialchars(_t('내어쓰기')) + '"><span class="text">' + this.htmlspecialchars(_t('내어쓰기')) + '</span></a>' +
+				'<a id="__ID__indicatorIndent" class="inactive-class button moderneditor-indicatorIndent" href="#void" onclick="__EDITOR__.command(\'Indent\'); return false" title="' + this.htmlspecialchars(_t('들여쓰기')) + '"><span class="text">' + this.htmlspecialchars(_t('들여쓰기')) + '</span></a>' +
+				'<a id="__ID__indicatorBlockquote" class="inactive-class button moderneditor-indicatorBlockquote" href="#void" onclick="__EDITOR__.command(\'Blockquote\'); return false" title="' + this.htmlspecialchars(_t('인용구')) + '"><span class="text">' + this.htmlspecialchars(_t('인용구')) + '</span></a>' +
 			'</dd>' +
 		'</dl>' +
 		'<dl class="special">' +
 			'<dt class="title">' +
-				'<span class="label">' + _t('기타') + '</span>' +
+				'<span class="label">' + this.htmlspecialchars(_t('기타')) + '</span>' +
 			'</dt>' +
 			'<dd class="command-box">' +
-				'<a id="__ID__indicatorCreateLink" class="inactive-class button moderneditor-indicatorCreateLink" href="#void" onclick="__EDITOR__.command(\'CreateLink\'); return false" title="' + _t('하이퍼링크') + '"><span class="text">' + _t('하이퍼링크') + '</span></a>' +
-				'<a id="__ID__indicatorMediaBlock" class="inactive-class button moderneditor-indicatorMediaBlock" href="#void" onclick="__EDITOR__.command(\'ObjectBlock\'); return false" title="' + _t('미디어 삽입') + '"><span class="text">' + _t('미디어 삽입') + '</span></a>' +
-				'<a id="__ID__indicatorMoreLessBlock" class="inactive-class button moderneditor-indicatorMoreLessBlock" href="#void" onclick="__EDITOR__.command(\'MoreLessBlock\'); return false" title="' + _t('More/Less') + '"><span class="text">' + _t('More/Less') + '</span></a>' +
+				'<a id="__ID__indicatorCreateLink" class="inactive-class button moderneditor-indicatorCreateLink" href="#void" onclick="__EDITOR__.command(\'CreateLink\'); return false" title="' + this.htmlspecialchars(_t('하이퍼링크')) + '"><span class="text">' + this.htmlspecialchars(_t('하이퍼링크')) + '</span></a>' +
+				'<a id="__ID__indicatorMediaBlock" class="inactive-class button moderneditor-indicatorMediaBlock" href="#void" onclick="__EDITOR__.command(\'ObjectBlock\'); return false" title="' + this.htmlspecialchars(_t('미디어 삽입')) + '"><span class="text">' + this.htmlspecialchars(_t('미디어 삽입')) + '</span></a>' +
+				'<a id="__ID__indicatorMoreLessBlock" class="inactive-class button moderneditor-indicatorMoreLessBlock" href="#void" onclick="__EDITOR__.command(\'MoreLessBlock\'); return false" title="' + this.htmlspecialchars(_t('More/Less')) + '"><span class="text">' + this.htmlspecialchars(_t('More/Less')) + '</span></a>' +
 			'</dd>' +
 		'</dl>';
 	if(this.restrictEditorMode != true) {
 		html += ////
 		'<dl class="mode">' +
 			'<dt class="title">' +
-				'<span class="label">' + _t('편집 환경') + '</span>' +
+				'<span class="label">' + this.htmlspecialchars(_t('편집 환경')) + '</span>' +
 			'</dt>' +
 			'<dd class="command-box">' +
-				'<a id="__ID__indicatorMode" class="inactive-class button moderneditor-indicatorMode" href="#void" onclick="__EDITOR__.command(\'ToggleMode\'); __EDITOR__.changeEditorMode(); return false" title="' + _t('클릭하시면 HTML 편집기로 변경합니다.') + '"><span class="text">' + _t('WYSIWYG 편집기') + '</span></a>' +
+				'<a id="__ID__indicatorMode" class="inactive-class button moderneditor-indicatorMode" href="#void" onclick="__EDITOR__.command(\'ToggleMode\'); __EDITOR__.changeEditorMode(); return false" title="' + this.htmlspecialchars(_t('클릭하시면 HTML 편집기로 변경합니다.')) + '"><span class="text">' + this.htmlspecialchars(_t('WYSIWYG 편집기')) + '</span></a>' +
 			'</dd>' +
 		'</dl>';
 	}
@@ -2424,6 +2417,7 @@ TTModernEditor.prototype.getEditorPalette = function(htmlonly) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// Textcube-NG: _t() 값은 HTML 문자열에 넣기 전에 htmlspecialchars 로 escape 한다(v3.193)
 TTModernEditor.prototype.getEditorProperty = function(/*$alt*/) {
 	//$fixPosition = getUserSetting('editorPropertyPositionFix', 0);
 	var fixPosition = this.fixPosition, hasGD = this.hasGD;
@@ -2433,29 +2427,29 @@ TTModernEditor.prototype.getEditorProperty = function(/*$alt*/) {
 		'<div id="__ID__propertyHyperLink" class="entry-editor-property" style="display: none;">' +
 			'<div class="entry-editor-property-option">' +
 				'<input type="checkbox" class="checkbox" id="__ID__propertyHyperLink-fix-position" onclick="__EDITOR__.setPropertyPosition(1); return true;"' + (fixPosition ? ' checked="checked"' : '') + '/>' +
-				'<label for="__ID__propertyHyperLink-fix-position">' + _t('위치 고정') + '</label>' +
+				'<label for="__ID__propertyHyperLink-fix-position">' + this.htmlspecialchars(_t('위치 고정')) + '</label>' +
 			'</div>' +
-			'<h4>' + _t('하이퍼링크') + '</h4>' +
+			'<h4>' + this.htmlspecialchars(_t('하이퍼링크')) + '</h4>' +
 			'<div class="group">' +
 				'<dl class="line">' +
-					'<dt class="property-name"><label for="__ID__propertyInsertObject_url">' + _t('URL') + '</label></dt>' +
+					'<dt class="property-name"><label for="__ID__propertyInsertObject_url">' + this.htmlspecialchars(_t('URL')) + '</label></dt>' +
 					'<dd><input type="text" id="__ID__propertyHyperLink_url" class="input-text" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
 				'</dl>' +
 				'<dl class="line">' +
-					'<dt class="property-name"><label for="__ID__propertyInsertObject_type">' + _t('대상') + '</label></dt>' +
+					'<dt class="property-name"><label for="__ID__propertyInsertObject_type">' + this.htmlspecialchars(_t('대상')) + '</label></dt>' +
 					'<dd>' +
 						'<select id="__ID__propertyHyperLink_target" style="width: 105px" >' +
-							'<option value="_blank">' + _t('새창') + '</option>' +
-							'<option value="_self">' + _t('현재창') + '</option>' +
-							'<option value="">' + _t('사용 안함') + '</option>' +
+							'<option value="_blank">' + this.htmlspecialchars(_t('새창')) + '</option>' +
+							'<option value="_self">' + this.htmlspecialchars(_t('현재창')) + '</option>' +
+							'<option value="">' + this.htmlspecialchars(_t('사용 안함')) + '</option>' +
 						'</select>' +
 					'</dd>' +
 				'</dl>' +
 			'</div>' +
 			'<div class="button-box">' +
-				'<span class="insert-button button" onclick="__EDITOR__.command(\'ExcuteCreateLink\'); return false"><span class="text">' + _t('적용하기') + '</span></span>' +
+				'<span class="insert-button button" onclick="__EDITOR__.command(\'ExcuteCreateLink\'); return false"><span class="text">' + this.htmlspecialchars(_t('적용하기')) + '</span></span>' +
 				'<span class="divider"> | </span>' +
-				'<span class="cancel-button button" onclick="__EDITOR__.command(\'CancelCreateLink\'); return false"><span class="text">' + _t('취소하기') + '</span></span>' +
+				'<span class="cancel-button button" onclick="__EDITOR__.command(\'CancelCreateLink\'); return false"><span class="text">' + this.htmlspecialchars(_t('취소하기')) + '</span></span>' +
 			'</div>' +
 		'</div>';
 
@@ -2464,34 +2458,34 @@ TTModernEditor.prototype.getEditorProperty = function(/*$alt*/) {
 		'<div id="__ID__propertyInsertObject" class="entry-editor-property" style="display: none;">' +
 			'<div class="entry-editor-property-option">' +
 				'<input type="checkbox" class="checkbox" id="__ID__propertyInsertObject-fix-position" onclick="__EDITOR__.setPropertyPosition(1); return true;"' + (fixPosition ? ' checked="checked"' : '') + '/>' +
-				'<label for="__ID__propertyInsertObject-fix-position">' + _t('위치 고정') + '</label>' +
+				'<label for="__ID__propertyInsertObject-fix-position">' + this.htmlspecialchars(_t('위치 고정')) + '</label>' +
 			'</div>' +
-			'<h4>' + _t('오브젝트 삽입') + '</h4>' +
+			'<h4>' + this.htmlspecialchars(_t('오브젝트 삽입')) + '</h4>' +
 			'<div class="group">' +
 				'<dl class="line">' +
-					'<dt class="property-name"><label for="__ID__propertyInsertObject_type">' + _t('유형') + '</label></dt>' +
+					'<dt class="property-name"><label for="__ID__propertyInsertObject_type">' + this.htmlspecialchars(_t('유형')) + '</label></dt>' +
 					'<dd>' +
 						'<select id="__ID__propertyInsertObject_type" style="width: 105px" onchange="getObject(\'__ID__propertyInsertObject_part_url\').style.display=getObject(\'__ID__propertyInsertObject_part_raw\').style.display=\'none\';getObject(\'__ID__propertyInsertObject_part_\' + this.value).style.display = \'block\'">' +
-							'<option value="url">' + _t('주소입력') + '</option>' +
-							'<option value="raw">' + _t('코드 붙여넣기') + '</option>' +
+							'<option value="url">' + this.htmlspecialchars(_t('주소입력')) + '</option>' +
+							'<option value="raw">' + this.htmlspecialchars(_t('코드 붙여넣기')) + '</option>' +
 						'</select>' +
 					'</dd>' +
 				'</dl>' +
 				'<dl id="__ID__propertyInsertObject_part_url" class="line">' +
-					'<dt class="property-name"><label for="__ID__propertyInsertObject_url">' + _t('파일 주소') + '</label></dt>' +
+					'<dt class="property-name"><label for="__ID__propertyInsertObject_url">' + this.htmlspecialchars(_t('파일 주소')) + '</label></dt>' +
 					'<dd><input type="text" id="__ID__propertyInsertObject_url" class="input-text" onkeypress="return preventEnter(event);" /></dd>' +
 				'</dl>' +
 				'<dl id="__ID__propertyInsertObject_part_raw" class="line" style="display: none">' +
-					'<dt class="property-name"><label for="__ID__propertyInsertObject_chunk">' + _t('코드') + '</label></dt>' +
+					'<dt class="property-name"><label for="__ID__propertyInsertObject_chunk">' + this.htmlspecialchars(_t('코드')) + '</label></dt>' +
 					'<dd>' +
 						'<textarea id="__ID__propertyInsertObject_chunk" cols="30" rows="10"></textarea>' +
 					'</dd>' +
 				'</dl>' +
 			'</div>' +
 			'<div class="button-box">' +
-				'<span class="insert-button button" onclick="__EDITOR__.command(\'InsertObject\'); return false"><span class="text">' + _t('삽입하기') + '</span></span>' +
+				'<span class="insert-button button" onclick="__EDITOR__.command(\'InsertObject\'); return false"><span class="text">' + this.htmlspecialchars(_t('삽입하기')) + '</span></span>' +
 				'<span class="divider"> | </span>' +
-				'<span class="cancel-button button" onclick="__EDITOR__.command(\'HideObjectBlock\'); return false"><span class="text">' + _t('취소하기') + '</span></span>' +
+				'<span class="cancel-button button" onclick="__EDITOR__.command(\'HideObjectBlock\'); return false"><span class="text">' + this.htmlspecialchars(_t('취소하기')) + '</span></span>' +
 			'</div>' +
 		'</div>';
 
@@ -2500,20 +2494,20 @@ TTModernEditor.prototype.getEditorProperty = function(/*$alt*/) {
 		'<div id="__ID__propertyImage1" class="entry-editor-property" style="display: none;">' +
 			'<div class="entry-editor-property-option">' +
 				'<input type="checkbox" class="checkbox" id="__ID__propertyImage1-fix-position" onclick="__EDITOR__.setPropertyPosition(1); return true;"' + (fixPosition ? ' checked="checked"' : '') + '/>' +
-				'<label for="__ID__propertyImage1-fix-position">' + _t('위치 고정') + '</label>' +
+				'<label for="__ID__propertyImage1-fix-position">' + this.htmlspecialchars(_t('위치 고정')) + '</label>' +
 			'</div>' +
-			'<h4>' + _t('Image') + '</h4>' +
+			'<h4>' + this.htmlspecialchars(_t('Image')) + '</h4>' +
 			'<div class="group">' +
 				'<dl class="line">' +
-					'<dt class="property-name"><label for="__ID__propertyImage1_width1">' + _t('폭') + '</label></dt>' +
+					'<dt class="property-name"><label for="__ID__propertyImage1_width1">' + this.htmlspecialchars(_t('폭')) + '</label></dt>' +
 					'<dd><input type="text" class="input-text" id="__ID__propertyImage1_width1" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
 				'</dl>' +
 				'<dl class="line">' +
-					'<dt class="property-name"><label for="__ID__propertyImage1_alt1">' + _t('대체 텍스트') + '</label></dt>' +
+					'<dt class="property-name"><label for="__ID__propertyImage1_alt1">' + this.htmlspecialchars(_t('대체 텍스트')) + '</label></dt>' +
 					'<dd><input type="text" class="input-text" id="__ID__propertyImage1_alt1" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
 				'</dl>' +
 				'<dl class="line">' +
-					'<dt class="property-name"><label for="__ID__propertyImage1_caption1">' + _t('자막') + '</label></dt>' +
+					'<dt class="property-name"><label for="__ID__propertyImage1_caption1">' + this.htmlspecialchars(_t('자막')) + '</label></dt>' +
 					'<dd><textarea class="input-text" id="__ID__propertyImage1_caption1" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);"></textarea></dd>' +
 				'</dl>' +
 			'</div>' +
@@ -2524,36 +2518,36 @@ TTModernEditor.prototype.getEditorProperty = function(/*$alt*/) {
 		'<div id="__ID__propertyImage2" class="entry-editor-property" style="display: none;">' +
 			'<div class="entry-editor-property-option">' +
 				'<input type="checkbox" class="checkbox" id="__ID__propertyImage2-fix-position" onclick="__EDITOR__.setPropertyPosition(1); return true;"' + (fixPosition ? ' checked="checked"' : '') + '/>' +
-				'<label for="__ID__propertyImage2-fix-position">' + _t('위치 고정') + '</label>' +
+				'<label for="__ID__propertyImage2-fix-position">' + this.htmlspecialchars(_t('위치 고정')) + '</label>' +
 			'</div>' +
-			'<h4>' + _t('Image') + '</h4>' +
+			'<h4>' + this.htmlspecialchars(_t('Image')) + '</h4>' +
 			'<div class="group">' +
-				'<div class="title">' + _t('첫번째 이미지') + '</div>' +
+				'<div class="title">' + this.htmlspecialchars(_t('첫번째 이미지')) + '</div>' +
 				'<dl class="line">' +
-					'<dt class="property-name"><label for="__ID__propertyImage2_width1">' + _t('폭') + '</label></dt>' +
+					'<dt class="property-name"><label for="__ID__propertyImage2_width1">' + this.htmlspecialchars(_t('폭')) + '</label></dt>' +
 					'<dd><input type="text" class="input-text" id="__ID__propertyImage2_width1" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
 				'</dl>' +
 				'<dl class="line">' +
-					'<dt class="property-name"><label for="__ID__propertyImage2_alt1">' + _t('대체 텍스트') + '</label></dt>' +
+					'<dt class="property-name"><label for="__ID__propertyImage2_alt1">' + this.htmlspecialchars(_t('대체 텍스트')) + '</label></dt>' +
 					'<dd><input type="text" class="input-text" id="__ID__propertyImage2_alt1" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
 				'</dl>' +
 				'<dl class="line">' +
-					'<dt class="property-name"><label for="__ID__propertyImage2_caption1">' + _t('자막') + '</label></dt>' +
+					'<dt class="property-name"><label for="__ID__propertyImage2_caption1">' + this.htmlspecialchars(_t('자막')) + '</label></dt>' +
 					'<dd><textarea class="input-text" id="__ID__propertyImage2_caption1" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);"></textarea></dd>' +
 				'</dl>' +
 			'</div>' +
 			'<div class="group">' +
-				'<div class="title">' + _t('두번째 이미지') + '</div>' +
+				'<div class="title">' + this.htmlspecialchars(_t('두번째 이미지')) + '</div>' +
 				'<dl class="line">' +
-					'<dt class="property-name"><label for="__ID__propertyImage2_width2">' + _t('폭') + '</label></dt>' +
+					'<dt class="property-name"><label for="__ID__propertyImage2_width2">' + this.htmlspecialchars(_t('폭')) + '</label></dt>' +
 					'<dd><input type="text" class="input-text" id="__ID__propertyImage2_width2" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
 				'</dl>' +
 				'<dl class="line">' +
-					'<dt class="property-name"><label for="__ID__propertyImage2_alt2">' + _t('대체 텍스트') + '</label></dt>' +
+					'<dt class="property-name"><label for="__ID__propertyImage2_alt2">' + this.htmlspecialchars(_t('대체 텍스트')) + '</label></dt>' +
 					'<dd><input type="text" class="input-text" id="__ID__propertyImage2_alt2" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
 				'</dl>' +
 				'<dl class="line">' +
-					'<dt class="property-name"><label for="__ID__propertyImage2_caption2">' + _t('자막') + '</label></dt>' +
+					'<dt class="property-name"><label for="__ID__propertyImage2_caption2">' + this.htmlspecialchars(_t('자막')) + '</label></dt>' +
 					'<dd><textarea class="input-text" id="__ID__propertyImage2_caption2" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);"></textarea></dd>' +
 				'</dl>' +
 			'</div>' +
@@ -2564,51 +2558,51 @@ TTModernEditor.prototype.getEditorProperty = function(/*$alt*/) {
 		'<div id="__ID__propertyImage3" class="entry-editor-property" style="display: none;">' +
 			'<div class="entry-editor-property-option">' +
 				'<input type="checkbox" class="checkbox" id="__ID__propertyImage3-fix-position" onclick="__EDITOR__.setPropertyPosition(1); return true;"' + (fixPosition ? ' checked="checked"' : '') + '/>' +
-				'<label for="__ID__propertyImage3-fix-position">' + _t('위치 고정') + '</label>' +
+				'<label for="__ID__propertyImage3-fix-position">' + this.htmlspecialchars(_t('위치 고정')) + '</label>' +
 			'</div>' +
-			'<h4>' + _t('Image') + '</h4>' +
+			'<h4>' + this.htmlspecialchars(_t('Image')) + '</h4>' +
 			'<div class="group">' +
-				'<div class="title">' + _t('첫번째 이미지') + '</div>' +
+				'<div class="title">' + this.htmlspecialchars(_t('첫번째 이미지')) + '</div>' +
 				'<dl class="line">' +
-					'<dt class="property-name"><label for="__ID__propertyImage3_width1">' + _t('폭') + '</label></dt>' +
+					'<dt class="property-name"><label for="__ID__propertyImage3_width1">' + this.htmlspecialchars(_t('폭')) + '</label></dt>' +
 					'<dd><input type="text" class="input-text" id="__ID__propertyImage3_width1" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
 				'</dl>' +
 				'<dl class="line">' +
-					'<dt class="property-name"><label for="__ID__propertyImage3_alt1">' + _t('대체 텍스트') + '</label></dt>' +
+					'<dt class="property-name"><label for="__ID__propertyImage3_alt1">' + this.htmlspecialchars(_t('대체 텍스트')) + '</label></dt>' +
 					'<dd><input type="text" class="input-text" id="__ID__propertyImage3_alt1" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
 				'</dl>' +
 				'<dl class="line">' +
-					'<dt class="property-name"><label for="__ID__propertyImage3_caption1">' + _t('자막') + '</label></dt>' +
+					'<dt class="property-name"><label for="__ID__propertyImage3_caption1">' + this.htmlspecialchars(_t('자막')) + '</label></dt>' +
 					'<dd><textarea class="input-text" id="__ID__propertyImage3_caption1" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);"></textarea></dd>' +
 				'</dl>' +
 			'</div>' +
 			'<div class="group">' +
-				'<div class="title">' + _t('두번째 이미지') + '</div>' +
+				'<div class="title">' + this.htmlspecialchars(_t('두번째 이미지')) + '</div>' +
 				'<dl class="line">' +
-					'<dt class="property-name"><label for="__ID__propertyImage3_width2">' + _t('폭') + '</label></dt>' +
+					'<dt class="property-name"><label for="__ID__propertyImage3_width2">' + this.htmlspecialchars(_t('폭')) + '</label></dt>' +
 					'<dd><input type="text" class="input-text" id="__ID__propertyImage3_width2" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
 				'</dl>' +
 				'<dl class="line">' +
-					'<dt class="property-name"><label for="__ID__propertyImage3_alt2">' + _t('대체 텍스트') + '</label></dt>' +
+					'<dt class="property-name"><label for="__ID__propertyImage3_alt2">' + this.htmlspecialchars(_t('대체 텍스트')) + '</label></dt>' +
 					'<dd><input type="text" class="input-text" id="__ID__propertyImage3_alt2" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
 				'</dl>' +
 				'<dl class="line">' +
-					'<dt class="property-name"><label for="__ID__propertyImage3_caption2">' + _t('자막') + '</label></dt>' +
+					'<dt class="property-name"><label for="__ID__propertyImage3_caption2">' + this.htmlspecialchars(_t('자막')) + '</label></dt>' +
 					'<dd><textarea class="input-text" id="__ID__propertyImage3_caption2" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);"></textarea></dd>' +
 				'</dl>' +
 			'</div>' +
 			'<div class="group">' +
-				'<div class="title">' + _t('세번째 이미지') + '</div>' +
+				'<div class="title">' + this.htmlspecialchars(_t('세번째 이미지')) + '</div>' +
 				'<dl class="line">' +
-					'<dt class="property-name"><label for="__ID__propertyImage3_width3">' + _t('폭') + '</label></dt>' +
+					'<dt class="property-name"><label for="__ID__propertyImage3_width3">' + this.htmlspecialchars(_t('폭')) + '</label></dt>' +
 					'<dd><input type="text" class="input-text" id="__ID__propertyImage3_width3" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
 				'</dl>' +
 				'<dl class="line">' +
-					'<dt class="property-name"><label for="__ID__propertyImage3_alt3">' + _t('대체 텍스트') + '</label></dt>' +
+					'<dt class="property-name"><label for="__ID__propertyImage3_alt3">' + this.htmlspecialchars(_t('대체 텍스트')) + '</label></dt>' +
 					'<dd><input type="text" class="input-text" id="__ID__propertyImage3_alt3" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
 				'</dl>' +
 				'<dl class="line">' +
-					'<dt class="property-name"><label for="__ID__propertyImage3_caption3">' + _t('자막') + '</label></dt>' +
+					'<dt class="property-name"><label for="__ID__propertyImage3_caption3">' + this.htmlspecialchars(_t('자막')) + '</label></dt>' +
 					'<dd><textarea class="input-text" id="__ID__propertyImage3_caption3" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);"></textarea></dd>' +
 				'</dl>' +
 			'</div>' +
@@ -2619,20 +2613,20 @@ TTModernEditor.prototype.getEditorProperty = function(/*$alt*/) {
 		'<div id="__ID__propertyObject" class="entry-editor-property" style="display: none;">' +
 			'<div class="entry-editor-property-option">' +
 				'<input type="checkbox" class="checkbox" id="__ID__propertyObject-fix-position" onclick="__EDITOR__.setPropertyPosition(1); return true;"' + (fixPosition ? ' checked="checked"' : '') + '/>' +
-				'<label for="__ID__propertyObject-fix-position">' + _t('위치 고정') + '</label>' +
+				'<label for="__ID__propertyObject-fix-position">' + this.htmlspecialchars(_t('위치 고정')) + '</label>' +
 			'</div>' +
-			'<h4>' + _t('Object') + '</h4>' +
+			'<h4>' + this.htmlspecialchars(_t('Object')) + '</h4>' +
 			'<div class="group">' +
 				'<dl class="line">' +
-					'<dt class="property-name"><label for="__ID__propertyObject_width">' + _t('폭') + '</label></dt>' +
+					'<dt class="property-name"><label for="__ID__propertyObject_width">' + this.htmlspecialchars(_t('폭')) + '</label></dt>' +
 					'<dd><input type="text" class="input-text" id="__ID__propertyObject_width" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
 				'</dl>' +
 				'<dl class="line">' +
-					'<dt class="property-name"><label for="__ID__propertyObject_height">' + _t('높이') + '</label></dt>' +
+					'<dt class="property-name"><label for="__ID__propertyObject_height">' + this.htmlspecialchars(_t('높이')) + '</label></dt>' +
 					'<dd><input type="text" class="input-text" id="__ID__propertyObject_height" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
 				'</dl>' +
 				'<dl class="line">' +
-					'<dt class="property-name"><label for="__ID__propertyObject_chunk">' + _t('코드') + '</label></dt>' +
+					'<dt class="property-name"><label for="__ID__propertyObject_chunk">' + this.htmlspecialchars(_t('코드')) + '</label></dt>' +
 					'<dd><textarea id="__ID__propertyObject_chunk" class="propertyObject_chunk" cols="30" rows="10" onkeyup="__EDITOR__.setProperty()"></textarea></dd>' +
 				'</dl>' +
 			'</div>' +
@@ -2643,16 +2637,16 @@ TTModernEditor.prototype.getEditorProperty = function(/*$alt*/) {
 		'<div id="__ID__propertyObject1" class="entry-editor-property" style="display: none;">' +
 			'<div class="entry-editor-property-option">' +
 				'<input type="checkbox" class="checkbox" id="__ID__propertyObject1-fix-position" onclick="__EDITOR__.setPropertyPosition(1); return true;"' + (fixPosition ? ' checked="checked"' : '') + '/>' +
-				'<label for="__ID__propertyObject1-fix-position">' + _t('위치 고정') + '</label>' +
+				'<label for="__ID__propertyObject1-fix-position">' + this.htmlspecialchars(_t('위치 고정')) + '</label>' +
 			'</div>' +
-			'<h4>' + _t('Object 1') + '</h4>' +
+			'<h4>' + this.htmlspecialchars(_t('Object 1')) + '</h4>' +
 			'<div class="group">' +
 				'<dl class="line">' +
-					'<dt class="property-name"><label for="__ID__propertyObject1_caption1">' + _t('자막') + '</label></dt>' +
+					'<dt class="property-name"><label for="__ID__propertyObject1_caption1">' + this.htmlspecialchars(_t('자막')) + '</label></dt>' +
 					'<dd><textarea class="input-text" id="__ID__propertyObject1_caption1" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);"></textarea></dd>' +
 				'</dl>' +
 				'<dl class="line">' +
-					'<dt class="property-name"><label for="__ID__propertyObject1_filename1">' + _t('파일명(수정불가)') + '</label></dt>' +
+					'<dt class="property-name"><label for="__ID__propertyObject1_filename1">' + this.htmlspecialchars(_t('파일명(수정불가)')) + '</label></dt>' +
 					'<dd><input type="text" class="input-text" id="__ID__propertyObject1_filename1" readonly="readonly" /></dd>' +
 				'</dl>' +
 			'</div>' +
@@ -2663,28 +2657,28 @@ TTModernEditor.prototype.getEditorProperty = function(/*$alt*/) {
 		'<div id="__ID__propertyObject2" class="entry-editor-property" style="display: none;">' +
 			'<div class="entry-editor-property-option">' +
 				'<input type="checkbox" class="checkbox" id="__ID__propertyObject2-fix-position" onclick="__EDITOR__.setPropertyPosition(1); return true;"' + (fixPosition ? ' checked="checked"' : '') + '/>' +
-				'<label for="__ID__propertyObject2-fix-position">' + _t('위치 고정') + '</label>' +
+				'<label for="__ID__propertyObject2-fix-position">' + this.htmlspecialchars(_t('위치 고정')) + '</label>' +
 			'</div>' +
-			'<h4>' + _t('Object') + '</h4>' +
+			'<h4>' + this.htmlspecialchars(_t('Object')) + '</h4>' +
 			'<div class="group">' +
-				'<div class="title">' + _t('첫번째 오브젝트') + '</div>' +
+				'<div class="title">' + this.htmlspecialchars(_t('첫번째 오브젝트')) + '</div>' +
 				'<dl class="line">' +
-					'<dt class="property-name"><label for="__ID__propertyObject2_caption1">' + _t('자막') + '</label></dt>' +
+					'<dt class="property-name"><label for="__ID__propertyObject2_caption1">' + this.htmlspecialchars(_t('자막')) + '</label></dt>' +
 					'<dd><textarea class="input-text" id="__ID__propertyObject2_caption1" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);"></textarea></dd>' +
 				'</dl>' +
 				'<dl class="line">' +
-					'<dt class="property-name"><label for="__ID__propertyObject2_filename1">' + _t('파일명') + '</label></dt>' +
+					'<dt class="property-name"><label for="__ID__propertyObject2_filename1">' + this.htmlspecialchars(_t('파일명')) + '</label></dt>' +
 					'<dd><input type="text" class="input-text" id="__ID__propertyObject2_filename1" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
 				'</dl>' +
 			'</div>' +
 			'<div class="group">' +
-				'<div class="title">' + _t('두번째 오브젝트') + '</div>' +
+				'<div class="title">' + this.htmlspecialchars(_t('두번째 오브젝트')) + '</div>' +
 				'<dl class="line">' +
-					'<dt class="property-name"><label for="__ID__propertyObject2_caption2">' + _t('자막') + '</label></dt>' +
+					'<dt class="property-name"><label for="__ID__propertyObject2_caption2">' + this.htmlspecialchars(_t('자막')) + '</label></dt>' +
 					'<dd><textarea class="input-text" id="__ID__propertyObject2_caption2" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);"></textarea></dd>' +
 				'</dl>' +
 				'<dl class="line">' +
-					'<dt class="property-name"><label for="__ID__propertyObject2_filename2">' + _t('파일명') + '</label></dt>' +
+					'<dt class="property-name"><label for="__ID__propertyObject2_filename2">' + this.htmlspecialchars(_t('파일명')) + '</label></dt>' +
 					'<dd><input type="text" class="input-text" id="__ID__propertyObject2_filename2" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
 				'</dl>' +
 			'</div>' +
@@ -2695,39 +2689,39 @@ TTModernEditor.prototype.getEditorProperty = function(/*$alt*/) {
 		'<div id="__ID__propertyObject3" class="entry-editor-property" style="display: none;">' +
 			'<div class="entry-editor-property-option">' +
 				'<input type="checkbox" class="checkbox" id="__ID__propertyObject3-fix-position" onclick="__EDITOR__.setPropertyPosition(1); return true;"' + (fixPosition ? ' checked="checked"' : '') + '/>' +
-				'<label for="__ID__propertyObject3-fix-position">' + _t('위치 고정') + '</label>' +
+				'<label for="__ID__propertyObject3-fix-position">' + this.htmlspecialchars(_t('위치 고정')) + '</label>' +
 			'</div>' +
-			'<h4>' + _t('Object') + '</h4>' +
+			'<h4>' + this.htmlspecialchars(_t('Object')) + '</h4>' +
 			'<div class="group">' +
-				'<div class="title">' + _t('첫번째 오브젝트') + '</div>' +
+				'<div class="title">' + this.htmlspecialchars(_t('첫번째 오브젝트')) + '</div>' +
 				'<dl class="line">' +
-					'<dt class="property-name"><label for="__ID__propertyObject3_caption1">' + _t('자막') + '</label></dt>' +
+					'<dt class="property-name"><label for="__ID__propertyObject3_caption1">' + this.htmlspecialchars(_t('자막')) + '</label></dt>' +
 					'<dd><textarea class="input-text" id="__ID__propertyObject3_caption1" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);"></textarea></dd>' +
 				'</dl>' +
 				'<dl class="line">' +
-					'<dt class="property-name"><label for="__ID__propertyObject3_filename1">' + _t('파일명') + '</label></dt>' +
+					'<dt class="property-name"><label for="__ID__propertyObject3_filename1">' + this.htmlspecialchars(_t('파일명')) + '</label></dt>' +
 					'<dd><input type="text" class="input-text" id="__ID__propertyObject3_filename1" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
 				'</dl>' +
 			'</div>' +
 			'<div class="group">' +
-				'<div class="title">' + _t('두번째 오브젝트') + '</div>' +
+				'<div class="title">' + this.htmlspecialchars(_t('두번째 오브젝트')) + '</div>' +
 				'<dl class="line">' +
-					'<dt class="property-name"><label for="__ID__propertyObject3_caption2">' + _t('자막') + '</label></dt>' +
+					'<dt class="property-name"><label for="__ID__propertyObject3_caption2">' + this.htmlspecialchars(_t('자막')) + '</label></dt>' +
 					'<dd><textarea class="input-text" id="__ID__propertyObject3_caption2" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);"></textarea></dd>' +
 				'</dl>' +
 				'<dl class="line">' +
-					'<dt class="property-name"><label for="__ID__propertyObject3_filename2">' + _t('파일명') + '</label></dt>' +
+					'<dt class="property-name"><label for="__ID__propertyObject3_filename2">' + this.htmlspecialchars(_t('파일명')) + '</label></dt>' +
 					'<dd><input type="text" class="input-text" id="__ID__propertyObject3_filename2" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
 				'</dl>' +
 			'</div>' +
 			'<div class="group">' +
-				'<div class="title">' + _t('세번째 오브젝트') + '</div>' +
+				'<div class="title">' + this.htmlspecialchars(_t('세번째 오브젝트')) + '</div>' +
 				'<dl class="line">' +
-					'<dt class="property-name"><label for="__ID__propertyObject3_caption3">' + _t('자막') + '</label></dt>' +
+					'<dt class="property-name"><label for="__ID__propertyObject3_caption3">' + this.htmlspecialchars(_t('자막')) + '</label></dt>' +
 					'<dd><textarea class="input-text" id="__ID__propertyObject3_caption3" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);"></textarea></dd>' +
 				'</dl>' +
 				'<dl class="line">' +
-					'<dt class="property-name"><label for="__ID__propertyObject3_filename3">' + _t('파일명') + '</label></dt>' +
+					'<dt class="property-name"><label for="__ID__propertyObject3_filename3">' + this.htmlspecialchars(_t('파일명')) + '</label></dt>' +
 					'<dd><input type="text" class="input-text" id="__ID__propertyObject3_filename3" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
 				'</dl>' +
 			'</div>' +
@@ -2738,81 +2732,81 @@ TTModernEditor.prototype.getEditorProperty = function(/*$alt*/) {
 		'<div id="__ID__propertyiMazing" class="entry-editor-property" style="display: none;">' +
 			'<div class="entry-editor-property-option">' +
 				'<input type="checkbox" class="checkbox" id="__ID__propertyiMazing-fix-position" onclick="__EDITOR__.setPropertyPosition(1); return true;"' + (fixPosition ? ' checked="checked"' : '') + '/>' +
-				'<label for="__ID__propertyiMazing-fix-position">' + _t('위치 고정') + '</label>' +
+				'<label for="__ID__propertyiMazing-fix-position">' + this.htmlspecialchars(_t('위치 고정')) + '</label>' +
 			'</div>' +
-			'<h4>' + _t('iMazing') + '</h4>' +
+			'<h4>' + this.htmlspecialchars(_t('iMazing')) + '</h4>' +
 			'<div class="group">' +
-				'<div class="title">' + _t('설정') + '</div>' +
+				'<div class="title">' + this.htmlspecialchars(_t('설정')) + '</div>' +
 				'<dl class="line">' +
-					'<dt class="property-name"><label for="__ID__propertyiMazing_width">' + _t('폭') + '</label></dt>' +
+					'<dt class="property-name"><label for="__ID__propertyiMazing_width">' + this.htmlspecialchars(_t('폭')) + '</label></dt>' +
 					'<dd><input type="text" class="input-text" id="__ID__propertyiMazing_width" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
 				'</dl>' +
 				'<dl class="line">' +
-					'<dt class="property-name"><label for="__ID__propertyiMazing_height">' + _t('높이') + '</label></dt>' +
+					'<dt class="property-name"><label for="__ID__propertyiMazing_height">' + this.htmlspecialchars(_t('높이')) + '</label></dt>' +
 					'<dd><input type="text" class="input-text" id="__ID__propertyiMazing_height" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
 				'</dl>' +
 				'<dl class="line">' +
-					'<dt class="property-name"><label for="__ID__propertyiMazing_frame">' + _t('테두리') + '</label></dt>' +
+					'<dt class="property-name"><label for="__ID__propertyiMazing_frame">' + this.htmlspecialchars(_t('테두리')) + '</label></dt>' +
 					'<dd>' +
 						'<select id="__ID__propertyiMazing_frame" onchange="__EDITOR__.setProperty()">' +
-							'<option value="net_imazing_frame_none">' + _t('테두리 없음') + '</option>' +
+							'<option value="net_imazing_frame_none">' + this.htmlspecialchars(_t('테두리 없음')) + '</option>' +
 						'</select>' +
 					'</dd>' +
 				'</dl>' +
 				'<dl class="line">' +
-					'<dt class="property-name"><label for="__ID__propertyiMazing_tran">' + _t('장면전환효과') + '</label></dt>' +
+					'<dt class="property-name"><label for="__ID__propertyiMazing_tran">' + this.htmlspecialchars(_t('장면전환효과')) + '</label></dt>' +
 					'<dd>' +
 						'<select id="__ID__propertyiMazing_tran" onchange="__EDITOR__.setProperty()">' +
-							'<option value="net_imazing_show_window_transition_none">' + _t('효과없음') + '</option>' +
-							'<option value="net_imazing_show_window_transition_alpha">' + _t('투명전환') + '</option>' +
-							'<option value="net_imazing_show_window_transition_contrast">' + _t('플래쉬') + '</option>' +
-							'<option value="net_imazing_show_window_transition_sliding">' + _t('슬라이딩') + '</option>' +
+							'<option value="net_imazing_show_window_transition_none">' + this.htmlspecialchars(_t('효과없음')) + '</option>' +
+							'<option value="net_imazing_show_window_transition_alpha">' + this.htmlspecialchars(_t('투명전환')) + '</option>' +
+							'<option value="net_imazing_show_window_transition_contrast">' + this.htmlspecialchars(_t('플래쉬')) + '</option>' +
+							'<option value="net_imazing_show_window_transition_sliding">' + this.htmlspecialchars(_t('슬라이딩')) + '</option>' +
 						'</select>' +
 					'</dd>' +
 				'</dl>' +
 				'<dl class="line">' +
-					'<dt class="property-name"><label for="__ID__propertyiMazing_nav">' + _t('내비게이션') + '</label></dt>' +
+					'<dt class="property-name"><label for="__ID__propertyiMazing_nav">' + this.htmlspecialchars(_t('내비게이션')) + '</label></dt>' +
 					'<dd>' +
 						'<select id="__ID__propertyiMazing_nav" onchange="__EDITOR__.setProperty()">' +
-							'<option value="net_imazing_show_window_navigation_none">' + _t('기본') + '</option>' +
-							'<option value="net_imazing_show_window_navigation_simple">' + _t('심플') + '</option>' +
-							'<option value="net_imazing_show_window_navigation_sidebar">' + _t('사이드바') + '</option>' +
+							'<option value="net_imazing_show_window_navigation_none">' + this.htmlspecialchars(_t('기본')) + '</option>' +
+							'<option value="net_imazing_show_window_navigation_simple">' + this.htmlspecialchars(_t('심플')) + '</option>' +
+							'<option value="net_imazing_show_window_navigation_sidebar">' + this.htmlspecialchars(_t('사이드바')) + '</option>' +
 						'</select>' +
 					'</dd>' +
 				'</dl>' +
 				'<dl class="line">' +
-					'<dt class="property-name">' + _t('슬라이드쇼 간격') + '</dt>' +
+					'<dt class="property-name">' + this.htmlspecialchars(_t('슬라이드쇼 간격')) + '</dt>' +
 					'<dd><input type="text" class="input-text" id="__ID__propertyiMazing_sshow" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
 				'</dl>' +
 				'<dl class="line">' +
-					'<dt class="property-name">' + _t('화면당 이미지 수') + '</dt>' +
+					'<dt class="property-name">' + this.htmlspecialchars(_t('화면당 이미지 수')) + '</dt>' +
 					'<dd><input type="text" class="input-text" id="__ID__propertyiMazing_page" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
 				'</dl>' +
 				'<dl class="line">' +
-					'<dt class="property-name"><label for="__ID__propertyiMazing_align">' + _t('정렬방법') + '</label></dt>' +
+					'<dt class="property-name"><label for="__ID__propertyiMazing_align">' + this.htmlspecialchars(_t('정렬방법')) + '</label></dt>' +
 					'<dd>' +
 						'<select id="__ID__propertyiMazing_align" onchange="__EDITOR__.setProperty()">' +
-							'<option value="h">' + _t('가로') + '</option>' +
-							'<option value="v">' + _t('세로') + '</option>' +
+							'<option value="h">' + this.htmlspecialchars(_t('가로')) + '</option>' +
+							'<option value="v">' + this.htmlspecialchars(_t('세로')) + '</option>' +
 						'</select>' +
 					'</dd>' +
 				'</dl>' +
 				'<dl class="line">' +
-					'<dt class="property-name"><label for="__ID__propertyiMazing_caption">' + _t('자막') + '</label></dt>' +
+					'<dt class="property-name"><label for="__ID__propertyiMazing_caption">' + this.htmlspecialchars(_t('자막')) + '</label></dt>' +
 					'<dd><textarea class="input-text" id="__ID__propertyiMazing_caption" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);"></textarea></dd>' +
 				'</dl>' +
 			'</div>' +
 			'<div class="group">' +
-				'<div class="title">' + _t('파일') + '</div>' +
+				'<div class="title">' + this.htmlspecialchars(_t('파일')) + '</div>' +
 				'<dl class="file-list-line line">' +
 					'<dd>' +
 						'<select id="__ID__propertyiMazing_list" class="file-list" size="10" onchange="__EDITOR__.listChanged(\'propertyiMazing_list\')" onclick="__EDITOR__.listChanged(\'propertyiMazing_list\')"></select>' +
 					'</dd>' +
 				'</dl>' +
 				'<div class="button-box">' +
-					'<span class="up-button button" onclick="__EDITOR__.moveUpFileList(\'__ID__propertyiMazing_list\'); return false" title="' + _t('선택한 항목을 위로 이동합니다.') + '"><span class="text">' + _t('위로') + '</span></span>' +
+					'<span class="up-button button" onclick="__EDITOR__.moveUpFileList(\'__ID__propertyiMazing_list\'); return false" title="' + this.htmlspecialchars(_t('선택한 항목을 위로 이동합니다.')) + '"><span class="text">' + this.htmlspecialchars(_t('위로')) + '</span></span>' +
 					'<span class="divider"> | </span>' +
-					'<span class="dn-button button" onclick="__EDITOR__.moveDownFileList(\'__ID__propertyiMazing_list\'); return false" title="' + _t('선택한 항목을 아래로 이동합니다.') + '"><span class="text">' + _t('아래로') + '</span></span>' +
+					'<span class="dn-button button" onclick="__EDITOR__.moveDownFileList(\'__ID__propertyiMazing_list\'); return false" title="' + this.htmlspecialchars(_t('선택한 항목을 아래로 이동합니다.')) + '"><span class="text">' + this.htmlspecialchars(_t('아래로')) + '</span></span>' +
 				'</div>' +
 				'<div id="__ID__propertyiMazing_preview" class="preview-box" style="display: none;"></div>' +
 			'</div>' +
@@ -2823,35 +2817,35 @@ TTModernEditor.prototype.getEditorProperty = function(/*$alt*/) {
 		'<div id="__ID__propertyGallery" class="entry-editor-property" style="display: none;">' +
 			'<div class="entry-editor-property-option">' +
 				'<input type="checkbox" class="checkbox" id="__ID__propertyGallery-fix-position" onclick="__EDITOR__.setPropertyPosition(1); return true;"' + (fixPosition ? ' checked="checked"' : '') + '/>' +
-				'<label for="__ID__propertyGallery-fix-position">' + _t('위치 고정') + '</label>' +
+				'<label for="__ID__propertyGallery-fix-position">' + this.htmlspecialchars(_t('위치 고정')) + '</label>' +
 			'</div>' +
-			'<h4>' + _t('Gallery') + '</h4>' +
+			'<h4>' + this.htmlspecialchars(_t('Gallery')) + '</h4>' +
 			'<div class="group">' +
-				'<div class="title">' + _t('설정') + '</div>' +
+				'<div class="title">' + this.htmlspecialchars(_t('설정')) + '</div>' +
 				'<dl class="line">' +
-					'<dt class="property-name"><label for="__ID__propertyGallery_width">' + _t('최대너비') + '</label></dt>' +
+					'<dt class="property-name"><label for="__ID__propertyGallery_width">' + this.htmlspecialchars(_t('최대너비')) + '</label></dt>' +
 					'<dd><input type="text" class="input-text" id="__ID__propertyGallery_width" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
 				'</dl>' +
 				'<dl class="line">' +
-					'<dt class="property-name"><label for="__ID__propertyGallery_height">' + _t('최대높이') + '</label></dt>' +
+					'<dt class="property-name"><label for="__ID__propertyGallery_height">' + this.htmlspecialchars(_t('최대높이')) + '</label></dt>' +
 					'<dd><input type="text" class="input-text" id="__ID__propertyGallery_height" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
 				'</dl>' +
 				'<dl id="__ID__propertyGallery_captionLine" class="line" style="display: none;">' +
-					'<dt class="property-name"><label for="__ID__propertyGallery_caption">' + _t('자막') + '</label></dt>' +
+					'<dt class="property-name"><label for="__ID__propertyGallery_caption">' + this.htmlspecialchars(_t('자막')) + '</label></dt>' +
 					'<dd><textarea class="input-text" id="__ID__propertyGallery_caption" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);"></textarea></dd>' +
 				'</dl>' +
 			'</div>' +
 			'<div class="group">' +
-				'<div class="title">' + _t('파일') + '</div>' +
+				'<div class="title">' + this.htmlspecialchars(_t('파일')) + '</div>' +
 				'<dl class="file-list-line line">' +
 					'<dd>' +
 						'<select id="__ID__propertyGallery_list" class="file-list" size="10" onchange="__EDITOR__.listChanged(\'propertyGallery_list\')" onclick="__EDITOR__.listChanged(\'propertyGallery_list\'); return false"></select>' +
 					'</dd>' +
 				'</dl>' +
 				'<div class="button-box">' +
-					'<span class="up-button button" onclick="__EDITOR__.moveUpFileList(\'__ID__propertyGallery_list\')" title="' + _t('선택한 항목을 위로 이동합니다.') + '"><span class="text">' + _t('위로') + '</span></span>' +
+					'<span class="up-button button" onclick="__EDITOR__.moveUpFileList(\'__ID__propertyGallery_list\')" title="' + this.htmlspecialchars(_t('선택한 항목을 위로 이동합니다.')) + '"><span class="text">' + this.htmlspecialchars(_t('위로')) + '</span></span>' +
 					'<span class="divider"> | </span>' +
-					'<span class="dn-button button" onclick="__EDITOR__.moveDownFileList(\'__ID__propertyGallery_list\')" title="' + _t('선택한 항목을 아래로 이동합니다.') + '"><span class="text">' + _t('아래로') + '</span></span>' +
+					'<span class="dn-button button" onclick="__EDITOR__.moveDownFileList(\'__ID__propertyGallery_list\')" title="' + this.htmlspecialchars(_t('선택한 항목을 아래로 이동합니다.')) + '"><span class="text">' + this.htmlspecialchars(_t('아래로')) + '</span></span>' +
 				'</div>' +
 				'<div id="__ID__propertyGallery_preview" class="preview-box" style="display: none;"></div>' +
 			'</div>' +
@@ -2862,32 +2856,32 @@ TTModernEditor.prototype.getEditorProperty = function(/*$alt*/) {
 		'<div id="__ID__propertyJukebox" class="entry-editor-property" style="display: none;">' +
 			'<div class="entry-editor-property-option">' +
 				'<input type="checkbox" class="checkbox" id="__ID__propertyJukebox-fix-position" onclick="__EDITOR__.setPropertyPosition(1); return true;"' + (fixPosition ? ' checked="checked"' : '') + '/>' +
-				'<label for="__ID__propertyJukebox-fix-position">' + _t('위치 고정') + '</label>' +
+				'<label for="__ID__propertyJukebox-fix-position">' + this.htmlspecialchars(_t('위치 고정')) + '</label>' +
 			'</div>' +
-			'<h4>' + _t('Jukebox') + '</h4>' +
+			'<h4>' + this.htmlspecialchars(_t('Jukebox')) + '</h4>' +
 			'<div class="group">' +
 				'<dl class="line">' +
-					'<dt class="property-name"><label for="__ID__propertyJukebox_title">' + _t('제목') + '</label></dt>' +
+					'<dt class="property-name"><label for="__ID__propertyJukebox_title">' + this.htmlspecialchars(_t('제목')) + '</label></dt>' +
 					'<dd><input type="text" class="input-text" id="__ID__propertyJukebox_title" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
 				'</dl>' +
 				'<dl class="line">' +
-					'<dd><input type="checkbox" id="__ID__propertyJukebox_autoplay" onclick="__EDITOR__.setProperty()" /> <label for="__ID__propertyJukebox_autoplay">' + _t('자동재생') + '</label></dd>' +
+					'<dd><input type="checkbox" id="__ID__propertyJukebox_autoplay" onclick="__EDITOR__.setProperty()" /> <label for="__ID__propertyJukebox_autoplay">' + this.htmlspecialchars(_t('자동재생')) + '</label></dd>' +
 				'</dl>' +
 				'<dl class="line">' +
-					'<dd><input type="checkbox" id="__ID__propertyJukebox_visibility" onclick="__EDITOR__.setProperty()" /> <label for="__ID__propertyJukebox_visibility">' + _t('플레이어 보이기') + '</label></dd>' +
+					'<dd><input type="checkbox" id="__ID__propertyJukebox_visibility" onclick="__EDITOR__.setProperty()" /> <label for="__ID__propertyJukebox_visibility">' + this.htmlspecialchars(_t('플레이어 보이기')) + '</label></dd>' +
 				'</dl>' +
 			'</div>' +
 			'<div class="group">' +
-				'<div class="title">' + _t('파일') + '</div>' +
+				'<div class="title">' + this.htmlspecialchars(_t('파일')) + '</div>' +
 				'<dl class="file-list-line line">' +
 					'<dd>' +
 						'<select id="__ID__propertyJukebox_list" class="file-list" size="10" onchange="__EDITOR__.listChanged(\'propertyJukebox_list\')" onclick="__EDITOR__.listChanged(\'propertyJukebox_list\')"></select>' +
 					'</dd>' +
 				'</dl>' +
 				'<div class="button-box">' +
-					'<span class="up-button button" onclick="__EDITOR__.moveUpFileList(\'__ID__propertyJukebox_list\')" title="' + _t('선택한 항목을 위로 이동합니다.') + '"><span class="text">' + _t('위로') + '</span></span>' +
+					'<span class="up-button button" onclick="__EDITOR__.moveUpFileList(\'__ID__propertyJukebox_list\')" title="' + this.htmlspecialchars(_t('선택한 항목을 위로 이동합니다.')) + '"><span class="text">' + this.htmlspecialchars(_t('위로')) + '</span></span>' +
 					'<span class="divider"> | </span>' +
-					'<span class="dn-button button" onclick="__EDITOR__.moveDownFileList(\'__ID__propertyJukebox_list\')" title="' + _t('선택한 항목을 아래로 이동합니다.') + '"><span class="text">' + _t('아래로') + '</span></span>' +
+					'<span class="dn-button button" onclick="__EDITOR__.moveDownFileList(\'__ID__propertyJukebox_list\')" title="' + this.htmlspecialchars(_t('선택한 항목을 아래로 이동합니다.')) + '"><span class="text">' + this.htmlspecialchars(_t('아래로')) + '</span></span>' +
 				'</div>' +
 			'</div>' +
 		'</div>';
@@ -2897,16 +2891,16 @@ TTModernEditor.prototype.getEditorProperty = function(/*$alt*/) {
 		'<div id="__ID__propertyEmbed" class="entry-editor-property" style="display: none;">' +
 			'<div class="entry-editor-property-option">' +
 				'<input type="checkbox" class="checkbox" id="__ID__propertyEmbed-fix-position" onclick="__EDITOR__.setPropertyPosition(1); return true;"' + (fixPosition ? ' checked="checked"' : '') + '/>' +
-				'<label for="__ID__propertyEmbed-fix-position">' + _t('위치 고정') + '</label>' +
+				'<label for="__ID__propertyEmbed-fix-position">' + this.htmlspecialchars(_t('위치 고정')) + '</label>' +
 			'</div>' +
-			'<h4>' + _t('Embed') + '</h4>' +
+			'<h4>' + this.htmlspecialchars(_t('Embed')) + '</h4>' +
 			'<div class="group">' +
 				'<dl class="line">' +
-					'<dt class="property-name"><label for="__ID__propertyEmbed_width">' + _t('폭') + '</label></dt>' +
+					'<dt class="property-name"><label for="__ID__propertyEmbed_width">' + this.htmlspecialchars(_t('폭')) + '</label></dt>' +
 					'<dd><input type="text" class="input-text" id="__ID__propertyEmbed_width" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
 				'</dl>' +
 				'<dl class="line">' +
-					'<dt class="property-name"><label for="__ID__propertyEmbed_height">' + _t('높이') + '</label></dt>' +
+					'<dt class="property-name"><label for="__ID__propertyEmbed_height">' + this.htmlspecialchars(_t('높이')) + '</label></dt>' +
 					'<dd><input type="text" class="input-text" id="__ID__propertyEmbed_height" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
 				'</dl>' +
 				'<dl class="line">' +
@@ -2921,16 +2915,16 @@ TTModernEditor.prototype.getEditorProperty = function(/*$alt*/) {
 		'<div id="__ID__propertyFlash" class="entry-editor-property" style="display: none;">' +
 			'<div class="entry-editor-property-option">' +
 				'<input type="checkbox" class="checkbox" id="__ID__propertyFlash-fix-position" onclick="__EDITOR__.setPropertyPosition(1); return true;"' + (fixPosition ? ' checked="checked"' : '') + '/>' +
-				'<label for="__ID__propertyFlash-fix-position">' + _t('위치 고정') + '</label>' +
+				'<label for="__ID__propertyFlash-fix-position">' + this.htmlspecialchars(_t('위치 고정')) + '</label>' +
 			'</div>' +
-			'<h4>' + _t('Embed') + '</h4>' +
+			'<h4>' + this.htmlspecialchars(_t('Embed')) + '</h4>' +
 			'<div class="group">' +
 				'<dl class="line">' +
-					'<dt class="property-name"><label for="__ID__propertyFlash_width">' + _t('폭') + '</label></dt>' +
+					'<dt class="property-name"><label for="__ID__propertyFlash_width">' + this.htmlspecialchars(_t('폭')) + '</label></dt>' +
 					'<dd><input type="text" class="input-text" id="__ID__propertyFlash_width" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
 				'</dl>' +
 				'<dl class="line">' +
-					'<dt class="property-name"><label for="__ID__propertyFlash_height">' + _t('높이') + '</label></dt>' +
+					'<dt class="property-name"><label for="__ID__propertyFlash_height">' + this.htmlspecialchars(_t('높이')) + '</label></dt>' +
 					'<dd><input type="text" class="input-text" id="__ID__propertyFlash_height" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
 				'</dl>' +
 				'<dl class="line">' +
@@ -2945,9 +2939,9 @@ TTModernEditor.prototype.getEditorProperty = function(/*$alt*/) {
 		'<div id="__ID__propertyMoreLess" class="entry-editor-property" style="display: none;">' +
 			'<div class="entry-editor-property-option">' +
 				'<input type="checkbox" class="checkbox" id="__ID__propertyMoreLess-fix-position" onclick="__EDITOR__.setPropertyPosition(1); return true;"' + (fixPosition ? ' checked="checked"' : '') + '/>' +
-				'<label for="__ID__propertyMoreLess-fix-position">' + _t('위치 고정') + '</label>' +
+				'<label for="__ID__propertyMoreLess-fix-position">' + this.htmlspecialchars(_t('위치 고정')) + '</label>' +
 			'</div>' +
-			'<h4>' + _t('More/Less') + '</h4>' +
+			'<h4>' + this.htmlspecialchars(_t('More/Less')) + '</h4>' +
 			'<div class="group">' +
 				'<dl class="line">' +
 					'<dt class="property-name"><label for="__ID__propertyMoreLess_more">More Text</label></dt>' +
@@ -2974,6 +2968,7 @@ TTModernEditor.prototype.getEditorProperty = function(/*$alt*/) {
 
 // moved from /blog/owner/entry/edit/item.php
 
+// Textcube-NG: _t() 값은 HTML 문자열에 넣기 전에 htmlspecialchars 로 escape 한다(v3.193)
 TTModernEditor.prototype.changeEditorMode = function() {
 	editWindow = document.getElementById("editWindow");
 	var indicatorMode = document.getElementById(this.id + "indicatorMode");
@@ -2981,17 +2976,17 @@ TTModernEditor.prototype.changeEditorMode = function() {
 	if (editWindow.style.display == "block" || editWindow.style.display == "inline") {
 		if (document.getElementById("visualEditorWindow")) {
 			indicatorMode.className = indicatorMode.className.replace("inactive-class", "active-class");
-			indicatorMode.innerHTML = '<span class="text">' + _t('HTML 모드') + '</span>';
+			indicatorMode.innerHTML = '<span class="text">' + this.htmlspecialchars(_t('HTML 모드')) + '</span>';
 			indicatorMode.setAttribute("title", _t('클릭하시면 WYSIWYG 모드로 변경합니다.'));
 		} else {
 			indicatorMode.className = indicatorMode.className.replace("inactive-class", "active-class");
-			indicatorMode.innerHTML = '<span class="text">' + _t('HTML 모드') + '</span>';
+			indicatorMode.innerHTML = '<span class="text">' + this.htmlspecialchars(_t('HTML 모드')) + '</span>';
 			indicatorMode.removeAttribute("title");
 		}
 	} else {
 		indicatorMode.className = indicatorMode.className.replace("active-class", "inactive-class");
 		indicatorMode.setAttribute("title", _t('클릭하시면 HTML 모드로 변경합니다.'));
-		indicatorMode.innerHTML = '<span class="text">' + _t('WYSIWYG 모드') + '</span>';
+		indicatorMode.innerHTML = '<span class="text">' + this.htmlspecialchars(_t('WYSIWYG 모드')) + '</span>';
 	}
 }
 

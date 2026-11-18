@@ -384,6 +384,17 @@ HTTPRequest.prototype.onSuccess = function(){};
 
 HTTPRequest.prototype.onError = function(){};
 
+// Textcube-NG: 응답이 HTTP 403 이면 관리 화면이 넣어 둔 안내(window.ngForbiddenNotice)를 화면의 onError 보다 먼저 띄운다.
+// 앱은 HTTPRequest 로 보내는 관리 요청에 403 을 내지 않으므로(권한 실패 404, 출처 확인 실패 412) 그 403 은 서버·웹 방화벽(mod_security 등)의 거부다.
+// 안내 변수가 없는 화면(블로그 방문자 화면 등)에서는 아무것도 하지 않는다. 화면의 onError 는 그대로 이어서 돈다(r3-14)
+HTTPRequest.prototype._ngNotifyForbidden = function() {
+	try {
+		if(this._request.status != 403) return;
+		if(typeof(window.ngForbiddenNotice) != "string" || window.ngForbiddenNotice.length == 0) return;
+		alert(window.ngForbiddenNotice);
+	} catch(e) {};
+};
+
 function HTTPRequest() {
 	switch(arguments.length) {
 		case 0:
@@ -402,15 +413,8 @@ function HTTPRequest() {
 	try {
 		this._request = new XMLHttpRequest();
 	} catch(e) {
-		var objectNames = ["MSXML2.XMLHTTP.5.0","MSXML2.XMLHTTP.4.0","MSXML2.XMLHTTP.3.0","MSXML2.XMLHTTP","Microsoft.XMLHTTP"];
-		for(var i=0;i<objectNames.length;i++) {
-			try{
-				this._request=new ActiveXObject(objectNames[i]);
-				break;
-			} catch(e){};
-		};
-
-		if(this._request==null) {return null;};
+		// Textcube-NG: IE 전용 ActiveXObject(MSXML2.XMLHTTP) 대체 경로를 지움(r3-31 R-429 B). XMLHttpRequest 를 만들 수 없으면 원래처럼 null 을 돌려준다
+		return null;
 	};
 
 	this._properties = new Array();
@@ -454,6 +458,7 @@ HTTPRequest.prototype.send = function() {
 					for(var i in instance._attributes)
 						if (instance._attributes[i] instanceof Array)
 							instance._attributes[i][0].setAttribute(instance._attributes[i][1],instance._attributes[i][2]);
+					instance._ngNotifyForbidden();
 					instance.onError();
 				};
 			};
@@ -477,7 +482,7 @@ HTTPRequest.prototype.send = function() {
 	if(arguments.length>0) {
 		this.content=arguments[0];
 	}
-	if(this.content.length>0) this._request.setRequestHeader("Content-Type",this.contentType);
+	if(this.content.length>0 || (this.content.length==0 && String(this.method).toUpperCase() == "POST")) this._request.setRequestHeader("Content-Type",this.contentType);	// Textcube-NG: 본문 없는 POST 에도 Content-Type 을 붙인다. 빼면 브라우저가 text/plain;charset=UTF-8 을 넣어 ModSecurity CRS 920420 이 막는다(v3.207)
 	if(this.timeout>0) {
 		this._request.setRequestHeader("Connection","Keep-Alive");
 		this._request.setRequestHeader("Keep-Alive","timeout="+this.timeout);
@@ -494,6 +499,7 @@ HTTPRequest.prototype.send = function() {
 			for(var i in this._attributes)
 				if (this._attributes[i] instanceof Array)
 					this._attributes[i][0].setAttribute(this._attributes[i][1],this._attributes[i][2]);
+			this._ngNotifyForbidden();
 			this.onError();
 		};
 	};
@@ -644,4 +650,129 @@ PageHolder.prototype.hold = function() {
 PageHolder.prototype.release=function() {
 	this._holding=false;
 };
+
+/// Textcube-NG: CSRF 토큰(v3.147). 화면이 출력한 csrfToken(이 창 → iframe 부모 → 팝업 opener 순서로 찾음)을 같은 출처로
+/// 보내는 GET·HEAD 외 XHR 에는 X-CSRF-Token 헤더로, method="post" 폼에는 hidden csrfToken 으로 붙인다. 다른 출처에는
+/// 붙이지 않는다(토큰 유출·CORS preflight 방지). fetch·sendBeacon 은 패치하지 않는다(사용처 없음 — fetch 를 쓰는
+/// 플러그인은 X-CSRF-Token 헤더를 직접 넣는다).
+Standardizer.prototype.getCSRFToken = function() {
+	var windows = [window];
+	try { if (window.parent && window.parent != window) windows.push(window.parent); } catch (e) {}
+	try { if (window.opener) windows.push(window.opener); } catch (e) {}
+	for (var i = 0; i < windows.length; i++) {
+		try {
+			var token = windows[i].csrfToken;
+			if (typeof(token) == "string" && token != "") return token;
+		} catch (e) {}
+	}
+	return "";
+};
+
+Standardizer.prototype.isSameOrigin = function(url) {
+	if (url === undefined || url === null) return true;
+	url = String(url);
+	if (url == "") return true;
+	if (typeof(URL) == "function") {
+		try {
+			return (new URL(url, document.baseURI || location.href)).origin == location.origin;
+		} catch (e) {
+			return false;
+		}
+	}
+	var a = document.createElement("a");
+	a.href = url;
+	a.href = a.href;	// 옛 IE 는 상대 주소를 다시 넣어야 host 를 채운다
+	var port = function(protocol, value) {
+		if (value != "" && value != "0") return String(value);
+		return protocol == "https:" ? "443" : (protocol == "http:" ? "80" : "");
+	};
+	return a.protocol == location.protocol && a.hostname == location.hostname && port(a.protocol, a.port) == port(location.protocol, location.port);
+};
+
+// form.method·form.action 은 <input name="method">·<input name="action"> 이 가리므로 getAttribute 를 쓴다
+// Textcube-NG: 누른 버튼의 formmethod·formaction 이 form 의 method·action 보다 먼저다. 자동으로 넣은 토큰(data-csrf-auto)은 POST·같은 출처가 아니게 되면 뺀다.
+// form= 속성으로 form 밖에 있는 입력란도 form.elements 로 찾는다(r3-7, 결정 455d)
+Standardizer.prototype.addCSRFTokenToForm = function(form, submitter) {
+	try {
+		if (!form || form.nodeType != 1 || String(form.nodeName).toLowerCase() != "form") return;
+		var getAttr = Element.prototype.getAttribute, hasAttr = Element.prototype.hasAttribute;
+		var method = getAttr.call(form, "method"), action = getAttr.call(form, "action");
+		if (submitter && submitter.nodeType == 1) {
+			if (hasAttr.call(submitter, "formmethod")) method = getAttr.call(submitter, "formmethod");
+			if (hasAttr.call(submitter, "formaction")) action = getAttr.call(submitter, "formaction");
+		}
+		var autos = Element.prototype.querySelectorAll.call(form, 'input[name="csrfToken"][data-csrf-auto="1"]');
+		if (method === null || String(method).toLowerCase() != "post" || !STD.isSameOrigin(action)) {
+			for (var i = 0; i < autos.length; i++)
+				if (autos[i].parentNode) Node.prototype.removeChild.call(autos[i].parentNode, autos[i]);
+			return;
+		}
+		if (autos.length > 0) return;
+		var elements = null;
+		try { elements = Object.getOwnPropertyDescriptor(HTMLFormElement.prototype, "elements").get.call(form); } catch (e) { elements = null; }
+		if (elements) {
+			for (var j = 0; j < elements.length; j++)
+				if (elements[j] && elements[j].nodeType == 1 && getAttr.call(elements[j], "name") == "csrfToken") return;
+		} else if (Element.prototype.querySelector.call(form, 'input[name="csrfToken"]')) return;
+		var token = STD.getCSRFToken();
+		if (token == "") return;
+		var input = document.createElement("input");
+		input.setAttribute("type", "hidden");
+		input.setAttribute("name", "csrfToken");
+		input.setAttribute("value", token);	// 속성(기본값)으로 넣어 form.reset() 뒤에도 남게 한다
+		input.setAttribute("data-csrf-auto", "1");
+		Node.prototype.appendChild.call(form, input);
+	} catch (e) {}
+};
+
+(function() {
+	if (typeof(XMLHttpRequest) == "undefined" || !XMLHttpRequest.prototype || XMLHttpRequest.prototype.__csrfPatched) return;
+	var proto = XMLHttpRequest.prototype, open = proto.open, send = proto.send, setRequestHeader = proto.setRequestHeader;
+	if (typeof(open) != "function" || typeof(send) != "function" || typeof(setRequestHeader) != "function") return;
+	proto.__csrfPatched = true;
+	proto.open = function(method, url) {
+		this.__csrfMethod = String(method).toUpperCase();
+		this.__csrfURL = url;
+		this.__csrfHeaderSet = false;
+		return open.apply(this, arguments);
+	};
+	proto.setRequestHeader = function(name, value) {
+		if (String(name).toLowerCase() == "x-csrf-token") this.__csrfHeaderSet = true;	// 직접 넣은 경우 두 번 붙이지 않는다
+		return setRequestHeader.apply(this, arguments);
+	};
+	proto.send = function() {
+		try {
+			if (typeof(this.__csrfMethod) == "string" && this.__csrfMethod != "GET" && this.__csrfMethod != "HEAD"
+				&& !this.__csrfHeaderSet && STD.isSameOrigin(this.__csrfURL)) {
+				var token = STD.getCSRFToken();
+				if (token != "") setRequestHeader.call(this, "X-CSRF-Token", token);
+			}
+		} catch (e) {}
+		return send.apply(this, arguments);
+	};
+})();
+
+(function() {
+	if (typeof(HTMLFormElement) == "undefined" || !HTMLFormElement.prototype || HTMLFormElement.prototype.__csrfPatched) return;
+	var proto = HTMLFormElement.prototype, submit = proto.submit;
+	if (typeof(submit) != "function") return;
+	proto.__csrfPatched = true;
+	// form.submit() 은 submit 이벤트를 내지 않는다
+	proto.submit = function() {
+		STD.addCSRFTokenToForm(this);
+		return submit.apply(this, arguments);
+	};
+	if (!document.addEventListener) return;
+	document.addEventListener("submit", function(event) {
+		STD.addCSRFTokenToForm(event.target, event.submitter);	// Textcube-NG: 누른 버튼의 formmethod·formaction 반영(r3-7, 결정 455d)
+	}, true);
+	var addToAllForms = function() {
+		for (var i = 0; i < document.forms.length; i++)
+			STD.addCSRFTokenToForm(document.forms[i]);
+	};
+	if (document.readyState == "loading")
+		document.addEventListener("DOMContentLoaded", addToAllForms, false);
+	else
+		addToAllForms();
+})();
 //]]>

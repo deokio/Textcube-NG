@@ -18,10 +18,13 @@ msgid "\"%1\"에 %2 파일을 생성할 수 없습니다. \"%1\"의 퍼미션을
 msgstr "Cannot create file \"%2\" in \"%1\". Change the permission setting of \"%1\" to \"%3\""
 
 msgid "\"%1\"에 접근할 수 없습니다. 퍼미션을 %2(으)로 수정해 주십시오."
-msgstr "Cannot access to \"%1\". Change the permission setting to $2"
+msgstr "Cannot access to \"%1\". Change the permission setting to %2"
 
 msgid "\"%1\"의 하위에 새 분류를 만듭니다."
 msgstr "Create new category under \"%1\""
+
+msgid "%1 계정으로 로그인됨"
+msgstr "Signed in with a %1 account"
 
 msgid "%1 님의 댓글에 대한 댓글"
 msgstr "c\\\\Comment about %1\\'s comment"
@@ -405,7 +408,7 @@ msgid "공지사항"
 msgstr "Notice"
 
 msgid "공지사항 캐시를 초기화합니다."
-msgstr "Reset page cache."
+msgstr "Reset notice cache."
 
 msgid "공지사항을 가져올 수 없습니다. 잠시 후 다시 시도해 주십시오."
 msgstr "Could not find notice. Try again later."
@@ -428,6 +431,9 @@ msgstr "Send Trackback"
 msgid "관리자"
 msgstr "Admin."
 
+msgid "관리자 계정과 연결된 소셜 계정"
+msgstr "Social account linked with the admin. account"
+
 msgid "관리자 계정과 연결된 오픈아이디"
 msgstr "OpenID connected with administrative account."
 
@@ -438,7 +444,7 @@ msgid "관리자 비밀번호를 그대로 사용"
 msgstr "Use admin\\'s password"
 
 msgid "관리자 설정에 의해 오픈아이디로만 댓글을 남길 수 있습니다."
-msgstr "You can leave comment only with OpenID"
+msgstr "Due to the administrator settings, you can only leave a comment with an OpenID or Social Login."
 
 msgid "관리자 스킨을 설정합니다"
 msgstr "Set Theme of Admin Page"
@@ -2492,6 +2498,9 @@ msgstr "Connected."
 msgid "연결한 오픈아이디로 이 계정에 로그인 할 수 있습니다."
 msgstr "You can log-in to this account using matched OpenID."
 
+msgid "연결할 계정의 인증을 확인하지 못했습니다. 다시 시도해 주십시오."
+msgstr "Could not confirm the authentication of the account to connect. Please try again."
+
 msgid "연락처를 아는"
 msgstr "Contact"
 
@@ -2583,7 +2592,7 @@ msgid "오픈아이디로 글쓰기"
 msgstr "Write with OpenID"
 
 msgid "오픈아이디로 로그인을 해야만 댓글 및 방명록을 쓸 수 있습니다."
-msgstr "You can leave a comment or write in guestbook only when logged in with OpenID."
+msgstr "You have to log in with an OpenID or Social Login to comment on posts or write in guestbook."
 
 msgid "오픈아이디로 로그인하여 쓴 댓글/방명록에 오픈아이디 아이콘을 표시합니다."
 msgstr "Show OpenID icon in comments and guesbook written with OpenID."
@@ -2592,7 +2601,7 @@ msgid "오픈아이디로 사용할 블로그 주소를 선택하세요"
 msgstr "Choose blog address for OpenID"
 
 msgid "오픈아이디로만 댓글을 남길 수 있습니다"
-msgstr "You can leave comment only with OpenID"
+msgstr "You have to log in with an OpenID or Social Login to leave a comment."
 
 msgid "오픈아이디를 입력하지 않았거나, 도메인 없는 오픈아이디를 입력하였습니다."
 msgstr "Did not input OpenID, or input OpenID without domain."
@@ -3677,6 +3686,15 @@ msgstr "Begin Installation"
 msgid "텍스트큐브 시스템 점검이 필요합니다. 지금 점검하시겠습니까?"
 msgstr "System check is necessary. Start the system check now?"
 
+msgid "지금 점검"
+msgstr "Check now"
+
+msgid "지금 생성"
+msgstr "Create now"
+
+msgid "나중에"
+msgstr "Later"
+
 msgid "텍스트큐브 점검을 시작합니다."
 msgstr "Starts textcube maintenance."
 
@@ -4113,7 +4131,7 @@ msgid "현재 달의 달력을 보여줍니다."
 msgstr "Shows calendar of current month."
 
 msgid "현재 로그인한 오픈아이디"
-msgstr "Log-in OpenID"
+msgstr "Currently logged-in OpenID"
 
 msgid "현재 버전 - %1"
 msgstr "Current version - %1"

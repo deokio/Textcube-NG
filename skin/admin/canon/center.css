@@ -862,3 +862,16 @@
 {
 	text-align                       : center;
 }
+
+/* Textcube-NG: 플러그인 알림 탭(r3-13) ------------------------------ */
+#plugin-notice-tab.plugin-notice-unread a
+{
+	color                            : #C9302C;
+	font-weight                      : bold;
+}
+
+#plugin-notice-tab.plugin-notice-open
+{
+	background-color                 : #FFFFFF;
+	background-image                 : none;
+}

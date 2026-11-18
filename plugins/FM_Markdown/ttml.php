@@ -28,12 +28,13 @@ function FM_TTML_bindTags($id, $content) {
 
 function FM_TTML_bindAttachments($entryId, $folderPath, $folderURL, $content, $useAbsolutePath = false, $bRssMode = false) {
 	global $service, $hostURL, $blogURL, $serviceURL;
+	$_absServiceURL = $bRssMode ? URL::toAbsolute($serviceURL) : $serviceURL;	// Textcube-NG: 피드(bRssMode)에서만 //host 에 스킴을 붙인다. 화면은 그대로(r3-34)
 	requireModel('blog.attachment');
 	$context = Model_Context::getInstance();
 	$blogid = getBlogId();
 	getAttachments($blogid, $entryId); // For attachment caching.
-	$view = str_replace('[##_ATTACH_PATH_##]', ($useAbsolutePath ? "{$serviceURL}/attach/$blogid" : $folderURL), $content);
-	$view = str_replace('http://tt_attach_path/', ($useAbsolutePath ? "{$serviceURL}/attach/$blogid/" : ($folderURL . '/')), $view);
+	$view = str_replace('[##_ATTACH_PATH_##]', ($useAbsolutePath ? "{$_absServiceURL}/attach/$blogid" : $folderURL), $content);
+	$view = str_replace('http://tt_attach_path/', ($useAbsolutePath ? "{$_absServiceURL}/attach/$blogid/" : ($folderURL . '/')), $view);
 	$count = 0;
 	$bWritedGalleryJS = false;
 
@@ -66,7 +67,7 @@ function FM_TTML_bindAttachments($entryId, $folderPath, $folderURL, $content, $u
 					if (!empty($images[$i])) {
 						if ($i % 2 == 0) {
 							$setWidth = $setHeight = 0;
-							if (list($width, $height) = @getimagesize("$folderPath/{$images[$i]}")) {
+							if (list($width, $height) = FM_TTML_getImageSize($folderPath, $images[$i])) {	// Textcube-NG: svg·webp·avif 크기(r3-20)
 
 								$setWidth = $width;
 								$setHeight = $height;
@@ -119,14 +120,15 @@ function FM_TTML_bindAttachments($entryId, $folderPath, $folderURL, $content, $u
 				$buf .= '	<script type="text/javascript">' . CRLF;
 				$buf .= '		//<![CDATA[' . CRLF;
 				$buf .= "			var {$id} = new TTGallery(\"{$cssId}\");" . CRLF;
-				$buf .= "			{$id}.prevText = \"" . _text('이전 이미지 보기') . "\"; " . CRLF;
-				$buf .= "			{$id}.nextText = \"" . _text('다음 이미지 보기') . "\"; " . CRLF;
-				$buf .= "			{$id}.enlargeText = \"" . _text('원본 크기로 보기') . "\"; " . CRLF;
-				$buf .= "			{$id}.altText = \"" . _text('갤러리 이미지') . "\"; " . CRLF;
+				// Textcube-NG: 갤러리 JS 라벨은 json_encode, 이미지 alt 는 htmlspecialchars 로 escape 한다(v3.193)
+				$buf .= "			{$id}.prevText = " . json_encode(_text('이전 이미지 보기'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) . "; " . CRLF;
+				$buf .= "			{$id}.nextText = " . json_encode(_text('다음 이미지 보기'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) . "; " . CRLF;
+				$buf .= "			{$id}.enlargeText = " . json_encode(_text('원본 크기로 보기'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) . "; " . CRLF;
+				$buf .= "			{$id}.altText = " . json_encode(_text('갤러리 이미지'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) . "; " . CRLF;
 
 				foreach ($items as $item) {
 					$setWidth = $setHeight = 0;
-					if (list($width, $height) = @getimagesize("$folderPath/$item[0]")) {
+					if (list($width, $height) = FM_TTML_getImageSize($folderPath, $item[0])) {	// Textcube-NG: svg·webp·avif 크기(r3-20)
 						$setWidth = $width;
 						$setHeight = $height;
 						if (isset($galleryAttributes['width']) && $galleryAttributes['width'] < $setWidth) {
@@ -147,7 +149,7 @@ function FM_TTML_bindAttachments($entryId, $folderPath, $folderURL, $content, $u
 				$buf .= '	<noscript>' . CRLF;
 				foreach ($items as $item) {
 					$setWidth = $setHeight = 0;
-					if (list($width, $height) = @getimagesize("$folderPath/$item[0]")) {
+					if (list($width, $height) = FM_TTML_getImageSize($folderPath, $item[0])) {	// Textcube-NG: svg·webp·avif 크기(r3-20)
 						$setWidth = $width;
 						$setHeight = $height;
 						if (isset($galleryAttributes['width']) && $galleryAttributes['width'] < $setWidth) {
@@ -161,9 +163,9 @@ function FM_TTML_bindAttachments($entryId, $folderPath, $folderURL, $content, $u
 
 						$buf .= '<div class="imageblock center" style="text-align: center; clear: both;">';
 						if ($useAbsolutePath)
-							$buf .= '		<img src="' . $serviceURL . "/attach/" . $blogid . "/" . $item[0] . '" width="' . intval($setWidth) . '" height="' . intval($setHeight) . '" alt="' . _text('사용자 삽입 이미지') . '" />' . CRLF;
+							$buf .= '		<img src="' . $serviceURL . "/attach/" . $blogid . "/" . $item[0] . '" width="' . intval($setWidth) . '" height="' . intval($setHeight) . '" alt="' . htmlspecialchars(_text('사용자 삽입 이미지'), ENT_QUOTES, 'UTF-8') . '" />' . CRLF;
 						else
-							$buf .= '		<img src="' . $folderURL . "/" . $item[0] . '" width="' . intval($setWidth) . '" height="' . intval($setHeight) . '" alt="' . _text('사용자 삽입 이미지') . '" />' . CRLF;
+							$buf .= '		<img src="' . $folderURL . "/" . $item[0] . '" width="' . intval($setWidth) . '" height="' . intval($setHeight) . '" alt="' . htmlspecialchars(_text('사용자 삽입 이미지'), ENT_QUOTES, 'UTF-8') . '" />' . CRLF;
 						if(!empty($item[1]))
 							$buf .= '		<p class="cap1">'. $item[1] .'</p>' . CRLF;
 						$buf .= '</div>';
@@ -177,7 +179,7 @@ function FM_TTML_bindAttachments($entryId, $folderPath, $folderURL, $content, $u
 				$images = array_slice($attributes, 1, count($attributes) - 3);
 				for ($i = 0; $i < count($images); $i += 2) {
 					if (!empty($images[$i]))
-						$buf .= '<div>' . FM_TTML_getAttachmentBinder($images[$i], '', $folderPath, $folderURL, 1, $useAbsolutePath) . '</div>';
+						$buf .= '<div>' . FM_TTML_getAttachmentBinder($images[$i], '', $folderPath, $folderURL, 1, $useAbsolutePath, $bRssMode) . '</div>';
 				}
 				$buf .= $attributes[count($attributes) - 1];
 			} else {
@@ -197,7 +199,7 @@ function FM_TTML_bindAttachments($entryId, $folderPath, $folderURL, $content, $u
 				} else {
 					$caption = '';
 				}
-				$buf .= '<div style="clear: both; text-align: center"><img src="' . ($useAbsolutePath ? $serviceURL : $service['path']) . '/resources/image/gallery/gallery_enlarge.gif" alt="' . _text('확대') . '" style="cursor:pointer" onclick="openFullScreen(\'' . $service['path'] . '/iMazing?d=' . urlencode($id) . '&f=' . urlencode($params['frame']) . '&t=' . urlencode($params['transition']) . '&n=' . urlencode($params['navigation']) . '&si=' . urlencode($params['slideshowinterval']) . '&p=' . urlencode($params['page']) . '&a=' . urlencode($params['align']) . '&o=' . $blogid . '&i=' . $imgStr . '\',\'' . htmlspecialchars(str_replace("'", "&#39;", $attributes[count($attributes) - 1])) . '\',\'' . $service['path'] . '\')" />';
+				$buf .= '<div style="clear: both; text-align: center"><img src="' . ($useAbsolutePath ? $serviceURL : $service['path']) . '/resources/image/gallery/gallery_enlarge.gif" alt="' . htmlspecialchars(_text('확대'), ENT_QUOTES, 'UTF-8') . '" style="cursor:pointer" onclick="openFullScreen(\'' . $service['path'] . '/iMazing?d=' . urlencode($id) . '&f=' . urlencode($params['frame']) . '&t=' . urlencode($params['transition']) . '&n=' . urlencode($params['navigation']) . '&si=' . urlencode($params['slideshowinterval']) . '&p=' . urlencode($params['page']) . '&a=' . urlencode($params['align']) . '&o=' . $blogid . '&i=' . $imgStr . '\',\'' . htmlspecialchars(str_replace("'", "&#39;", $attributes[count($attributes) - 1])) . '\',\'' . $service['path'] . '\')" />';
 				$_galNav = (!empty($params['navigation']) && $params['navigation'] !== '0') ? true : false;
 				$_galInterval = !empty($params['slideshowinterval']) ? intval($params['slideshowinterval']) : 0;
 				if ($_galInterval > 0 && $_galInterval <= 100) $_galInterval *= 1000;
@@ -242,7 +244,7 @@ function FM_TTML_bindAttachments($entryId, $folderPath, $folderURL, $content, $u
 				$sounds = array_slice($attributes, 1, count($attributes) - 3);
 				for ($i = 0; $i < count($sounds); $i += 2) {
 					if (!empty($sounds[$i]))
-						echo "<a href=\"$folderURL/$sounds[$i]\">$sounds[$i]</a><br />";
+						$buf .= '<a href="' . htmlspecialchars("$folderURL/" . $sounds[$i], ENT_QUOTES, 'UTF-8') . '">' . htmlspecialchars($sounds[$i], ENT_QUOTES, 'UTF-8') . '</a><br />';	// Textcube-NG: echo 는 본문 자리 밖(호출 시점)으로 나가고 본문 캐시·피드에서 빠지므로 desktop 분기와 같이 $buf 에 escape 해서 붙인다 (r3-38 R-556)
 				}
 			} else {
 				$params = Misc::getAttributesFromString($attributes[sizeof($attributes) - 2]);
@@ -280,7 +282,7 @@ function FM_TTML_bindAttachments($entryId, $folderPath, $folderURL, $content, $u
 				}
 
 				$_jkAutoplay = (!empty($params['autoplay']) && $params['autoplay'] !== 'false' && $params['autoplay'] !== '0') ? ' autoplay' : '';
-				$_jkBasePath = $useAbsolutePath ? $serviceURL : $service['path'];
+				$_jkBasePath = $useAbsolutePath ? $_absServiceURL : $service['path'];
 				$_jkTracks = [];
 				for ($i = 0; $i < count($imgs); $i += 2) {
 					if (!empty($imgs[$i])) {
@@ -330,7 +332,7 @@ function FM_TTML_bindAttachments($entryId, $folderPath, $folderURL, $content, $u
 					list($newProperty, $onclickFlag) = FM_TTML_createNewProperty($attributes[1], $contentWidth, $attributes[2]);
 
 					if ($context->getProperty('blog.displaymode','desktop')=='mobile') {
-						$buf = '<div class="imageblock center">' . FM_TTML_getAttachmentBinder($attributes[1], $newProperty, $folderPath, $folderURL, 1, $useAbsolutePath) . "</div><div>$attributes[3]</div>";
+						$buf = '<div class="imageblock center">' . FM_TTML_getAttachmentBinder($attributes[1], $newProperty, $folderPath, $folderURL, 1, $useAbsolutePath, $bRssMode) . "</div><div>$attributes[3]</div>";
 					} else {
 						if (trim($attributes[3]) == '') {
 							$caption = '';
@@ -401,16 +403,17 @@ function FM_TTML_bindAttachments($entryId, $folderPath, $folderURL, $content, $u
 
 function FM_TTML_getAttachmentBinder($filename, $property, $folderPath, $folderURL, $imageBlocks = 1, $useAbsolutePath = true, $bRssMode = false, $onclickFlag=false) {
 	global $database, $skinSetting, $service, $blogURL, $hostURL, $serviceURL;
+	$_absServiceURL = $bRssMode ? URL::toAbsolute($serviceURL) : $serviceURL;	// Textcube-NG: 피드(bRssMode)에서만 //host 에 스킴을 붙인다. 화면은 그대로(r3-34)
 	$context = Model_Context::getInstance();
 	$blogid = getBlogId();
 	$path = "$folderPath/$filename";
 	if ($useAbsolutePath)
-		$url = "$serviceURL/attach/$blogid/$filename";
+		$url = "$_absServiceURL/attach/$blogid/$filename";
 	else
 		$url = "$folderURL/$filename";
 	$fileInfo = getAttachmentByOnlyName($blogid, $filename);
 	switch (Misc::getFileExtension($filename)) {
-		case 'jpg':case 'jpeg':case 'gif':case 'png':case 'bmp':
+		case 'jpg':case 'jpeg':case 'gif':case 'png':case 'bmp':case 'webp':case 'avif':	// Textcube-NG: webp·avif(r3-20)
 			$bPassing = false;
 /*			if ($context->getProperty('blog.displaymode','desktop')=='mobile') {
 				if (!is_null(Setting::getBlogSettingGlobal("resamplingDefault"))) {
@@ -435,37 +438,76 @@ function FM_TTML_getAttachmentBinder($filename, $property, $folderPath, $folderU
 
 			return fireEvent('ViewAttachedImage', $imageStr, $path);
 			break;
+		// Textcube-NG: svg 는 <img> 로만 낸다(<img> 안 svg 는 스크립트·외부 참조를 실행하지 않는다). config.php $service['svgRasterize'] 가 true 이고
+		//   래스터 사본(cache/thumbnail/<blogid>/<파일>.png)이 있으면 사본을 낸다. 크기 속성이 없으면 첨부 행 width·height 를 붙인다(r3-20)
+		case 'svg':
+			if ($context->getProperty('blog.displaymode','desktop')=='mobile') {
+				$resizeClass="class=\"img-responsive\" ";
+			} else {
+				$resizeClass="";
+			}
+			$src = $url;
+			if ($context->getProperty('service.svgRasterize') === true && is_file(__TEXTCUBE_CACHE_DIR__."/thumbnail/$blogid/$filename.png"))
+				$src = ($useAbsolutePath ? $_absServiceURL : $context->getProperty('uri.path'))."/cache/thumbnail/$blogid/$filename.png";
+			if (!preg_match('/\b(width|height)\s*=/i', $property) && is_array($fileInfo) && intval($fileInfo['width']) > 0 && intval($fileInfo['height']) > 0)
+				$property = trim($property . ' width="' . intval($fileInfo['width']) . '" height="' . intval($fileInfo['height']) . '"');
+			if ( ($context->getProperty('blog.displaymode','desktop')=='mobile') ||
+				(($onclickFlag == true) && ($bRssMode == false)) ) {
+				$imageStr = '<img '.$resizeClass.'src="'.$src.'" '.$property.' style="cursor: pointer;" onclick="open_img(\''.$url.'\'); return false;" />';
+			} else {
+				$imageStr = '<img '.$resizeClass.'src="'.$src.'" '.$property.' />';
+			}
+			return fireEvent('ViewAttachedImage', $imageStr, $path);
+			break;
 		case 'swf':
 			return '<p class="system-message">' . _text('Flash 콘텐츠는 더 이상 지원되지 않습니다.') . '</p>';
 			break;
 		case 'wmv':case 'avi':case 'asf':case 'mpg':case 'mpeg':
-			$id = md5($url) . rand(1, 10000);
-			if (($useAbsolutePath) && (strncasecmp($url, 'http://', 7) == 0)) $url = substr($url, 7);
-			return "<span id=\"$id\"><script type=\"text/javascript\">//<![CDATA[".CRLF.
-				"writeCode('<embed $property autostart=\"0\" src=\"$url\"></embed>', \"$id\")//]]></script></span>";
+			// Textcube-NG: r3-32 R-521 — 원본은 $url·$property 를 escape 없이 writeCode('<embed …>') 로 내보내고 절대경로일 때 http:// 를 잘라 주소를 깨뜨렸다. mov(r3-31 R-429 B)와 같이 HTML5 <video> + 대체 링크로 바꾸고 URL·이름을 escape 한다
+			$_videoUrl = htmlspecialchars($url, ENT_QUOTES, 'UTF-8');
+			return '<video controls width="400" height="300" style="max-width:100%"><source src="' . $_videoUrl . '" /><a href="' . $_videoUrl . '">' . htmlspecialchars($fileInfo['label'] ?? $filename, ENT_QUOTES, 'UTF-8') . '</a></video>';
 			break;
 		case 'mp3':case 'mp2':case 'wma':case 'wav':case 'mid':case 'midi':
 			$_audioUrl = htmlspecialchars($url, ENT_QUOTES, 'UTF-8');
 			return '<audio controls style="width:100%;display:block;margin:4px 0"><source src="' . $_audioUrl . '" /><a href="' . $_audioUrl . '">' . htmlspecialchars($fileInfo['label'] ?? $filename, ENT_QUOTES, 'UTF-8') . '</a></audio>';
 			break;
 		case 'mov':
-			$id = md5($url) . rand(1, 10000);
-			return "<span id=\"$id\"><script type=\"text/javascript\">//<![CDATA[".CRLF."writeCode(" . '\'<object classid="clsid:02BF25D5-8C17-4B23-BC80-D3488ABDDC6B" codebase="http://www.apple.com/qtactivex/qtplugin.cab" width="400px" height="300px"><param name="src" value="' . $url . '" /><param name="controller" value="true" /><param name="pluginspage" value="http://www.apple.com/QuickTime/download/" /><!--[if !IE]> <--><object type="video/quicktime" data="' . $url . '" width="400px" height="300px" class="mov"><param name="controller" value="true" /><param name="pluginspage" value="http://www.apple.com/QuickTime/download/" /></object><!--> <![endif]--></object>\'' . ", \"$id\")//]]></script></span>";
+			// Textcube-NG: IE 전용 QuickTime ActiveX(clsid) object 를 HTML5 video 로 바꿈(r3-31 R-429 B, r3-30 R-429 A·오디오 첨부 <audio> 와 같은 방식)
+			$_videoUrl = htmlspecialchars($url, ENT_QUOTES, 'UTF-8');
+			return '<video controls width="400" height="300" style="max-width:100%"><source src="' . $_videoUrl . '" /><a href="' . $_videoUrl . '">' . htmlspecialchars($fileInfo['label'] ?? $filename, ENT_QUOTES, 'UTF-8') . '</a></video>';
 			break;
 		default:
 			if (file_exists(ROOT . '/resources/image/extension/' . Misc::getFileExtension($fileInfo['label']) . '.gif')) {
-				return '<a class="extensionIcon" href="' . ($useAbsolutePath ? $hostURL : '') . $blogURL . '/attachment/' . $filename . '">' . fireEvent('ViewAttachedFileExtension', '<img src="' . ($useAbsolutePath ? $serviceURL : $service['path']) . '/resources/image/extension/' . Misc::getFileExtension($fileInfo['label']) . '.gif" alt="" />') . ' ' . htmlspecialchars($fileInfo['label']) . '</a>';
+				return '<a class="extensionIcon" href="' . ($useAbsolutePath ? $hostURL : '') . $blogURL . '/attachment/' . $filename . '">' . fireEvent('ViewAttachedFileExtension', '<img src="' . ($useAbsolutePath ? $_absServiceURL : $service['path']) . '/resources/image/extension/' . Misc::getFileExtension($fileInfo['label']) . '.gif" alt="" />') . ' ' . htmlspecialchars($fileInfo['label']) . '</a>';
 			} else {
-				return '<a class="extensionIcon" href="' . ($useAbsolutePath ? $hostURL : '') . $blogURL . '/attachment/' . $filename . '">' . fireEvent('ViewAttachedFileExtension', '<img src="' . ($useAbsolutePath ? $serviceURL : $service['path']) . '/resources/image/extension/unknown.gif" alt="" />') . ' ' . htmlspecialchars($fileInfo['label']) . '</a>';
+				return '<a class="extensionIcon" href="' . ($useAbsolutePath ? $hostURL : '') . $blogURL . '/attachment/' . $filename . '">' . fireEvent('ViewAttachedFileExtension', '<img src="' . ($useAbsolutePath ? $_absServiceURL : $service['path']) . '/resources/image/extension/unknown.gif" alt="" />') . ' ' . htmlspecialchars($fileInfo['label']) . '</a>';
 			}
 			break;
 	}
 }
 
+// Textcube-NG: 갤러리·iMazing 이미지 크기. svg·webp·avif 는 getimagesize 가 0·실패면 첨부 행 width·height 를 쓴다(r3-20)
+//   그 밖의 확장자는 원본과 같이 getimagesize 결과(배열이면 그 크기, 아니면 false)를 돌려준다
+function FM_TTML_getImageSize($folderPath, $name) {
+	$size = @getimagesize("$folderPath/$name");
+	if (!in_array(Misc::getFileExtension($name), array('svg', 'webp', 'avif'), true)) return is_array($size) ? array($size[0], $size[1]) : false;
+	if (is_array($size) && $size[0] > 0 && $size[1] > 0) return array($size[0], $size[1]);
+	if (!is_file("$folderPath/$name")) return false;
+	$info = getAttachmentByOnlyName(getBlogId(), $name);
+	if (!is_array($info) || intval($info['width']) <= 0 || intval($info['height']) <= 0) return false;
+	return array(intval($info['width']), intval($info['height']));
+}
+
 function FM_TTML_createNewProperty($filename, $imageWidth, $property) {
 	$blogid = getBlogId();
 	$image = Utils_Image::getInstance();
-	if (in_array($image->getImageType(__TEXTCUBE_ATTACH_DIR__."/$blogid/$filename"), array('gif', 'png', 'jpg', 'bmp')))
+	$imageType = $image->getImageType(__TEXTCUBE_ATTACH_DIR__."/$blogid/$filename");
+	// Textcube-NG: webp·avif 는 getimagesize 크기가 0 보다 클 때만 줄인다(resizeImageToContent 가 크기로 나눈다)(r3-20)
+	if (in_array($imageType, array('webp', 'avif'), true)) {
+		$imageSize = @getimagesize(__TEXTCUBE_ATTACH_DIR__."/$blogid/$filename");
+		if (!is_array($imageSize) || $imageSize[0] <= 0 || $imageSize[1] <= 0) $imageType = false;
+	}
+	if (in_array($imageType, array('gif', 'png', 'jpg', 'bmp', 'webp', 'avif')))
 		return $image->resizeImageToContent($property, __TEXTCUBE_ATTACH_DIR__."/$blogid/$filename", $imageWidth);
 	else
 		return array($property, false);

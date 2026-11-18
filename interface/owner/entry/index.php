@@ -2,6 +2,14 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 
 if (isset($_POST['page']))
 	$_GET['page'] = $_POST['page'];
@@ -139,21 +147,43 @@ require ROOT . '/interface/common/owner/header.php';
 ?>
 						<script type="text/javascript">
 							//<![CDATA[
+								function tcCheckupNotice(msg, url, label, note) {	// Textcube-NG: 점검 안내를 브라우저 confirm 대신 페이지 위 안내 줄로 보인다(r3-16, R-395)
+									var bar = document.getElementById("tc-checkup-notice");
+									if (!bar) {
+										bar = document.createElement("div");
+										bar.id = "tc-checkup-notice";
+										bar.setAttribute("role", "alert");
+										bar.style.cssText = "position:relative;z-index:1000;padding:8px 12px;background:#fff8d6;border-bottom:1px solid #e0c96a;color:#333;font-size:12px;line-height:1.6;text-align:center;";
+										bar.appendChild(document.createElement("span"));
+										var go = document.createElement("a");
+										go.style.cssText = "margin-left:10px;font-weight:bold;";
+										bar.appendChild(go);
+										var later = document.createElement("button");
+										later.type = "button";
+										later.style.cssText = "margin-left:8px;";
+										later.appendChild(document.createTextNode("<?php echo _t('나중에');?>"));
+										later.onclick = function () { bar.style.display = "none"; };
+										bar.appendChild(later);
+										document.body.insertBefore(bar, document.body.firstChild);
+									}
+									bar.childNodes[0].textContent = note ? msg + " " + note : msg;
+									bar.childNodes[1].href = url;
+									bar.childNodes[1].textContent = label;
+									bar.style.display = "";
+								}
 <?php
 if (!file_exists(__TEXTCUBE_CACHE_DIR__.'/CHECKUP')) {
 ?>
 								window.addEventListener("load", checkTextcubeVersion, false);
 								function checkTextcubeVersion() {
-									if (confirm("<?php echo _t('버전업 체크를 위한 파일을 생성합니다. 지금 생성하시겠습니까?');?>"))
-										window.location.href = "<?php echo $blogURL;?>/checkup";
+									tcCheckupNotice("<?php echo _t('버전업 체크를 위한 파일을 생성합니다. 지금 생성하시겠습니까?');?>", "<?php echo $blogURL;?>/checkup", "<?php echo _t('지금 생성');?>");	// Textcube-NG: confirm 대신 안내 줄(r3-16, R-395)
 								}
 <?php
-} else if (file_get_contents(__TEXTCUBE_CACHE_DIR__.'/CHECKUP') != TEXTCUBE_VERSION) {
+} else if (!Checkup::isCurrent()) {	// PHP port: NG 점검 표시(2행) 포함 비교(Checkup, Textcube.Core.php)
 ?>
 								window.addEventListener("load", checkTextcubeVersion, false);
 								function checkTextcubeVersion() {
-									if (confirm("<?php echo _t('텍스트큐브 시스템 점검이 필요합니다. 지금 점검하시겠습니까?');?>"))
-										window.location.href = "<?php echo $blogURL;?>/checkup";
+									tcCheckupNotice("<?php echo _t('텍스트큐브 시스템 점검이 필요합니다. 지금 점검하시겠습니까?');?>", "<?php echo $blogURL;?>/checkup", "<?php echo _t('지금 점검');?>");	// Textcube-NG: confirm 대신 안내 줄(r3-16, R-395)
 								}
 <?php
 }
@@ -175,7 +205,7 @@ if (!file_exists(__TEXTCUBE_CACHE_DIR__.'/CHECKUP')) {
 										visibility = 2;
 									}
 								
-									var request = new HTTPRequest("<?php echo $blogURL;?>/owner/entry/visibility/" + entry + "?visibility=" + visibility);
+									var request = new HTTPRequest("POST", "<?php echo $blogURL;?>/owner/entry/visibility/" + entry);
 									
 									request.onSuccess = function () {
 										if (this.getText("/response/countSyndicated") == 0) {
@@ -269,13 +299,13 @@ if (!file_exists(__TEXTCUBE_CACHE_DIR__.'/CHECKUP')) {
 										alert("<?php echo _t('글 공개 정도를 변경하지 못했습니다.').' : entry ID : ';?>"+entry);
 //										window.location = "<?php echo $blogURL;?>/owner/entry";
 									}
-									request.send();
+									request.send("visibility=" + visibility);
 								}
 								
 								function setEntryStar(entry, mark) {
 									if ((mark < 0) || (mark > 2))
 										return false;
-									var request = new HTTPRequest("<?php echo $blogURL;?>/owner/entry/star/" + entry + "?mark=" + mark);
+									var request = new HTTPRequest("POST", "<?php echo $blogURL;?>/owner/entry/star/" + entry);
 									request.onSuccess = function () {
 										switch (mark) {
 											case 1:
@@ -291,20 +321,20 @@ if (!file_exists(__TEXTCUBE_CACHE_DIR__.'/CHECKUP')) {
 									request.onError = function () {
 										window.location = "<?php echo $blogURL;?>/owner/entry";
 									}
-									request.send();
+									request.send("mark=" + mark);
 								}
 								
 								function deleteEntry(id) {
-									if (!confirm("<?php echo _t('이 글 및 이미지 파일을 완전히 삭제합니다. 계속 하시겠습니까?');?>"))
-										return;
-									var request = new HTTPRequest("<?php echo $blogURL;?>/owner/entry/delete/" + id);
+									tcConfirm("<?php echo _t('이 글 및 이미지 파일을 완전히 삭제합니다. 계속 하시겠습니까?');?>", function () {	// Textcube-NG: 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396)
+									var request = new HTTPRequest("POST", "<?php echo $blogURL;?>/owner/entry/delete/" + id);
 									request.onSuccess = function () {
 										document.getElementById('list-form').submit();
 									}
 									request.onError = function () {
-										window.location.href = "<?php echo $blogURL;?>/owner/entry/delete/" + id + "?command=delete";
+										postNavigate("<?php echo $blogURL;?>/owner/entry/delete/" + id + "?command=delete");
 									}
 									request.send();
+									});
 								}
 								
 								function protectEntry(id) {
@@ -384,8 +414,7 @@ if (!file_exists(__TEXTCUBE_CACHE_DIR__.'/CHECKUP')) {
 											countSyndicated = true;
 											break;
 										case 'delete':
-											if (!confirm("<?php echo _t('선택된 글 및 이미지 파일을 완전히 삭제합니다. 계속 하시겠습니까?');?>"))
-												return false;
+											tcConfirm("<?php echo _t('선택된 글 및 이미지 파일을 완전히 삭제합니다. 계속 하시겠습니까?');?>", function () {	// Textcube-NG: 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396)
 											var targets = new Array();
 											for (var i = 0; i < document.getElementById('list-form').elements.length; i++) {
 												var oElement = document.getElementById('list-form').elements[i];
@@ -402,7 +431,9 @@ if (!file_exists(__TEXTCUBE_CACHE_DIR__.'/CHECKUP')) {
 											}
 											
 											request.send("targets="+targets.join(","));
-											break;
+											obj.selectedIndex = 0;
+											});
+											return false;
 										case 'category':
 											var targets = "";
 											var currentCategory = "<?php echo $categoryId;?>";
@@ -517,9 +548,9 @@ if (!file_exists(__TEXTCUBE_CACHE_DIR__.'/CHECKUP')) {
 								}
 								
 								function removeTrackbackLog(removeid,entry) {
-									if (confirm("<?php echo _t('선택된 걸린글을 지웁니다. 계속 하시겠습니까?');?>")) {
+									tcConfirm("<?php echo _t('선택된 걸린글을 지웁니다. 계속 하시겠습니까?');?>", function () {	// Textcube-NG: 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396)
 										var id = removeid.replace(/trackbackRemove_/g,'');
-										var request = new HTTPRequest("<?php echo $blogURL;?>/owner/communication/trackback/log/remove/" + id);
+										var request = new HTTPRequest("POST", "<?php echo $blogURL;?>/owner/communication/trackback/log/remove/" + id);
 										request.onSuccess = function () {
 											document.getElementById("logs_"+entry).innerHTML = "";
 											printTrackbackLog(entry);
@@ -528,7 +559,7 @@ if (!file_exists(__TEXTCUBE_CACHE_DIR__.'/CHECKUP')) {
 											alert("<?php echo _t('걸린글을 지우지 못했습니다.');?>");
 										}
 										request.send();
-									}
+									});
 								}
 								
 								function printTrackbackLog(id) {
@@ -631,7 +662,7 @@ if (!file_exists(__TEXTCUBE_CACHE_DIR__.'/CHECKUP')) {
 //											document.getElementById("protectedSettingIcon_" + id).className = "protect-on-button button";
 										}
 										request.onError = function () {
-											alert("비밀번호를 가져오지 못했습니다.");
+											alert("<?php echo _t('비밀번호를 가져오지 못했습니다.');?>");
 										}
 										request.send();
 									}
@@ -692,7 +723,7 @@ if (!file_exists(__TEXTCUBE_CACHE_DIR__.'/CHECKUP')) {
 								
 								function sendTrackback(id) {
 									var trackbackField = document.getElementById('trackbackForm_'+id);
-									var request = new HTTPRequest("<?php echo $blogURL;?>/owner/communication/trackback/send/" + id + "?url=" + encodeURIComponent(trackbackField.value));
+									var request = new HTTPRequest("POST", "<?php echo $blogURL;?>/owner/communication/trackback/send/" + id);
 									request.onSuccess = function () {
 										PM.removeRequest(this);
 										PM.showMessage("<?php echo _t('글을 걸었습니다.');?>", "center", "bottom");
@@ -705,7 +736,7 @@ if (!file_exists(__TEXTCUBE_CACHE_DIR__.'/CHECKUP')) {
 										alert("<?php echo _t('글을 걸 수 없었습니다.');?>");
 									}
 									PM.addRequest(request, "<?php echo _t('글을 걸고 있습니다.');?>");
-									request.send();
+									request.send("url=" + encodeURIComponent(trackbackField.value));
 								}
 								
 								function toggleDeleteButton(obj, position) {
@@ -752,7 +783,7 @@ if (!file_exists(__TEXTCUBE_CACHE_DIR__.'/CHECKUP')) {
 							</span></h2>
 
 							<form id="category-form-top" class="category-box" method="post" action="<?php echo $blogURL;?>/owner/entry">
-								<input type="hidden" name="page" value="<?php echo $suri['page'];?>" />
+								<input type="hidden" name="page" value="<?php echo htmlspecialchars((string)$suri['page'], ENT_QUOTES);?>" />
 								<input type="hidden" name="visibility" value="<?php echo htmlspecialchars($_POST['visibility'], ENT_QUOTES);?>" />
 								
 								<ul id="entry-tabs-box" class="tabs-box">
@@ -955,7 +986,8 @@ if (sizeof($entries) == 0) {
                 $contentLength = 75 - UTF8::lengthAsEm(htmlspecialchars($entry['title']));
                 ?>
                 <a href="<?php echo $blogURL; ?>/owner/<?php echo $editmode; ?>/edit/<?php echo $entryModifyLink; ?>"
-                   onclick="document.getElementById('list-form').action='<?php echo $blogURL; ?>/owner/<?php echo $editmode; ?>/edit/<?php echo $entryModifyLink; ?>'<?php echo($entry['draft'] ? ("+(confirm('" . _t('임시 저장본을 보시겠습니까?') . "') ? '?draft' : '')") : ''); ?>; document.getElementById('list-form').submit(); return false;"><?php echo htmlspecialchars($entry['title']); ?></a>
+                   <?php /* Textcube-NG: 아래 onclick 의 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396) */ ?>
+                   onclick="var u='<?php echo $blogURL; ?>/owner/<?php echo $editmode; ?>/edit/<?php echo $entryModifyLink; ?>';<?php echo($entry['draft'] ? (" tcConfirm('" . _t('임시 저장본을 보시겠습니까?') . "', function () { document.getElementById('list-form').action=u+'?draft'; document.getElementById('list-form').submit(); }, function () { document.getElementById('list-form').action=u; document.getElementById('list-form').submit(); }); return false;") : ''); ?> document.getElementById('list-form').action=u; document.getElementById('list-form').submit(); return false;"><?php echo htmlspecialchars($entry['title']); ?></a>
                 <span
                     class="description"><?php echo(($contentLength > 0) ? UTF8::lessenAsEm(removeAllTags(strip_tags($entry['content'])), $contentLength) : ''); ?></span>
             </td>
@@ -1145,7 +1177,7 @@ if (sizeof($entries) == 0) {
 								<hr class="hidden" />
 								
 								<div class="data-subbox">
-									<input type="hidden" name="page" value="<?php echo $suri['page'];?>" />
+									<input type="hidden" name="page" value="<?php echo htmlspecialchars((string)$suri['page'], ENT_QUOTES);?>" />
 																		
 									<div id="change-section-bottom" class="section">
 										<input type="checkbox" id="allCheckedBottom" class="checkbox" onclick="checkAll(this.checked);" />

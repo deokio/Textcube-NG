@@ -23,7 +23,7 @@ require_once ROOT . '/framework/legacy/Textcube.Control.OIDC.php';
 function OIDCStartAuth()
 {
 	$context = Model_Context::getInstance();
-	$requestURI = !empty($_GET['requestURI']) ? $_GET['requestURI'] : ($context->getProperty('uri.blog') . '/');
+	$requestURI = !empty($_GET['requestURI']) ? getSafeRedirectURI($_GET['requestURI'], $context->getProperty('uri.blog') . '/') : ($context->getProperty('uri.blog') . '/');
 	$_SESSION['oidc_return'] = $requestURI;
 	$url = OIDCClient::buildAuthUrl();
 	if( $url === false ) {
@@ -39,7 +39,7 @@ function LogoutOpenID()
 {
 	$context = Model_Context::getInstance();
 	OpenIDConsumer::logout();
-	$requestURI = !empty($_GET['requestURI']) ? $_GET['requestURI'] : ($context->getProperty('uri.blog') . '/');
+	$requestURI = !empty($_GET['requestURI']) ? getSafeRedirectURI($_GET['requestURI'], $context->getProperty('uri.blog') . '/') : ($context->getProperty('uri.blog') . '/');
 	header("HTTP/1.0 302 Moved Temporarily");
 	header("Location: ".$requestURI);
 

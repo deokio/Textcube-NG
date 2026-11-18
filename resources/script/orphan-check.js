@@ -80,15 +80,15 @@
 
         var btns = '';
         if (canSave) {
-            btns += '<button id="orphan-btn-save" style="margin-right:6px;padding:5px 10px;">임시저장 후 새 글쓰기</button>';
+            btns += '<button id="orphan-btn-save" style="margin-right:6px;padding:5px 10px;">' + _t('임시저장 후 새 글쓰기') + '</button>';
         }
-        btns += '<button id="orphan-btn-continue" style="margin-right:6px;padding:5px 10px;">파일 무시하고 계속</button>'
-              + '<button id="orphan-btn-cancel" style="padding:5px 10px;">취소</button>';
+        btns += '<button id="orphan-btn-continue" style="margin-right:6px;padding:5px 10px;">' + _t('파일 무시하고 계속') + '</button>'
+              + '<button id="orphan-btn-cancel" style="padding:5px 10px;">' + _t('취소') + '</button>';
 
         dlg.innerHTML = '<div style="padding:20px 20px 14px 20px;font-size:13px;">'
             + '<p style="margin:0 0 12px 0;line-height:1.6;">'
-            + '저장되지 않은 새 게시물에 업로드된 첨부파일이 <strong>' + count + '개</strong> 있습니다.<br>'
-            + '새 글쓰기를 열면 해당 파일들이 새 글에 연결됩니다.</p>'
+            + _t('저장되지 않은 새 게시물에 업로드된 첨부파일이 <strong>%1개</strong> 있습니다.').replace('%1', function() { return count; }) + '<br>'
+            + _t('새 글쓰기를 열면 해당 파일들이 새 글에 연결됩니다.') + '</p>'
             + '<div style="text-align:right;">' + btns + '</div></div>';
 
         makeOverlay();
@@ -112,11 +112,11 @@
 
         dlg.innerHTML = '<div style="padding:20px 20px 14px 20px;font-size:13px;">'
             + '<p style="margin:0 0 12px 0;line-height:1.6;">'
-            + '다른 탭/창에서 작성 중인 새 게시물의 첨부파일이 <strong>' + count + '개</strong> 있습니다.<br>'
-            + '이 페이지에서 글을 저장하면 해당 파일들이 이 글에 연결됩니다.<br>'
-            + '다른 탭에서 먼저 임시저장할 것을 권장합니다.</p>'
+            + _t('다른 탭/창에서 작성 중인 새 게시물의 첨부파일이 <strong>%1개</strong> 있습니다.').replace('%1', function() { return count; }) + '<br>'
+            + _t('이 페이지에서 글을 저장하면 해당 파일들이 이 글에 연결됩니다.') + '<br>'
+            + _t('다른 탭에서 먼저 임시저장할 것을 권장합니다.') + '</p>'
             + '<div style="text-align:right;">'
-            + '<button id="orphan-newpost-ok" style="padding:5px 10px;">확인</button>'
+            + '<button id="orphan-newpost-ok" style="padding:5px 10px;">' + _t('확인') + '</button>'
             + '</div></div>';
 
         makeOverlay();

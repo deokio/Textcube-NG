@@ -25,7 +25,7 @@ require ROOT . '/library/preprocessor.php';
 require_once ROOT . '/framework/legacy/Textcube.Control.OIDC.php';
 
 $context = Model_Context::getInstance();
-$return = !empty($_SESSION['oidc_return']) ? $_SESSION['oidc_return'] : ($context->getProperty('uri.blog') . '/');
+$return = !empty($_SESSION['oidc_return']) ? getSafeRedirectURI($_SESSION['oidc_return'], $context->getProperty('uri.blog') . '/') : ($context->getProperty('uri.blog') . '/');
 
 function _oidc_redirect($location)
 {
@@ -69,7 +69,11 @@ if( $claims === false ) {
 }
 
 // 검증 성공 — 신원 설정(게스트 + 연결 계정 매핑). 1회용 토큰 폐기.
-OIDCClient::establishIdentity($claims);
+if( OIDCClient::establishIdentity($claims) === false ) {
+	// 신원을 설정하지 못함(식별자 형식·세션 발급 실패, v3.153) — 1회용 값을 지우고 오류를 알린다.
+	unset($_SESSION['oidc_state'], $_SESSION['oidc_nonce'], $_SESSION['oidc_verifier'], $_SESSION['oidc_return']);
+	_oidc_error(_text('OIDC 인증 검증에 실패했습니다') . ' : ' . OIDCClient::$error, $return);
+}
 unset($_SESSION['oidc_state'], $_SESSION['oidc_nonce'], $_SESSION['oidc_verifier'], $_SESSION['oidc_return']);
 
 _oidc_redirect($return);

@@ -7,7 +7,7 @@ require ROOT . '/library/preprocessor.php';
 
 requireStrictRoute();
 
-if ((isset($_REQUEST['name'])) && (isset($adminHandlerMappings[$_REQUEST['name']])))
+if (isset($_REQUEST['name']) && is_string($_REQUEST['name']) && isset($adminHandlerMappings[$_REQUEST['name']]))	// Textcube-NG: name 은 문자열만, 확인한 $_REQUEST['name'] 으로 핸들러를 찾는다(원본은 아래에서 $_GET['name'] 을 다시 읽었다)(r3-7, 449a)
 {
 
 	$IV = array (
@@ -16,7 +16,7 @@ if ((isset($_REQUEST['name'])) && (isset($adminHandlerMappings[$_REQUEST['name']
 			)
 		);
 
-	foreach($adminHandlerMappings[$_GET['name']]['params'] as $param) {
+	foreach($adminHandlerMappings[$_REQUEST['name']]['params'] as $param) {
 		$ivItem = array ( $param['type']);
 		if (isset($param['default']) && !is_null($param['default']) ) $ivItem['default'] = $param['default'];
 		if (isset($param['mandatory']) && !is_null($param['mandatory']) ) $ivItem['mandatory'] = $param['mandatory'];

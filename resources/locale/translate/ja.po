@@ -1062,7 +1062,7 @@ msgid "관리자 비밀번호를 그대로 사용"
 msgstr "管理者パスワードと一緒に"
 
 msgid "관리자 설정에 의해 오픈아이디로만 댓글을 남길 수 있습니다."
-msgstr "OpenIDでサインインした人のみコメントの作成ができます。"
+msgstr "管理者の設定により、OpenIDまたはソーシャルログインでサインインした人のみコメントの作成ができます。"
 
 msgid "관리자 정보 입력"
 msgstr "管理者情報の入力"
@@ -2372,7 +2372,7 @@ msgid "백업파일이 올바르지 않습니다."
 msgstr "正しくない形式のバックアップデータです。"
 
 msgid "버전 %1"
-msgstr "Ver. ％1"
+msgstr "Ver. %1"
 
 msgid "버전 검사"
 msgstr "版本確認"
@@ -3886,6 +3886,9 @@ msgstr "権限付与成功"
 msgid "연결한 오픈아이디로 이 계정에 로그인 할 수 있습니다."
 msgstr "リンクしたOpenIDは管理者用OpenIDとしてサインインできます。"
 
+msgid "연결할 계정의 인증을 확인하지 못했습니다. 다시 시도해 주십시오."
+msgstr "リンクするアカウントの認証を確認できませんでした。もう一度お試しください。"
+
 msgid "연락처를 아는"
 msgstr "連絡先だけ"
 
@@ -3935,7 +3938,7 @@ msgid "오직하나뿐인"
 msgstr "たった一人の"
 
 msgid "오픈아이디 게스트 로그인"
-msgstr "OpenIDサインイン"
+msgstr "OpenIDゲストサインイン"
 
 msgid "오픈아이디 기록"
 msgstr "OpenID利用履歴"
@@ -4001,7 +4004,7 @@ msgid "오픈아이디로 글쓰기"
 msgstr "OpenIDで作成"
 
 msgid "오픈아이디로 로그인을 해야만 댓글 및 방명록을 쓸 수 있습니다."
-msgstr "OpenIDでサインインした利用者のみにコメント作成を許可"
+msgstr "OpenIDまたはソーシャルログインでサインインした利用者のみにコメントと掲示板の作成を許可"
 
 msgid "오픈아이디로 로그인하여 쓴 댓글/방명록에 오픈아이디 아이콘을 표시합니다."
 msgstr "OpenIDで作成したコメントにOpenIDアイコンを表示"
@@ -4013,7 +4016,7 @@ msgid "오픈아이디로 사용할 블로그 주소를 선택하세요"
 msgstr "OpenIDとして利用するURLをご選択ください。"
 
 msgid "오픈아이디로만 댓글을 남길 수 있습니다"
-msgstr "OpenIDでサインインした人のみコメントの作成ができます。"
+msgstr "OpenIDまたはソーシャルログインでサインインした人のみコメントの作成ができます。"
 
 msgid "오픈아이디를 입력하세요"
 msgstr "OpenIDをご入力ください。"
@@ -5434,6 +5437,15 @@ msgstr "Textcubeの設定を始めます。"
 
 msgid "텍스트큐브 시스템 점검이 필요합니다. 지금 점검하시겠습니까?"
 msgstr "Textcubeのメインテナンスを必要とします。今すぐにメインテナンスをお行いしますか？"
+
+msgid "지금 점검"
+msgstr "今すぐメインテナンス"
+
+msgid "지금 생성"
+msgstr "今すぐ作成"
+
+msgid "나중에"
+msgstr "後で"
 
 msgid "텍스트큐브 오픈아이디 인증"
 msgstr "Textcube OpenID Verification"

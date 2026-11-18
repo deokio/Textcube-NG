@@ -2,6 +2,14 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 	function replace_num_entity($ord)
 	{
 		$ord = $ord[1];
@@ -51,6 +59,12 @@
 			case 4:
 			{
 				$prefix = array(7, 240);
+				break;
+			}
+			default:
+			{
+				// Textcube-NG: $prefix 미정의 경로 방지(위 else와 같이 null 반환), case 4 에 break 추가(r3-8)
+				return;
 			}
 		}
 		for ($i = 0; $i < $no_bytes; $i++)
@@ -69,6 +83,8 @@
 #[AllowDynamicProperties]
 class XMLRPC {
 	var $url, $async = false, $methodName, $params, $result, $fault;
+	// Textcube-NG: 요청을 공인 주소로만 보낼지(HTTPRequest::$publicOnly 로 넘김). 기본 false = 기존 동작(v3.156)
+	var $publicOnly = false;
 	
 	var $useOldXmlRPC = false; // for 2003-before-version
 
@@ -84,11 +100,12 @@ class XMLRPC {
 		$request->url = $this->url;
 		$request->contentType = 'text/xml';
 		$request->async = $this->async;
+		$request->publicOnly = $this->publicOnly;
 		ob_start();
-		echo '<?xml version="1.0" encoding="utf-8"?><methodCall><methodName>' . func_get_arg(0) . '</methodName><params>';
+		echo '<?xml version="1.0" encoding="utf-8"?><methodCall><methodName>' . htmlspecialchars((string)func_get_arg(0), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</methodName><params>';
 		for ($i = 1; $i < func_num_args(); $i++) {
 			echo '<param>';
-			echo $this->_encodeValue(func_get_arg($i));
+			$this->_encodeValue(func_get_arg($i)); // Textcube-NG: _encodeValue는 직접 출력하고 값을 돌려주지 않음(r3-8)
 			echo '</param>';
 		}
 		echo '</params></methodCall>';
@@ -153,6 +170,8 @@ class XMLRPC {
 		}
 		$this->methodName = $xmls->struct['methodCall'][0]['methodName'][0]['.value'];
 		$params = $xmls->selectNodes('/methodCall/params/param');
+		// Textcube-NG: 인자가 없으면 selectNodes() 가 null — count(null) 은 PHP 7.2 부터 경고, PHP 8.0 부터 TypeError. 원본(PHP 5)처럼 0회 반복하도록 빈 배열로 둔다(v3.181)
+		if (!is_array($params)) $params = array();
 		$this->params = array();
 		for ($i = 0; $i < count($params); $i++) {
 			if (!isset($params[$i]['value']))
@@ -184,7 +203,7 @@ class XMLRPC {
 		echo '</params></methodResponse>';
 	}
 	
-	function sendFault($code = 0, $string = 'Error') {
+	static function sendFault($code = 0, $string = 'Error') {
 		header('Content-Type: text/xml');
 		echo '<?xml version="1.0" encoding="utf-8"?>';
 		echo '<methodResponse><fault><value><struct><member><name>faultCode</name><value><i4>';
@@ -292,9 +311,11 @@ class XMLRPC {
 					}
 					return $struct;
 				} else {
-					if (!isset($value['struct'][0]['member'][0]['name'][0]['.value']) || !isset($value['struct'][0]['member'][0]['value']))
+					if (!isset($value['struct'][0]['member']['name'][0]['.value']) || !isset($value['struct'][0]['member']['value'])) // Textcube-NG: 단일 member(목록 아님) 처리로 정리, 정의되지 않은 $i 제거(r3-8)
 						return null;
-					return array($value['struct'][0]['member'][$i]['name'][0]['.value'] => $this->_decodeValue($value['struct'][0]['member'][$i]['value'][0]));
+					// Textcube-NG: 참조 인자(&$value)에는 식(삼항)을 넘길 수 없어(PHP 7+ Error) 변수에 받아 넘긴다(r3-8 보충, 481)
+					$memberValue = isset($value['struct'][0]['member']['value'][0]) ? $value['struct'][0]['member']['value'][0] : $value['struct'][0]['member']['value'];
+					return array($value['struct'][0]['member']['name'][0]['.value'] => $this->_decodeValue($memberValue));
 				}
 		}
 		return null;

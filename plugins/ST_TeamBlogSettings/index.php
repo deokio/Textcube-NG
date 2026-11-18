@@ -1,6 +1,42 @@
 <?php
+/* Textcube-NG: 직접 SQL(POD 문자열 SQL)을 준비 문장(POD::prepare·bindAndExecute)으로 바꿨다. 값은 SQL 문장과 따로 보낸다(PDO 모드 호환)(v3.211)
+   행은 열 이름 키 배열(fetchAllStmt)이다. 실패하면 원래 POD 함수와 같이 null·false·0을 돌려준다. */
+function ST_TeamBlog_preparedRows($query, $types, $params) {
+	$stmt = POD::prepare($query);
+	if (!$stmt) return null;
+	$rows = POD::bindAndExecute($stmt, $types, ...$params) ? POD::fetchAllStmt($stmt) : null;
+	$stmt->close();
+	return $rows;
+}
+
+function ST_TeamBlog_preparedRow($query, $types, $params) {
+	$rows = ST_TeamBlog_preparedRows($query, $types, $params);
+	return empty($rows) ? null : $rows[0];
+}
+
+function ST_TeamBlog_preparedCell($query, $types, $params) {
+	$rows = ST_TeamBlog_preparedRows($query, $types, $params);
+	if (empty($rows)) return null;
+	$row = array_values($rows[0]);
+	return $row[0];
+}
+
+function ST_TeamBlog_preparedExecute($query, $types, $params) {
+	$stmt = POD::prepare($query);
+	if (!$stmt) return false;
+	$result = POD::bindAndExecute($stmt, $types, ...$params) ? true : false;
+	$stmt->close();
+	return $result;
+}
+
 function getTeamBlogInitConfigVal( &$data ){
-	$postHeaderDefault = '<fieldset><legend>Writer profile</legend>';
+	// Textcube-NG: 기본 legend 가 영어로 고정되어 index.xml(ko 작성자 프로필 / en Writer profile / ja 作成者紹介)과 달랐다.
+	// 블로그 언어(없으면 service.language)의 앞 2글자로 index.xml 과 같은 값을 고르고, 그 밖의 언어는 en 값을 쓴다(v3.190)
+	$postHeaderContext = Model_Context::getInstance();
+	$postHeaderLanguage = $postHeaderContext->getProperty('blog.blogLanguage') !== null ? $postHeaderContext->getProperty('blog.blogLanguage') : $postHeaderContext->getProperty('service.language');
+	$postHeaderLegends = array('ko' => '작성자 프로필', 'ja' => '作成者紹介');
+	$postHeaderLanguage = strtolower(substr((string)$postHeaderLanguage, 0, 2));
+	$postHeaderDefault = '<fieldset><legend>' . (isset($postHeaderLegends[$postHeaderLanguage]) ? $postHeaderLegends[$postHeaderLanguage] : 'Writer profile') . '</legend>';
 	$postFooterDefault = '</fieldset>';
 	$data['p1'] = !isset($data['p1'])?true:$data['p1'];
 	$data['postHeader']	= !isset($data['postHeader'])?$postHeaderDefault:$data['postHeader'];
@@ -13,7 +49,7 @@ function getTeamBlogInitConfigVal( &$data ){
 
 function getTeamAuthorStyle($target, $mother){
 	global $database, $entry;
-	$row = POD::queryRow("SELECT style, image, profile FROM {$database['prefix']}TeamUserSettings WHERE blogid =" . getBlogId() . " AND userid=" . $entry['userid']);
+	$row = ST_TeamBlog_preparedRow("SELECT style, image, profile FROM {$database['prefix']}TeamUserSettings WHERE blogid =? AND userid=?", 'ii', array(getBlogId(), $entry['userid']));
 	$authorStyle = '';
 	if($row['style']){
 		$style = explode("|", $row['style']);
@@ -46,10 +82,11 @@ function getTeamProfileView($target, $mother){
 	$data = Setting::fetchConfigVal($configVal);
 	getTeamBlogInitConfigVal($data);
 	if ($suri['directive'] != "/rss" && $suri['directive'] != "/sync" && $data['p1'] && empty($data['p2']) ) {
-		$target .= getTeamProfile($entry['userid']);
+		// Textcube-NG: /atom 등 $entry 가 null 인 경로의 PHP 7.4 Notice·8.x Warning 방지(null 병합 연산자, PHP 7.0+, r3-36 R-560)
+		$target .= getTeamProfile($entry['userid'] ?? null);
 	}
 	if ($suri['directive'] != "/rss" && $suri['directive'] != "/sync" && $data['p1'] && !empty($data['p2']) ) {
-		Misc::dress('TeamBlogProfileTag', getTeamProfile($entry['userid']), $entryView);
+		Misc::dress('TeamBlogProfileTag', getTeamProfile($entry['userid'] ?? null), $entryView);
 	}
 	return $target;
 }
@@ -60,7 +97,7 @@ function getTeamProfile($userid){
 	requireComponent('Textcube.Function.misc');
 	$data = Setting::fetchConfigVal($configVal);
 	getTeamBlogInitConfigVal($data);
-	$row = POD::queryRow("SELECT style, image, profile FROM {$database['prefix']}TeamUserSettings WHERE blogid =".getBlogId()." AND userid=".$userid);
+	$row = ST_TeamBlog_preparedRow("SELECT style, image, profile FROM {$database['prefix']}TeamUserSettings WHERE blogid =? AND userid=?", 'ii', array(getBlogId(), $userid));
 	$imageStyle = $imageTag = $html = '';
 	if(!empty($row['image'])){
 		$imageSrc = "{$serviceURL}/attach/".getBlogId()."/team/".$row['image'];
@@ -86,13 +123,27 @@ function getTeamBlogSettings() {
 	requireComponent('Textcube.Function.misc');
 	$data = Setting::fetchConfigVal($configVal);
 	getTeamBlogInitConfigVal($data);
+	// Textcube-NG: JS 의 _t('fontDisplayName:fontCode:fontFamily') 는 window.__text 에서 값을 찾는데 이 키가 넘어가지 않아
+	// locale 에 폰트 목록을 넣어도 쓰이지 않았다. 넘기는 문구 목록에 키를 더한다(v3.190)
+	$teamBlogTexts = array('정말 삭제하시겠습니까?', '필명 스타일이 저장 되었습니다.', '프로필 설명이 저장 되었습니다.', '저장하지 못했습니다. 다시 시도 해주세요.', 'fontDisplayName:fontCode:fontFamily');
+	$teamBlogTable = array();
+	foreach ($teamBlogTexts as $teamBlogText) {
+		$teamBlogTable[$teamBlogText] = _t($teamBlogText);
+	}
+	$teamBlogJson = json_encode($teamBlogTable, JSON_FORCE_OBJECT | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+	if ($teamBlogJson === false) {
+		$teamBlogJson = '{}';
+	}
 ?>
+	<script type="text/javascript">
+	(function(t){var own=function(o,k){return Object.prototype.hasOwnProperty.call(o,k);};var d=window.__text||(window.__text={});for(var k in t){if(own(t,k)&&!own(d,k))d[k]=t[k];}if(typeof window._t!=='function'){window._t=function(m){var x=window.__text;return(x&&own(x,m)&&x[m])||m;};}})(<?php echo $teamBlogJson;?>);
+	</script>
 	<script type="text/javascript" src="<?php echo $pluginURL;?>/plugin-main.js"></script>
 <?php
-	$teamblog_user = POD::queryRow("SELECT name, loginid FROM {$database['prefix']}Users WHERE userid=".getUserId());
-	$row = POD::queryRow("SELECT style, image, profile FROM {$database['prefix']}TeamUserSettings WHERE blogid =".getBlogId()." and userid=".getUserId());
+	$teamblog_user = ST_TeamBlog_preparedRow("SELECT name, loginid FROM {$database['prefix']}Users WHERE userid=?", 'i', array(getUserId()));
+	$row = ST_TeamBlog_preparedRow("SELECT style, image, profile FROM {$database['prefix']}TeamUserSettings WHERE blogid =? and userid=?", 'ii', array(getBlogId(), getUserId()));
 	if(!$row){
-		POD::execute("INSERT INTO {$database['prefix']}TeamUserSettings (blogid,userid,style,image,profile,updated) VALUES(".getBlogId().",".getUserId().",'','', '',UNIX_TIMESTAMP())");
+		ST_TeamBlog_preparedExecute("INSERT INTO {$database['prefix']}TeamUserSettings (blogid,userid,style,image,profile,updated) VALUES(?,?,'','', '',UNIX_TIMESTAMP())", 'ii', array(getBlogId(), getUserId()));
 	}
 	if($row['image']){
 		$image = "{$service['path']}/attach/".getBlogId()."/team/".$row['image'];
@@ -256,16 +307,20 @@ function getTeamBlogSettings() {
 function getTeamContentsSave($target){
 	global $database;
 	$flag = isset($_POST['flag']) ? $_POST['flag'] : '';
-	$style = POD::escapeString(isset($_POST['fontstyle']) ? $_POST['fontstyle'] : '');
+	$style = isset($_POST['fontstyle']) ? $_POST['fontstyle'] : ''; // Textcube-NG: 값은 준비 문장으로 따로 보내므로 escapeString을 쓰지 않는다(v3.211)
 	$profile = isset($_POST['profile']) ? $_POST['profile'] : '';
 	if(doesHaveOwnership() && doesHaveMembership()){
+		// Textcube-NG: 상태 변경(저장·업로드)은 같은 블로그 Referer 와 CSRF 토큰을 요구한다 — blog 인터페이스(/plugin/…)라
+		// preprocessor 의 owner/reader 검사가 적용되지 않아 다른 사이트가 소유자 브라우저로 요청할 수 있었다(v3.147)
+		requireStrictRoute();
+		requireCSRFToken();
 		if($flag == "style"){
-			if(POD::execute("UPDATE {$database['prefix']}TeamUserSettings SET style=\"{$style}\", updated=UNIX_TIMESTAMP() WHERE blogid=".(int)getBlogId()." and userid=".(int)getUserId())){
+			if(ST_TeamBlog_preparedExecute("UPDATE {$database['prefix']}TeamUserSettings SET style=?, updated=UNIX_TIMESTAMP() WHERE blogid=? and userid=?", 'sii', array($style, (int)getBlogId(), (int)getUserId()))){
 				Respond::ResultPage(0);
 			}
 		}else if($flag == "profile"){
-			$profile = POD::escapeString(UTF8::lessenAsEncoding($profile, 65535));
-			if(POD::execute("UPDATE {$database['prefix']}TeamUserSettings SET profile=\"{$profile}\", updated=UNIX_TIMESTAMP() WHERE blogid=".(int)getBlogId()." and userid=".(int)getUserId())){
+			$profile = UTF8::lessenAsEncoding($profile, 65535); // Textcube-NG: 값은 준비 문장으로 따로 보내므로 escapeString을 쓰지 않는다(v3.211)
+			if(ST_TeamBlog_preparedExecute("UPDATE {$database['prefix']}TeamUserSettings SET profile=?, updated=UNIX_TIMESTAMP() WHERE blogid=? and userid=?", 'sii', array($profile, (int)getBlogId(), (int)getUserId()))){
 				Respond::ResultPage(0);
 			}
 		}
@@ -276,6 +331,10 @@ function getTeamContentsSave($target){
 function getImageFileUpload($target){
 	global $database;
 	if(doesHaveOwnership() && doesHaveMembership()){
+		// Textcube-NG: 상태 변경(저장·업로드)은 같은 블로그 Referer 와 CSRF 토큰을 요구한다 — blog 인터페이스(/plugin/…)라
+		// preprocessor 의 owner/reader 검사가 적용되지 않아 다른 사이트가 소유자 브라우저로 요청할 수 있었다(v3.147)
+		requireStrictRoute();
+		requireCSRFToken();
 		$type = $_POST['type'];
 		$file = $_FILES['teamImageFile'];
 		$errcode = 0;
@@ -285,11 +344,20 @@ function getImageFileUpload($target){
 				$errmsg = _t('잘못된 파일 형식입니다. 다시 시도하세요');
 				$errcode = 1;
 			}else{
-				$result = getAddAttachment($file);
-				$errmsg = _t('새로운 프로필 사진을 저장 했습니다.');
+				// Textcube-NG: 그림 검사(r3-20) — 크기·가로세로(4096)·확장자 대 실제 형식 불일치는 거부한다(Attachment::classifyUpload, 글 첨부와 같은 기준).
+				// 업로드 오류(이름 없음·error 값)는 원본 흐름(getAddAttachment 가 false)대로 둔다
+				requireComponent('Textcube.Data.Attachment');
+				$imageCheck = (empty($file['name']) || ($file['error'] != 0)) ? null : Attachment::classifyUpload($file['tmp_name'], Path::getBaseName($file['name']), $file['size'], false);
+				if(is_array($imageCheck) && (!$imageCheck['ok'] || (($imageCheck['kind'] === 'svg') && ($imageCheck['error'] === 'svgInvalid')))){
+					$errmsg = _t('잘못된 파일 형식입니다. 다시 시도하세요');
+					$errcode = 1;
+				}else{
+					$result = getAddAttachment($file, $imageCheck);
+					$errmsg = _t('새로운 프로필 사진을 저장 했습니다.');
+				}
 			}
 		}else if($type == "delete"){
-			$tmpImage = POD::queryCell("SELECT image FROM {$database['prefix']}TeamUserSettings WHERE blogid=".getBlogId()." and userid=".getUserId());
+			$tmpImage = ST_TeamBlog_preparedCell("SELECT image FROM {$database['prefix']}TeamUserSettings WHERE blogid=? and userid=?", 'ii', array(getBlogId(), getUserId()));
 			if($tmpImage){
 				$result = getDeleteAttachment();
 				$errmsg = _t('등록된 프로필 사진을 삭제 하였습니다.');
@@ -310,7 +378,7 @@ function getImageFileUpload($target){
 	exit;
 }
 
-function getAddAttachment($file){
+function getAddAttachment($file, $imageCheck = null){
 	global $database, $serviceURL;
 	requireComponent('Textcube.Function.misc');
 	requireComponent('Textcube.Data.Attachment');
@@ -334,8 +402,11 @@ function getAddAttachment($file){
 	if(!move_uploaded_file($file['tmp_name'],$attachment['path']))
 		return false;
 	@chmod($attachment['path'],0666);
-	$tmpImage = POD::queryCell("SELECT image FROM {$database['prefix']}TeamUserSettings WHERE blogid=".getBlogId()." and userid=".getUserId());
-	if(!POD::execute("UPDATE {$database['prefix']}TeamUserSettings SET image='".$attachment['name']."', updated=UNIX_TIMESTAMP() WHERE blogid=".getBlogId()." and userid=".getUserId())){
+	// Textcube-NG: 일반 그림은 설정 imageReencode 가 true 일 때만 다시 인코딩한다(r3-20, $imageCheck = Attachment::classifyUpload 결과)
+	if(is_array($imageCheck) && ($imageCheck['kind'] === 'raster') && Attachment::reencodeImage($attachment['path'], $imageCheck['type']))
+		@chmod($attachment['path'],0666);
+	$tmpImage = ST_TeamBlog_preparedCell("SELECT image FROM {$database['prefix']}TeamUserSettings WHERE blogid=? and userid=?", 'ii', array(getBlogId(), getUserId()));
+	if(!ST_TeamBlog_preparedExecute("UPDATE {$database['prefix']}TeamUserSettings SET image=?, updated=UNIX_TIMESTAMP() WHERE blogid=? and userid=?", 'sii', array($attachment['name'], getBlogId(), getUserId()))){
 		@unlink($attachment['path']);
 		$result = "{$serviceURL}/resources/image/spacer.gif";
 	}else{
@@ -348,9 +419,9 @@ function getAddAttachment($file){
 
 function getDeleteAttachment($filename){
 	global $database, $serviceURL;
-	$tmpImage = POD::queryCell("SELECT image FROM {$database['prefix']}TeamUserSettings WHERE blogid=".getBlogId()." and userid=".getUserId());
+	$tmpImage = ST_TeamBlog_preparedCell("SELECT image FROM {$database['prefix']}TeamUserSettings WHERE blogid=? and userid=?", 'ii', array(getBlogId(), getUserId()));
 	if($tmpImage){
-		POD::execute("UPDATE {$database['prefix']}TeamUserSettings SET image='', updated=UNIX_TIMESTAMP() WHERE blogid=".getBlogId()." and userid=".getUserId());
+		ST_TeamBlog_preparedExecute("UPDATE {$database['prefix']}TeamUserSettings SET image='', updated=UNIX_TIMESTAMP() WHERE blogid=? and userid=?", 'ii', array(getBlogId(), getUserId()));
 		@unlink(__TEXTCUBE_ATTACH_DIR__."/".getBlogId()."/team/".$tmpImage);
 	}
 	$result = "{$serviceURL}/resources/image/spacer.gif";

@@ -2,6 +2,14 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 
 define( 'TCDEBUG', true );
 
@@ -33,7 +41,7 @@ function __tcSqlLogBegin( $sql )
 	array_shift($backtrace);
 	array_shift($backtrace);
 
-	$__tcSqlLog[$__tcSqlLogCount] = array( 'sql' => trim($sql), 'backtrace' => $backtrace );
+	$__tcSqlLog[$__tcSqlLogCount] = array( 'sql' => trim($sql ?? ''), 'backtrace' => $backtrace );	// Textcube-NG: PHP 8.1 부터 trim() 에 null 을 넘기면 deprecated — null 은 빈 문자열로(v3.222)
 	$__tcSqlQueryBeginTime = explode(' ', microtime());
 }
 function __tcSqlLogEnd( $result, $cachedResult = 0 )
@@ -51,9 +59,9 @@ function __tcSqlLogEnd( $result, $cachedResult = 0 )
 //		$__tcSqlLog[$__tcSqlLogCount]['error'] = iconv( $client_encoding, 'utf-8', mysql_error());
 //	}
 //	else {
-		$__tcSqlLog[$__tcSqlLogCount]['error'] = iconv('euc-kr','utf-8',cubrid_error_msg());
+		$__tcSqlLog[$__tcSqlLogCount]['error'] = iconv('euc-kr','utf-8',DBAdapter::__lastErrorMessage());	// 드라이버(native/pdo)별 오류
 //	}
-	$__tcSqlLog[$__tcSqlLogCount]['errno'] = cubrid_error_code();
+	$__tcSqlLog[$__tcSqlLogCount]['errno'] = DBAdapter::__lastErrorCode();
 
 	if( $cachedResult == 0 ) {
 		$__tcSqlLog[$__tcSqlLogCount]['elapsed'] = ceil($elapsed * 10000) / 10;
@@ -65,16 +73,16 @@ function __tcSqlLogEnd( $result, $cachedResult = 0 )
 	$__tcSqlLog[$__tcSqlLogCount]['rows'] = 0;
 	$__tcSqlLog[$__tcSqlLogCount]['endtime'] = ($tcSqlQueryEndTime[1] - $__tcPageStartTime[1]) + ($tcSqlQueryEndTime[0] - $__tcPageStartTime[0]);
 	$__tcSqlLog[$__tcSqlLogCount]['endtime'] = sprintf("%4.1f",ceil($__tcSqlLog[$__tcSqlLogCount]['endtime'] * 10000) / 10);
-	if( ! $cachedResult && cubrid_error_code() == 0 ) {
+	if( ! $cachedResult && DBAdapter::__lastErrorCode() == 0 ) {
 		switch( strtolower(substr($__tcSqlLog[$__tcSqlLogCount]['sql'], 0, 6 )) )
 		{
 			case 'select':
-				$__tcSqlLog[$__tcSqlLogCount]['rows'] = cubrid_num_rows($result);
+				$__tcSqlLog[$__tcSqlLogCount]['rows'] = DBAdapter::__numRows($result);
 				break;
 			case 'insert':
 			case 'delete':
 			case 'update':
-				$__tcSqlLog[$__tcSqlLogCount]['rows'] = cubrid_affected_rows($result);
+				$__tcSqlLog[$__tcSqlLogCount]['rows'] = DBAdapter::__affectedRows($result);
 				break;
 		}
 	}
@@ -128,7 +136,7 @@ function __tcSqlLogDump()
 	global $service;
 	static $sLogPumped = false;
 	
-	if (!empty($sLogPumped)) return;
+	if (!empty($sLogPumped) || !empty($GLOBALS['__preventSqlLogDump'])) return;
 	$sLogPumped = true;
 	
 	__tcSqlLogPoint('shutdown');
@@ -263,7 +271,7 @@ EOS;
 	$cached_count = 0;
 	foreach( $__tcSqlLog as $c => $log ) {
 		$elapsed[$count] = array( $log['elapsed'], $count, $log['cached'] ? "cached":"" );
-		$__tcSqlLog[$c]['percent'] = sprintf("%4.1f", $log['endtime']*100/$__tcPageEndTime);
+		$__tcSqlLog[$c]['percent'] = sprintf("%4.1f", ((float) $__tcPageEndTime > 0) ? $log['endtime']*100/$__tcPageEndTime : 0);
 		$count++;
 	}
 
@@ -319,7 +327,7 @@ THEAD;
 			$backtrace = '';
 		}
 		
-		$elapsed_total_db += $log['elapsed'];
+		$elapsed_total_db += (float) $log['elapsed'];
 		$elapsed_total = $log['endtime'];
 		$progress_bar = $log['percent'] / 2; //Max 50px;
 		if (!$commentBlosk) {

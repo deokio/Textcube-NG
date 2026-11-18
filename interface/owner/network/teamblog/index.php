@@ -2,6 +2,14 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 $IV = array(
 	'GET' => array(
 		'password' => array('any' ,'mandatory' => false)
@@ -160,11 +168,13 @@ if( Acl::check('group.owners')) {?>
 								
 								function deleteUser(userid, atype) {
 									if(atype == 1) { // If there are posts from user.
-										if(!confirm("<?php echo _t('선택된 사용자를 정말 삭제하시겠습니까?');?>\n\n<?php echo _t('삭제되는 기존 사용자의 글은 전부 관리자의 글로 변환됩니다.');?>\n(<?php echo _t('글이 전부 삭제되지는 않고 팀블로그의 로그인 데이터만 삭제됩니다');?>)\n<?php echo _t('삭제 이후에는 복원이 불가능합니다.');?> <?php echo _t('정말 삭제 하시겠습니까?');?>")) return false;
+										tcConfirm("<?php echo _t('선택된 사용자를 정말 삭제하시겠습니까?');?>\n\n<?php echo _t('삭제되는 기존 사용자의 글은 전부 관리자의 글로 변환됩니다.');?>\n(<?php echo _t('글이 전부 삭제되지는 않고 팀블로그의 로그인 데이터만 삭제됩니다');?>)\n<?php echo _t('삭제 이후에는 복원이 불가능합니다.');?> <?php echo _t('정말 삭제 하시겠습니까?');?>", tcDeleteUserGo);	// Textcube-NG: 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396)
+										return false;
 									} else { // No post from user.
-										if(!confirm('<?php echo _t('삭제 하시겠습니까?');?>')) 
-											return false;
+										tcConfirm('<?php echo _t('삭제 하시겠습니까?');?>', tcDeleteUserGo);	// Textcube-NG: 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396)
+										return false;
 									}
+									function tcDeleteUserGo() {	// Textcube-NG: 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396)
 									var request = new HTTPRequest("POST", "<?php	echo $blogURL;?>/owner/network/teamblog/deleteUser/");
 									request.onSuccess = function() {
 										window.location.href="<?php 	echo $blogURL;?>/owner/network/teamblog";
@@ -173,6 +183,7 @@ if( Acl::check('group.owners')) {?>
 										alert("<?php echo _t('실패했습니다.');?>");
 									}
 									request.send("userid=" + userid);
+									}
 								}
 
 <?php
@@ -234,7 +245,10 @@ if( Acl::check('group.administrators')) {
 									<tbody>
 <?php
 	$blogid = getBlogId();
-	$teamblog_user = POD::queryAll("SELECT t.*, u.loginid, u.password, u.name, u.created
+	/* [보안] 저장된 비밀번호 해시(u.password)는 화면·링크에 쓰지 않으므로 읽지 않는다. 초대 링크 표시 판단용으로 계정 기준
+	   로그인 기록(u.lastlogin → userlastlogin)과 계정을 만든(초대한) 사용자(u.host → userhost)를 읽는다.
+	   ($value['lastlogin'] 은 원본대로 Privileges.lastlogin — 참여 상태 표시용) */
+	$teamblog_user = POD::queryAll("SELECT t.*, u.loginid, u.name, u.created, u.lastlogin AS userlastlogin, u.host AS userhost
 		FROM {$database['prefix']}Privileges t, 
 		 	{$database['prefix']}Users u 
 		WHERE t.blogid = '$blogid' 
@@ -261,23 +275,26 @@ if( Acl::check('group.administrators')) {
 													<td class="posting"><?php echo $value['posting'];?></td>
 													<td class="status">
 <?php
-			$authtoken = getAuthToken($value['userid']);
+			/* [보안] 원본은 관리자 권한 구성원마다 그 사용자의 인증 토큰(로그인 비밀번호로 쓰임)과 저장된 비밀번호 해시가 든
+			   초대·재발급 링크를 이 화면을 보는 모든 관리자에게 출력했다(다른 구성원 계정으로 로그인 가능). Privileges.lastlogin 은
+			   갱신되지 않아 가입한 구성원도 '미참여' 분기로 링크가 나갔다.
+			   → 초대 링크는 아직 로그인한 적 없는 계정(Users.lastlogin = 0)을 직접 초대한 사용자(Users.host)에게만, 토큰이 있을 때만
+			     출력하고(계정 화면 '초대한 사람 목록'과 같은 범위) 해시는 넣지 않는다. 재발급 링크는 출력하지 않는다. */
 			if($value['lastlogin'] == 0) { 
 ?>
 													<?php echo _t('미참여');?>
 <?php
-				if($value['acl'] & BITWISE_ADMINISTRATOR) {
-					$invitationURL = getInvitationLink(getBlogURLById($blogid), htmlspecialchars($value['loginid']), $value['password'], $authtoken);
-					echo '<a href="'.$invitationURL.'">'._t('초대 링크').'</a>';
+				if(($value['acl'] & BITWISE_ADMINISTRATOR) && $value['userlastlogin'] == 0 && !empty($value['userhost']) && $value['userhost'] == getUserId()) {
+					$authtoken = getAuthToken($value['userid']);
+					if(!empty($authtoken)) {
+						$invitationURL = getInvitationLink(getBlogURLById($blogid), htmlspecialchars($value['loginid']), null, $authtoken);
+						echo '<a href="'.$invitationURL.'">'._t('초대 링크').'</a>';
+					}
 				}
 			} else { 
 ?>
 													<?php echo _t('참여중');?>
 <?php
-				if(($value['acl'] & BITWISE_ADMINISTRATOR) && !empty($authtoken) && !is_null($authtoken)) {
-					$invitationURL = getInvitationLink(getBlogURLById($blogid), htmlspecialchars($value['loginid']), $value['password'], $authtoken);
-					echo '<a href="'.$invitationURL.'">'._t('재발급 링크').'</a>';
-				}
 			}
 ?></td>
 													<td class="password">

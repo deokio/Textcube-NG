@@ -7,7 +7,8 @@ global $__gCacheBlogSettings, $__serviceSetting; // share blog.service.php
 $__serviceSetting = array();
 class Setting {
 	static function fetchConfigVal( $DATA ){
-		return is_null($DATA) ? null:unserialize($DATA);
+		// Textcube-NG: r3-43 R-577 플러그인 설정(Plugins.settings)은 문자열 배열이므로 객체를 되살리지 않는다(allowed_classes, PHP 7.0+) — 매직 메서드 실행 방지
+		return is_null($DATA) ? null:unserialize($DATA, array('allowed_classes' => false));
 //		if (is_null($DATA)) return null; // Compartibility. If data is stored as array (new method), return it.		
 //		if (is_array($DATA)) return $DATA;
 //		return Setting::fetchConfigVal_Legacy($DATA);
@@ -29,7 +30,8 @@ class Setting {
 				unset($xmls);	
 				return null;
 			}
-			$outVal[$field['.attributes']['name']] = $field['.value'] ;
+			// Textcube-NG: 자식 요소가 있는 field 는 XMLStruct 가 '.value' 를 지운다 — 원본은 Notice(PHP 8 은 Warning) 뒤 null 을 넣었다. 같은 null 을 경고 없이 넣는다(XMLStruct::getValue() 와 같은 방식, v3.221)
+			$outVal[$field['.attributes']['name']] = isset($field['.value']) ? $field['.value'] : null;
 		}
 		unset($xmls);	
 		return ( $outVal);
@@ -202,7 +204,7 @@ class Setting {
 			$query = DBModel::getInstance();
 			$query->reset('BlogSettings');
 			$query->setQualifier('blogid','equals', $blogid);
-			$query->setQualifier('name','equals', $name);
+			$query->setQualifier('name','equals', $name, true);	// Textcube-NG: r3-44 R-578 name 조건도 escape 한다(같은 클래스의 다른 name 조건과 맞춤, 본 포트 DBModel 은 escape 인자가 없으면 escape 하지 않음)
 			return $query->delete();
 		}
 		
@@ -244,8 +246,11 @@ class Setting {
 			$query->setQualifier('name','equals', $name, true);
 			return $query->getCell('value');
 		}
+		/* PHP 8.5: null 을 배열 키로 쓰는 것이 deprecated. 원본은 $userid 가 null(현재 사용자)이면 아래 isset($userSetting[$userid]) 에서
+		   null 을 키로 썼고(빈 문자열 키로 처리돼 캐시를 찾지 못해 매번 다시 읽음), 그 뒤에야 getUserId() 로 바꿨다.
+		   캐시 확인 전에 현재 사용자 ID 로 정한다(읽는 행·반환값 같음, 설정 변경 시 캐시는 clearUserSettingCache() 로 비워짐). */
+		if (is_null($userid)) $userid = getUserId();
 		if( empty($userSetting) || !isset($userSetting[$userid])) {
-			$userid = is_null($userid) ? getUserId() :  $userid;
 			$query = DBModel::getInstance();
 			$query->reset('UserSettings');
 			$query->setQualifier('userid','equals', $userid);
@@ -297,6 +302,8 @@ class Setting {
 	static function getServiceSetting($name, $default = null, $global = null) {
 		global $__serviceSetting;
 		if(is_null($global)) $name = 'plugin_' . $name;
+		// Textcube-NG: setServiceSetting() 과 같이 이름을 32바이트(ServiceSettings.name varchar(32))로 줄인다. 원본은 저장할 때만 줄여 긴 이름은 다시 읽거나 지울 수 없었다(r3-5)
+		$name = UTF8::lessenAsEncoding($name, 32);
 		if( empty($__serviceSetting) ) {
 			$query = DBModel::getInstance();
 			$query->reset('ServiceSettings');
@@ -326,6 +333,8 @@ class Setting {
 
 	static function removeServiceSetting($name, $global = null) {
 		if(is_null($global)) $name = 'plugin_' . $name;
+		// Textcube-NG: setServiceSetting() 과 같이 이름을 32바이트(ServiceSettings.name varchar(32))로 줄인다. 원본은 저장할 때만 줄여 긴 이름은 다시 읽거나 지울 수 없었다(r3-5)
+		$name = UTF8::lessenAsEncoding($name, 32);
 		$query = DBModel::getInstance();
 		$query->reset('ServiceSettings');
 		$query->setQualifier('name','like', $name,true);

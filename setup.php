@@ -40,12 +40,20 @@ if (count($host) > 1) {
 	$_SERVER['SERVER_PORT'] = $host[1];
 }
 unset($host);
+// [보안] PHP_SELF 는 PATH_INFO(setup.php 뒤에 붙인 경로)를 포함해 요청자가 바꿀 수 있는데, $path 는 config.php·.htaccess(RewriteBase)에
+//   기록되고 화면에 출력된다 → PATH_INFO 가 없는 SCRIPT_NAME 기준으로 계산(없으면 원본대로 PHP_SELF). 제어문자·PHP 종료 태그 문자열이 있으면 중단.
+$scriptName = !empty($_SERVER['SCRIPT_NAME']) ? $_SERVER['SCRIPT_NAME'] : $_SERVER['PHP_SELF'];
 if(empty($accessInfo)) {
 	$root = substr($_SERVER['SCRIPT_FILENAME'], 0, strlen($_SERVER['SCRIPT_FILENAME']) - 10);
-	$path = stripPath(substr($_SERVER['PHP_SELF'], 0, strlen($_SERVER['PHP_SELF']) - 10));
+	$path = stripPath(substr($scriptName, 0, strlen($scriptName) - 10));
 } else {
 	$root = substr($_SERVER['SCRIPT_FILENAME'], 0, strlen($_SERVER['SCRIPT_FILENAME']) - 12);
-	$path = stripPath(substr($_SERVER['PHP_SELF'], 0, strlen($_SERVER['PHP_SELF']) - 12));
+	$path = stripPath(substr($scriptName, 0, strlen($scriptName) - 12));
+}
+unset($scriptName);
+if (preg_match('/[\x00-\x1f\x7f]/', $path) || strpos($path, '?>') !== false) {
+	header('HTTP/1.1 400 Bad Request');
+	exit;
 }
 $_SERVER['PHP_SELF'] = rtrim($_SERVER['PHP_SELF'], '/');
 // Set default table prefix.
@@ -61,6 +69,12 @@ $__requireBasics = array(
 	'function/misc',
 	'function/image',
 	'function/mail');
+// [보안] dbms 는 DB 어댑터 파일 경로(framework/alias/DBAdapter.php → framework/data/<dbms>/Adapter.php, 설치 모드는 global $dbms)에
+//   쓰이므로 지원 목록(setupDBMSList) 값만 받는다(strict 비교).
+if(isset($_POST['dbms']) && !in_array($_POST['dbms'], setupDBMSList(), true)) {
+	header('HTTP/1.1 400 Bad Request');
+	exit;
+}
 if(isset($_POST['dbms'])) $database['dbms'] = $_POST['dbms'];
 require ROOT.'/library/include.php';
 
@@ -76,7 +90,13 @@ $baseLanguage = 'ko';
 if( !empty($_POST['Lang']) ) $baseLanguage = $_POST['Lang'];
 $locale = Locales::getInstance();
 $locale->setDomain('setup');
-if( $locale->setDirectory(ROOT.'/resources/locale/setup') ) $locale->set( $baseLanguage , "setup");
+// [보안] Lang 은 locale 파일 include 경로(Locales::set)와 BlogSettings(language) 저장값으로 쓰이고, 이 코드는 설치 여부 확인보다
+//   먼저 실행된다(설치 후에도 도달) → resources/locale/setup 의 지원 locale 키만 받고, 아니면 기본값 'ko'.
+if( $locale->setDirectory(ROOT.'/resources/locale/setup') ) {
+	if( !is_string($baseLanguage) || !array_key_exists($baseLanguage, $locale->getSupportedLocales()) ) $baseLanguage = 'ko';
+	$locale->set( $baseLanguage , "setup");
+} else $baseLanguage = 'ko';
+if( isset($_POST['Lang']) ) $_POST['Lang'] = $baseLanguage;
 
 if (file_exists($root . '/config.php') && (filesize($root . '/config.php') > 0)) {
     header('HTTP/1.1 503 Service Unavailable');
@@ -97,9 +117,9 @@ if (file_exists($root . '/config.php') && (filesize($root . '/config.php') > 0))
 </head>
 <body>
 	<div id="container">
-		<form id="setup" name="setup" method="post" action="<?php echo $_SERVER['PHP_SELF'];?>">
+		<form id="setup" name="setup" method="post" action="<?php echo setupEscape($_SERVER['PHP_SELF']);?>">
 			<div id="title">
-				<h1><img src="./resources/style/setup/image/title.gif" width="253" height="44" alt="Textcube를 점검합니다." /></h1>
+				<h1><img src="./resources/style/setup/image/title.gif" width="253" height="44" alt="<?php echo _t('Textcube를 점검합니다.');?>" /></h1>
 			</div>
 
 			<div id="inner">
@@ -175,11 +195,11 @@ if (array_key_exists('phpinfo',$_GET)) {
 </head>
 <body onload="init()">
 <div id="container">
-<form id="setup" name="setup" method="post" action="<?php echo $_SERVER['PHP_SELF'];?>">
+<form id="setup" name="setup" method="post" action="<?php echo setupEscape($_SERVER['PHP_SELF']);?>">
 	<div id="title">
 		<h1><img src="./resources/style/setup/image/title.gif" width="253" height="44" alt="<?php echo TEXTCUBE_NAME;?> <?php echo TEXTCUBE_VERSION;?> Setup" /></h1>
 	</div>
-	<input type="hidden" name="Lang" id="Lang" value="<?php echo $baseLanguage;?>" />
+	<input type="hidden" name="Lang" id="Lang" value="<?php echo setupEscape($baseLanguage);?>" />
 <?php
 if (empty($_POST['step'])) {
 ?>
@@ -260,6 +280,15 @@ function checkStep($step, $check = true) {
 					if (!empty($_POST['dbServer']) && !empty($_POST['dbName']) && !empty($_POST['dbUser']) && isset($_POST['dbPassword']) && isset($_POST['dbPrefix'])) {
 						$dbTemp = array('server'=>$_POST['dbServer'],'username'=>$_POST['dbUser'],'password'=>$_POST['dbPassword'],'port'=>$_POST['dbPort']);
 						if(!empty($_POST['dbName'])) $dbTemp['database'] = $_POST['dbName'];
+						if(!empty($_POST['dbUseSSL'])) {
+							$dbTemp['ssl'] = true;
+							if(!empty($_POST['dbSslCa']))   $dbTemp['ssl_ca']   = $_POST['dbSslCa'];
+							if(!empty($_POST['dbSslCert'])) $dbTemp['ssl_cert'] = $_POST['dbSslCert'];
+							if(!empty($_POST['dbSslKey']))  $dbTemp['ssl_key']  = $_POST['dbSslKey'];
+							$dbTemp['ssl_verify'] = !empty($_POST['dbSslVerify']);
+						}
+						// DB 드라이버 선택(native/pdo). 값 검사는 어댑터 bind() 가 수행
+						if(isset($_POST['dbDriver']) && is_string($_POST['dbDriver']) && $_POST['dbDriver'] !== '') $dbTemp['driver'] = $_POST['dbDriver'];
 						global $dbms;
 						$dbms = $_POST['dbms'];
 						if (!POD::bind($dbTemp))
@@ -276,6 +305,15 @@ function checkStep($step, $check = true) {
 					if (!empty($_POST['dbServer']) && !empty($_POST['dbName']) && !empty($_POST['dbUser']) && isset($_POST['dbPassword']) && !empty($_POST['dbPort'])) {
 						$dbTemp = array('server'=>$_POST['dbServer'],'username'=>$_POST['dbUser'],'password'=>$_POST['dbPassword'],'port'=>$_POST['dbPort']);
 						if(!empty($_POST['dbName'])) $dbTemp['database'] = $_POST['dbName'];
+						if(!empty($_POST['dbUseSSL'])) {
+							$dbTemp['ssl'] = true;
+							if(!empty($_POST['dbSslCa']))   $dbTemp['ssl_ca']   = $_POST['dbSslCa'];
+							if(!empty($_POST['dbSslCert'])) $dbTemp['ssl_cert'] = $_POST['dbSslCert'];
+							if(!empty($_POST['dbSslKey']))  $dbTemp['ssl_key']  = $_POST['dbSslKey'];
+							$dbTemp['ssl_verify'] = !empty($_POST['dbSslVerify']);
+						}
+						// DB 드라이버 선택(native/pdo). 값 검사는 어댑터 bind() 가 수행
+						if(isset($_POST['dbDriver']) && is_string($_POST['dbDriver']) && $_POST['dbDriver'] !== '') $dbTemp['driver'] = $_POST['dbDriver'];
 						global $dbms;
 						$dbms = $_POST['dbms'];
 						if (!POD::bind($dbTemp))
@@ -290,9 +328,21 @@ function checkStep($step, $check = true) {
         }
 ?>
   <input type="hidden" name="step" value="3" />
-  <input type="hidden" name="mode" value="<?php echo $_POST['mode'];?>" />
+  <input type="hidden" name="mode" value="<?php echo setupEscape($_POST['mode']);?>" />
   <script type="text/javascript">
     //<![CDATA[
+     var driverSupport = <?php echo json_encode(setupDriverSupport(), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);?>;
+     function suggestDriver(db) {
+		var drivers = driverSupport[db] || [];
+		var native = document.getElementById('dbDriverNative'), pdo = document.getElementById('dbDriverPdo');
+		if (!native || !pdo) return;
+		native.disabled = (drivers.indexOf('native') < 0);
+		pdo.disabled = (drivers.indexOf('pdo') < 0);
+		if ((native.checked && native.disabled) || (pdo.checked && pdo.disabled) || (!native.checked && !pdo.checked)) {
+			native.checked = !native.disabled;
+			pdo.checked = native.disabled && !pdo.disabled;
+		}
+	 }
      function suggestDefaultPort(db) {
 		switch(db) {
 			case 'MySQL':
@@ -311,6 +361,7 @@ function checkStep($step, $check = true) {
 				break;
 		}
 		document.getElementById('dbPort').value = port;
+		suggestDriver(db);
 		document.getElementById('dbms'+db).checked = checked;
 		return true;
 	 }
@@ -325,11 +376,10 @@ function checkStep($step, $check = true) {
         <td>
 <?php
 $dbmsSupport = array();
-if(function_exists('mysqli_connect')) array_push($dbmsSupport,'MySQLi');
-if(class_exists('mysqli')) array_push($dbmsSupport,'MySQL');
-if(function_exists('pg_connect')) array_push($dbmsSupport,'PostgreSQL');
-if(class_exists('SQLite3')) array_push($dbmsSupport,'SQLite3');
-if(function_exists('cubrid_connect')) array_push($dbmsSupport,'Cubrid');
+// DBMS 확장(native) 또는 PDO 드라이버(pdo) 중 하나라도 있으면 지원 (setupDriverSupport())
+foreach(setupDriverSupport() as $supportDbms => $supportDrivers) {
+	if(!empty($supportDrivers)) array_push($dbmsSupport,$supportDbms);
+}
 foreach($dbmsSupport as $dbms) {
 ?>
 	      <input type="radio" id="dbms<?php echo $dbms;?>" name="dbms" value="<?php echo $dbms;?>" <?php echo (((isset($_POST['dbms']) && $_POST['dbms'] == $dbms)||(!isset($_POST['dbms']) && $dbms == $dbmsSupport[0])) ? 'checked' : '');?> onclick="suggestDefaultPort('<?php echo $dbms;?>');return false;" /> <?php echo $dbms;?>
@@ -341,13 +391,13 @@ foreach($dbmsSupport as $dbms) {
 	  <tr>
         <th><?php echo _t('데이터베이스 서버');?> :</th>
         <td>
-          <input type="text" name="dbServer" value="<?php echo (isset($_POST['dbServer']) ? $_POST['dbServer'] : 'localhost');?>" class="input<?php echo ($check && (empty($_POST['dbServer']) || ($error == 1)) ? ' input_error' : '');?>" />
+          <input type="text" name="dbServer" value="<?php echo (isset($_POST['dbServer']) ? setupEscape($_POST['dbServer']) : 'localhost');?>" class="input<?php echo ($check && (empty($_POST['dbServer']) || ($error == 1)) ? ' input_error' : '');?>" />
         </td>
       </tr>
       <tr>
         <th><?php echo _t('데이터베이스 포트');?> :</th>
         <td>
-          <input type="text" id="dbPort" name="dbPort" value="<?php echo (isset($_POST['dbPort']) ? $_POST['dbPort'] :
+          <input type="text" id="dbPort" name="dbPort" value="<?php echo (isset($_POST['dbPort']) ? setupEscape($_POST['dbPort']) :
 		  '3306'
 		  );?>" class="input<?php echo ($check && (empty($_POST['dbPort']) || ($error == 1)) ? ' input_error' : '');?>" />
         </td>
@@ -355,13 +405,13 @@ foreach($dbmsSupport as $dbms) {
 	  <tr>
         <th><?php echo _t('데이터베이스 이름');?> :</th>
         <td>
-          <input type="text" name="dbName" value="<?php echo (isset($_POST['dbName']) ? $_POST['dbName'] : NULL);?>" class="input<?php echo ($check && (empty($_POST['dbName']) || ($error == 2)) ? ' input_error' : '');?>" />
+          <input type="text" name="dbName" value="<?php echo (isset($_POST['dbName']) ? setupEscape($_POST['dbName']) : NULL);?>" class="input<?php echo ($check && (empty($_POST['dbName']) || ($error == 2)) ? ' input_error' : '');?>" />
         </td>
       </tr>
       <tr>
         <th><?php echo _t('데이터베이스 사용자명');?> :</th>
         <td>
-          <input type="text" name="dbUser" value="<?php echo (isset($_POST['dbUser']) ? $_POST['dbUser'] : '');?>" class="input<?php echo ($check && (empty($_POST['dbUser']) || $error) ? ' input_error' : '');?>" />
+          <input type="text" name="dbUser" value="<?php echo (isset($_POST['dbUser']) ? setupEscape($_POST['dbUser']) : '');?>" class="input<?php echo ($check && (empty($_POST['dbUser']) || $error) ? ' input_error' : '');?>" />
         </td>
       </tr>
       <tr>
@@ -378,7 +428,17 @@ foreach($dbmsSupport as $dbms) {
       <tr>
         <th><?php echo _t('테이블 식별자');?> :</th>
         <td>
-          <input type="text" name="dbPrefix" value="<?php echo (isset($_POST['dbPrefix']) ? $_POST['dbPrefix'] : 'tc_');?>" class="input <?php echo ($check && ($error == 3) ? ' input_error' : '');?>" />
+          <input type="text" name="dbPrefix" value="<?php echo (isset($_POST['dbPrefix']) ? setupEscape($_POST['dbPrefix']) : 'tc_');?>" class="input <?php echo ($check && ($error == 3) ? ' input_error' : '');?>" />
+        </td>
+      </tr>
+      <tr>
+        <th><?php echo _t('SSL/TLS');?> :</th>
+        <td>
+          <label><input type="checkbox" name="dbUseSSL" value="1" <?php echo (!empty($_POST['dbUseSSL'])?'checked="checked"':'');?> /> <?php echo _t('SSL/TLS 사용');?></label><br />
+          CA: <input type="text" name="dbSslCa" value="<?php echo (isset($_POST['dbSslCa']) ? htmlspecialchars($_POST['dbSslCa'],ENT_QUOTES) : '');?>" class="input" /><br />
+          Cert: <input type="text" name="dbSslCert" value="<?php echo (isset($_POST['dbSslCert']) ? htmlspecialchars($_POST['dbSslCert'],ENT_QUOTES) : '');?>" class="input" /> <?php echo _t('(상호 TLS 시)');?><br />
+          Key: <input type="text" name="dbSslKey" value="<?php echo (isset($_POST['dbSslKey']) ? htmlspecialchars($_POST['dbSslKey'],ENT_QUOTES) : '');?>" class="input" /> <?php echo _t('(상호 TLS 시)');?><br />
+          <label><input type="checkbox" name="dbSslVerify" value="1" <?php echo (!empty($_POST['dbSslVerify'])?'checked="checked"':'');?> /> <?php echo _t('서버 인증서 검증 (자체서명 CA 면 해제)');?></label>
         </td>
       </tr>
 <?php
@@ -386,7 +446,26 @@ foreach($dbmsSupport as $dbms) {
 			case 'uninstall':
 				break;
 		}
+		// DB 드라이버 선택 (native: DBMS 확장, pdo: PDO). 고른 DBMS 에 설치된 드라이버만 고를 수 있다(DBMS 를 바꾸면 suggestDriver() 가 맞춤)
+		$driverSupport = setupDriverSupport();
+		$driverDbms = (isset($_POST['dbms']) && is_string($_POST['dbms']) && isset($driverSupport[$_POST['dbms']])) ? $_POST['dbms'] : (empty($dbmsSupport) ? '' : $dbmsSupport[0]);
+		$driverAvailable = ($driverDbms !== '') ? $driverSupport[$driverDbms] : array();
+		$driverChecked = (isset($_POST['dbDriver']) && in_array($_POST['dbDriver'], $driverAvailable, true)) ? $_POST['dbDriver'] : (empty($driverAvailable) ? 'native' : $driverAvailable[0]);
+		$driverText = array();
+		foreach($dbmsSupport as $supportDbms) {
+			$driverNames = array();
+			foreach($driverSupport[$supportDbms] as $supportDriver) $driverNames[] = ($supportDriver == 'pdo') ? 'PDO' : _t('네이티브');
+			$driverText[] = $supportDbms . ' (' . implode(', ', $driverNames) . ')';
+		}
 ?>
+      <tr>
+        <th><?php echo _t('데이터베이스 드라이버');?> :</th>
+        <td>
+          <label><input type="radio" id="dbDriverNative" name="dbDriver" value="native" <?php echo ($driverChecked == 'native' ? 'checked="checked"' : '');?><?php echo (in_array('native', $driverAvailable, true) ? '' : ' disabled="disabled"');?> /> <?php echo _t('네이티브 (DBMS 확장)');?></label>
+          <label><input type="radio" id="dbDriverPdo" name="dbDriver" value="pdo" <?php echo ($driverChecked == 'pdo' ? 'checked="checked"' : '');?><?php echo (in_array('pdo', $driverAvailable, true) ? '' : ' disabled="disabled"');?> /> PDO</label>
+          <br /><?php echo _t('설치된 드라이버');?> : <?php echo htmlspecialchars(implode(' / ', $driverText));?>
+        </td>
+      </tr>
     </table>
     </div>
     <div id="content">
@@ -439,15 +518,21 @@ foreach($dbmsSupport as $dbms) {
 			return checkStep(204, false);
 ?>
   <input type="hidden" name="step" value="4" />
-  <input type="hidden" name="mode" value="<?php echo $_POST['mode'];?>" />
-  <input type="hidden" name="dbms" value="<?php echo (isset($_POST['dbms']) ? $_POST['dbms'] : '');?>" />
-  <input type="hidden" name="dbServer" value="<?php echo (isset($_POST['dbServer']) ? $_POST['dbServer'] : '');?>" />
-  <input type="hidden" name="dbName" value="<?php echo (isset($_POST['dbName']) ? $_POST['dbName'] : '');?>" />
-  <input type="hidden" name="dbPort" value="<?php echo (isset($_POST['dbPort']) ? $_POST['dbPort'] : '');?>" />
-  <input type="hidden" name="dbUser" value="<?php echo (isset($_POST['dbUser']) ? $_POST['dbUser'] : '');?>" />
+  <input type="hidden" name="mode" value="<?php echo setupEscape($_POST['mode']);?>" />
+  <input type="hidden" name="dbms" value="<?php echo (isset($_POST['dbms']) ? setupEscape($_POST['dbms']) : '');?>" />
+  <input type="hidden" name="dbServer" value="<?php echo (isset($_POST['dbServer']) ? setupEscape($_POST['dbServer']) : '');?>" />
+  <input type="hidden" name="dbName" value="<?php echo (isset($_POST['dbName']) ? setupEscape($_POST['dbName']) : '');?>" />
+  <input type="hidden" name="dbPort" value="<?php echo (isset($_POST['dbPort']) ? setupEscape($_POST['dbPort']) : '');?>" />
+  <input type="hidden" name="dbUser" value="<?php echo (isset($_POST['dbUser']) ? setupEscape($_POST['dbUser']) : '');?>" />
   <input type="hidden" name="dbPassword" value="<?php echo (isset($_POST['dbPassword']) ? htmlspecialchars($_POST['dbPassword']) : '');?>" />
-  <input type="hidden" name="dbPrefix" value="<?php echo (isset($_POST['dbPrefix']) ? $_POST['dbPrefix'] : '');?>" />
-  <input type="hidden" name="disableRewrite" value="<?php echo (isset($_POST['disableRewrite']) ? $_POST['disableRewrite'] : '');?>" />
+  <input type="hidden" name="dbPrefix" value="<?php echo (isset($_POST['dbPrefix']) ? setupEscape($_POST['dbPrefix']) : '');?>" />
+  <input type="hidden" name="dbUseSSL" value="<?php echo (isset($_POST['dbUseSSL']) ? setupEscape($_POST['dbUseSSL']) : '');?>" />
+  <input type="hidden" name="dbSslCa" value="<?php echo (isset($_POST['dbSslCa']) ? htmlspecialchars($_POST['dbSslCa'],ENT_QUOTES) : '');?>" />
+  <input type="hidden" name="dbSslCert" value="<?php echo (isset($_POST['dbSslCert']) ? htmlspecialchars($_POST['dbSslCert'],ENT_QUOTES) : '');?>" />
+  <input type="hidden" name="dbSslKey" value="<?php echo (isset($_POST['dbSslKey']) ? htmlspecialchars($_POST['dbSslKey'],ENT_QUOTES) : '');?>" />
+  <input type="hidden" name="dbSslVerify" value="<?php echo (isset($_POST['dbSslVerify']) ? setupEscape($_POST['dbSslVerify']) : '');?>" />
+  <input type="hidden" name="dbDriver" value="<?php echo (isset($_POST['dbDriver']) ? setupEscape($_POST['dbDriver']) : '');?>" />
+  <input type="hidden" name="disableRewrite" value="<?php echo (isset($_POST['disableRewrite']) ? setupEscape($_POST['disableRewrite']) : '');?>" />
   <div id="inner">
     <h2><span class="step"><?php echo _f('%1단계', 4);?></span> : <?php echo _t('설치 요구 사항을 확인하고 있습니다.');?> </h2>
     <div id="content-box">
@@ -834,7 +919,7 @@ xml_set_object
 	<ul style="color:red">
 		<li><?php echo _t('현재 IIS에서의 설치는 실험적으로만 지원하고 있으며 별도의 Rewrite 모듈을 사용해야 합니다.').' '._t('만약 이 페이지를 보고 계시다면 Apache mod_rewrite와 호환되지 않는 Rewrite 모듈을 사용 중이거나 아예 모듈이 없는 경우입니다.'); ?></li>
 		<li><?php echo _t('IIS 7.0을 사용하시는 경우 공식 URL Rewrite Module을 사용하려면 <a href="http://www.iis.net/extensions/URLRewrite">이곳에서 다운로드</a>받아 설치하시고, 계속 진행·설치 후 생성되는 <b>.htaccess</b> 파일 내용을 그대로 import해주시면 됩니다.'); ?></li>
-		<li><?php echo _t('IIS 6.0 이전 버전을 사용하시는 경우 Rewrite 모듈을 설치하려면, 오픈스소 무료 모듈을 제공하고 있는 <a href="http://www.codeplex.com/IIRF" target="_blank">Ionics Isapi Rewrite Filter 홈페이지</a>를 방문하여 설치하신 후, 계속 진행·설치 후 생성되는 <b>.htaccess</b> 파일의 내용을 위 모듈의 설정파일(<b>IsapiRewrite4.ini</b>)에 복사하시기 바랍니다.'); ?></li>
+		<li><?php echo _t('IIS 6.0 이전 버전을 사용하시는 경우 Rewrite 모듈을 설치하려면, 오픈소스 무료 모듈을 제공하고 있는 <a href="http://www.codeplex.com/IIRF" target="_blank">Ionics Isapi Rewrite Filter 홈페이지</a>를 방문하여 설치하신 후, 계속 진행·설치 후 생성되는 <b>.htaccess</b> 파일의 내용을 위 모듈의 설정파일(<b>IsapiRewrite4.ini</b>)에 복사하시기 바랍니다.'); ?></li>
 	</ul>
 	<p>
 		<input type="radio" name="rewriteIIS" value="IISRewrite" id="rewriteIIS_Option1"><label for="rewriteIIS_Option1"><?php echo _t('IIS 7.0용 공식 URL Rewrite 모듈을 사용합니다.'); ?></label><br />
@@ -933,18 +1018,24 @@ RewriteRule ^testrewrite$ setup.php [L]"
     	$domain = $rewrite == 3 ? substr($_SERVER['HTTP_HOST'], strpos($_SERVER['HTTP_HOST'], '.') + 1) : $_SERVER['HTTP_HOST'];
 ?>
   <input type="hidden" name="step" value="<?php echo $step;?>" />
-  <input type="hidden" name="mode" value="<?php echo $_POST['mode'];?>" />
-  <input type="hidden" name="dbms" value="<?php echo (isset($_POST['dbms']) ? $_POST['dbms'] : '');?>" />
-  <input type="hidden" name="dbServer" value="<?php echo (isset($_POST['dbServer']) ? $_POST['dbServer'] : '');?>" />
-  <input type="hidden" name="dbPort" value="<?php echo (isset($_POST['dbPort']) ? $_POST['dbPort'] : '');?>" />
-  <input type="hidden" name="dbName" value="<?php echo (isset($_POST['dbName']) ? $_POST['dbName'] : '');?>" />
-  <input type="hidden" name="dbUser" value="<?php echo (isset($_POST['dbUser']) ? $_POST['dbUser'] : '');?>" />
+  <input type="hidden" name="mode" value="<?php echo setupEscape($_POST['mode']);?>" />
+  <input type="hidden" name="dbms" value="<?php echo (isset($_POST['dbms']) ? setupEscape($_POST['dbms']) : '');?>" />
+  <input type="hidden" name="dbServer" value="<?php echo (isset($_POST['dbServer']) ? setupEscape($_POST['dbServer']) : '');?>" />
+  <input type="hidden" name="dbPort" value="<?php echo (isset($_POST['dbPort']) ? setupEscape($_POST['dbPort']) : '');?>" />
+  <input type="hidden" name="dbName" value="<?php echo (isset($_POST['dbName']) ? setupEscape($_POST['dbName']) : '');?>" />
+  <input type="hidden" name="dbUser" value="<?php echo (isset($_POST['dbUser']) ? setupEscape($_POST['dbUser']) : '');?>" />
   <input type="hidden" name="dbPassword" value="<?php echo (isset($_POST['dbPassword']) ? htmlspecialchars($_POST['dbPassword']) : '');?>" />
-  <input type="hidden" name="dbPrefix" value="<?php echo (isset($_POST['dbPrefix']) ? $_POST['dbPrefix'] : '');?>" />
-  <input type="hidden" name="checked" value="<?php echo (isset($_POST['checked']) ? $_POST['checked'] : '');?>" />
-  <input type="hidden" name="domain" value="<?php echo $domain;?>" />
-  <input type="hidden" name="disableRewrite" value="<?php echo (isset($_POST['disableRewrite']) ? $_POST['disableRewrite'] : '');?>" />
-  <input type="hidden" name="rewriteMode" value="<?php echo ($rewrite <= -1) ? $_POST['rewriteIIS'] : 'mod_rewrite';?>" />
+  <input type="hidden" name="dbPrefix" value="<?php echo (isset($_POST['dbPrefix']) ? setupEscape($_POST['dbPrefix']) : '');?>" />
+  <input type="hidden" name="dbUseSSL" value="<?php echo (isset($_POST['dbUseSSL']) ? setupEscape($_POST['dbUseSSL']) : '');?>" />
+  <input type="hidden" name="dbSslCa" value="<?php echo (isset($_POST['dbSslCa']) ? htmlspecialchars($_POST['dbSslCa'],ENT_QUOTES) : '');?>" />
+  <input type="hidden" name="dbSslCert" value="<?php echo (isset($_POST['dbSslCert']) ? htmlspecialchars($_POST['dbSslCert'],ENT_QUOTES) : '');?>" />
+  <input type="hidden" name="dbSslKey" value="<?php echo (isset($_POST['dbSslKey']) ? htmlspecialchars($_POST['dbSslKey'],ENT_QUOTES) : '');?>" />
+  <input type="hidden" name="dbSslVerify" value="<?php echo (isset($_POST['dbSslVerify']) ? setupEscape($_POST['dbSslVerify']) : '');?>" />
+  <input type="hidden" name="dbDriver" value="<?php echo (isset($_POST['dbDriver']) ? setupEscape($_POST['dbDriver']) : '');?>" />
+  <input type="hidden" name="checked" value="<?php echo (isset($_POST['checked']) ? setupEscape($_POST['checked']) : '');?>" />
+  <input type="hidden" name="domain" value="<?php echo setupEscape($domain);?>" />
+  <input type="hidden" name="disableRewrite" value="<?php echo (isset($_POST['disableRewrite']) ? setupEscape($_POST['disableRewrite']) : '');?>" />
+  <input type="hidden" name="rewriteMode" value="<?php echo setupEscape(($rewrite <= -1) ? $_POST['rewriteIIS'] : 'mod_rewrite');?>" />
   <div id="inner">
   <h2><span class="step"><?php echo _f('%1단계', $step);?></span> : <?php echo _t('사용 가능한 운영 방법은 다음과 같습니다. 선택하여 주십시오.');?></h2>
   <div id="userinput">
@@ -979,15 +1070,15 @@ RewriteRule ^testrewrite$ setup.php [L]"
         <th style="padding-top:20px"><?php echo _t('블로그 주소 예시');?></th>
         <td style="padding-top:20px; height:100px">
         <ul id="typeDomain"<?php echo ($rewrite >= 2 ? '' : ' style="display:none"');?>>
-          <li>http://<b>blog1</b>.<?php echo $domain;?><?php echo ($_SERVER['SERVER_PORT'] == 80 ? '' : ":{$_SERVER['SERVER_PORT']}");?><?php echo $path;?>/</li>
-          <li>http://<b>blog2</b>.<?php echo $domain;?><?php echo ($_SERVER['SERVER_PORT'] == 80 ? '' : ":{$_SERVER['SERVER_PORT']}");?><?php echo $path;?>/</li>
+          <li>http://<b>blog1</b>.<?php echo setupEscape($domain);?><?php echo setupEscape($_SERVER['SERVER_PORT'] == 80 ? '' : ":{$_SERVER['SERVER_PORT']}");?><?php echo setupEscape($path);?>/</li>
+          <li>http://<b>blog2</b>.<?php echo setupEscape($domain);?><?php echo setupEscape($_SERVER['SERVER_PORT'] == 80 ? '' : ":{$_SERVER['SERVER_PORT']}");?><?php echo setupEscape($path);?>/</li>
         </ul>
         <ul id="typePath"<?php echo ($rewrite == 1 ? '' : ' style="display:none"');?>>
-          <li>http://<?php echo $domain;?><?php echo ($_SERVER['SERVER_PORT'] == 80 ? '' : ":{$_SERVER['SERVER_PORT']}");?><?php echo $path;?>/<b>blog1</b></li>
-          <li>http://<?php echo $domain;?><?php echo ($_SERVER['SERVER_PORT'] == 80 ? '' : ":{$_SERVER['SERVER_PORT']}");?><?php echo $path;?>/<b>blog2</b></li>
+          <li>http://<?php echo setupEscape($domain);?><?php echo setupEscape($_SERVER['SERVER_PORT'] == 80 ? '' : ":{$_SERVER['SERVER_PORT']}");?><?php echo setupEscape($path);?>/<b>blog1</b></li>
+          <li>http://<?php echo setupEscape($domain);?><?php echo setupEscape($_SERVER['SERVER_PORT'] == 80 ? '' : ":{$_SERVER['SERVER_PORT']}");?><?php echo setupEscape($path);?>/<b>blog2</b></li>
         </ul>
         <ul id="typeSingle" <?php echo (empty($_POST['disableRewrite']) ? 'style="display:none"' : '');?>>
-          <li>http://<?php echo $domain;?><?php echo ($_SERVER['SERVER_PORT'] == 80 ? '' : ":{$_SERVER['SERVER_PORT']}");?><?php echo $path;?>/<?php echo (empty($_POST['disableRewrite']) ? '' : 'blog/');?></li>
+          <li>http://<?php echo setupEscape($domain);?><?php echo setupEscape($_SERVER['SERVER_PORT'] == 80 ? '' : ":{$_SERVER['SERVER_PORT']}");?><?php echo setupEscape($path);?>/<?php echo (empty($_POST['disableRewrite']) ? '' : 'blog/');?></li>
         </ul>
         </td>
       </tr>
@@ -1029,19 +1120,25 @@ RewriteRule ^testrewrite$ setup.php [L]"
 		}
 ?>
   <input type="hidden" name="step" value="<?php echo $step;?>" />
-  <input type="hidden" name="mode" value="<?php echo $_POST['mode'];?>" />
-  <input type="hidden" name="dbms" value="<?php echo (isset($_POST['dbms']) ? $_POST['dbms'] : '');?>" />
-  <input type="hidden" name="dbServer" value="<?php echo (isset($_POST['dbServer']) ? $_POST['dbServer'] : '');?>" />
-  <input type="hidden" name="dbPort" value="<?php echo (isset($_POST['dbPort']) ? $_POST['dbPort'] : '');?>" />
-  <input type="hidden" name="dbName" value="<?php echo (isset($_POST['dbName']) ? $_POST['dbName'] : '');?>" />
-  <input type="hidden" name="dbUser" value="<?php echo (isset($_POST['dbUser']) ? $_POST['dbUser'] : '');?>" />
+  <input type="hidden" name="mode" value="<?php echo setupEscape($_POST['mode']);?>" />
+  <input type="hidden" name="dbms" value="<?php echo (isset($_POST['dbms']) ? setupEscape($_POST['dbms']) : '');?>" />
+  <input type="hidden" name="dbServer" value="<?php echo (isset($_POST['dbServer']) ? setupEscape($_POST['dbServer']) : '');?>" />
+  <input type="hidden" name="dbPort" value="<?php echo (isset($_POST['dbPort']) ? setupEscape($_POST['dbPort']) : '');?>" />
+  <input type="hidden" name="dbName" value="<?php echo (isset($_POST['dbName']) ? setupEscape($_POST['dbName']) : '');?>" />
+  <input type="hidden" name="dbUser" value="<?php echo (isset($_POST['dbUser']) ? setupEscape($_POST['dbUser']) : '');?>" />
   <input type="hidden" name="dbPassword" value="<?php echo (isset($_POST['dbPassword']) ? htmlspecialchars($_POST['dbPassword']) : '');?>" />
-  <input type="hidden" name="dbPrefix" value="<?php echo (isset($_POST['dbPrefix']) ? $_POST['dbPrefix'] : '');?>" />
-  <input type="hidden" name="checked" value="<?php echo (isset($_POST['checked']) ? $_POST['checked'] : '');?>" />
-  <input type="hidden" name="domain" value="<?php echo (isset($_POST['domain']) ? $_POST['domain'] : '');?>" />
-  <input type="hidden" name="disableRewrite" value="<?php echo (isset($_POST['disableRewrite']) ? $_POST['disableRewrite'] : '');?>" />
-  <input type="hidden" name="rewriteMode" value="<?php echo (isset($_POST['rewriteMode']) ? $_POST['rewriteMode'] : '');?>" />
-  <input type="hidden" name="type" value="<?php echo (isset($_POST['type']) ? $_POST['type'] : '');?>" />
+  <input type="hidden" name="dbPrefix" value="<?php echo (isset($_POST['dbPrefix']) ? setupEscape($_POST['dbPrefix']) : '');?>" />
+  <input type="hidden" name="dbUseSSL" value="<?php echo (isset($_POST['dbUseSSL']) ? setupEscape($_POST['dbUseSSL']) : '');?>" />
+  <input type="hidden" name="dbSslCa" value="<?php echo (isset($_POST['dbSslCa']) ? htmlspecialchars($_POST['dbSslCa'],ENT_QUOTES) : '');?>" />
+  <input type="hidden" name="dbSslCert" value="<?php echo (isset($_POST['dbSslCert']) ? htmlspecialchars($_POST['dbSslCert'],ENT_QUOTES) : '');?>" />
+  <input type="hidden" name="dbSslKey" value="<?php echo (isset($_POST['dbSslKey']) ? htmlspecialchars($_POST['dbSslKey'],ENT_QUOTES) : '');?>" />
+  <input type="hidden" name="dbSslVerify" value="<?php echo (isset($_POST['dbSslVerify']) ? setupEscape($_POST['dbSslVerify']) : '');?>" />
+  <input type="hidden" name="dbDriver" value="<?php echo (isset($_POST['dbDriver']) ? setupEscape($_POST['dbDriver']) : '');?>" />
+  <input type="hidden" name="checked" value="<?php echo (isset($_POST['checked']) ? setupEscape($_POST['checked']) : '');?>" />
+  <input type="hidden" name="domain" value="<?php echo (isset($_POST['domain']) ? setupEscape($_POST['domain']) : '');?>" />
+  <input type="hidden" name="disableRewrite" value="<?php echo (isset($_POST['disableRewrite']) ? setupEscape($_POST['disableRewrite']) : '');?>" />
+  <input type="hidden" name="rewriteMode" value="<?php echo (isset($_POST['rewriteMode']) ? setupEscape($_POST['rewriteMode']) : '');?>" />
+  <input type="hidden" name="type" value="<?php echo (isset($_POST['type']) ? setupEscape($_POST['type']) : '');?>" />
   <div id="inner">
     <h2><span class="step"><?php echo _f('%1단계', $step);?></span> : <?php echo _t('관리자 정보 입력');?></h2>
     <div id="userinput">
@@ -1111,20 +1208,26 @@ RewriteRule ^testrewrite$ setup.php [L]"
 
 ?>
   <input type="hidden" name="step" value="<?php echo $step;?>" />
-  <input type="hidden" name="mode" value="<?php echo $_POST['mode'];?>" />
-  <input type="hidden" name="dbms" value="<?php echo (isset($_POST['dbms']) ? $_POST['dbms'] : '');?>" />
-  <input type="hidden" name="dbServer" value="<?php echo (isset($_POST['dbServer']) ? $_POST['dbServer'] : '');?>" />
-  <input type="hidden" name="dbPort" value="<?php echo (isset($_POST['dbPort']) ? $_POST['dbPort'] : '');?>" />
-  <input type="hidden" name="dbName" value="<?php echo (isset($_POST['dbName']) ? $_POST['dbName'] : '');?>" />
-  <input type="hidden" name="dbUser" value="<?php echo (isset($_POST['dbUser']) ? $_POST['dbUser'] : '');?>" />
+  <input type="hidden" name="mode" value="<?php echo setupEscape($_POST['mode']);?>" />
+  <input type="hidden" name="dbms" value="<?php echo (isset($_POST['dbms']) ? setupEscape($_POST['dbms']) : '');?>" />
+  <input type="hidden" name="dbServer" value="<?php echo (isset($_POST['dbServer']) ? setupEscape($_POST['dbServer']) : '');?>" />
+  <input type="hidden" name="dbPort" value="<?php echo (isset($_POST['dbPort']) ? setupEscape($_POST['dbPort']) : '');?>" />
+  <input type="hidden" name="dbName" value="<?php echo (isset($_POST['dbName']) ? setupEscape($_POST['dbName']) : '');?>" />
+  <input type="hidden" name="dbUser" value="<?php echo (isset($_POST['dbUser']) ? setupEscape($_POST['dbUser']) : '');?>" />
   <input type="hidden" name="dbPassword" value="<?php echo (isset($_POST['dbPassword']) ? htmlspecialchars($_POST['dbPassword']) : '');?>" />
-  <input type="hidden" name="dbPrefix" value="<?php echo (isset($_POST['dbPrefix']) ? $_POST['dbPrefix'] : '');?>" />
-  <input type="hidden" name="checked" value="<?php echo (isset($_POST['checked']) ? $_POST['checked'] : '');?>" />
-  <input type="hidden" name="domain" value="<?php echo (isset($_POST['domain']) ? $_POST['domain'] : '');?>" />
-  <input type="hidden" name="disableRewrite" value="<?php echo (isset($_POST['disableRewrite']) ? $_POST['disableRewrite'] : false);?>" />
-  <input type="hidden" name="rewriteMode" value="<?php echo (isset($_POST['rewriteMode']) ? $_POST['rewriteMode'] : '');?>" />
-  <input type="hidden" name="type" value="<?php echo (isset($_POST['type']) ? $_POST['type'] : '');?>" />
-  <input type="hidden" name="blog" value="<?php echo (isset($_POST['blog']) ? $_POST['blog'] : '');?>" />
+  <input type="hidden" name="dbPrefix" value="<?php echo (isset($_POST['dbPrefix']) ? setupEscape($_POST['dbPrefix']) : '');?>" />
+  <input type="hidden" name="dbUseSSL" value="<?php echo (isset($_POST['dbUseSSL']) ? setupEscape($_POST['dbUseSSL']) : '');?>" />
+  <input type="hidden" name="dbSslCa" value="<?php echo (isset($_POST['dbSslCa']) ? htmlspecialchars($_POST['dbSslCa'],ENT_QUOTES) : '');?>" />
+  <input type="hidden" name="dbSslCert" value="<?php echo (isset($_POST['dbSslCert']) ? htmlspecialchars($_POST['dbSslCert'],ENT_QUOTES) : '');?>" />
+  <input type="hidden" name="dbSslKey" value="<?php echo (isset($_POST['dbSslKey']) ? htmlspecialchars($_POST['dbSslKey'],ENT_QUOTES) : '');?>" />
+  <input type="hidden" name="dbSslVerify" value="<?php echo (isset($_POST['dbSslVerify']) ? setupEscape($_POST['dbSslVerify']) : '');?>" />
+  <input type="hidden" name="dbDriver" value="<?php echo (isset($_POST['dbDriver']) ? setupEscape($_POST['dbDriver']) : '');?>" />
+  <input type="hidden" name="checked" value="<?php echo (isset($_POST['checked']) ? setupEscape($_POST['checked']) : '');?>" />
+  <input type="hidden" name="domain" value="<?php echo (isset($_POST['domain']) ? setupEscape($_POST['domain']) : '');?>" />
+  <input type="hidden" name="disableRewrite" value="<?php echo (isset($_POST['disableRewrite']) ? setupEscape($_POST['disableRewrite']) : false);?>" />
+  <input type="hidden" name="rewriteMode" value="<?php echo (isset($_POST['rewriteMode']) ? setupEscape($_POST['rewriteMode']) : '');?>" />
+  <input type="hidden" name="type" value="<?php echo (isset($_POST['type']) ? setupEscape($_POST['type']) : '');?>" />
+  <input type="hidden" name="blog" value="<?php echo (isset($_POST['blog']) ? setupEscape($_POST['blog']) : '');?>" />
   <div id="inner">
     <h2><span class="step"><?php echo _f('%1단계', $step);?></span> : <?php echo _t('데이터베이스를 준비하고 있습니다. 잠시만 기다려 주십시오.');?></h2>
     <div id="content-box" style="text-align:center">
@@ -1306,7 +1409,44 @@ INSERT INTO {$_POST['dbPrefix']}Entries (blogid, userid, id, category, visibilit
     else if ($step == 8) {
         if ($check)
             return true;
+		// [보안] step=7 요청은 앞 단계 검사 없이 바로 여기로 오고(checkStep(8, false)), 원본은 POST 값을 작은따옴표 안에 그대로 넣어
+		//   config.php(PHP 코드)를 기록했다(값의 따옴표로 문자열을 닫고 코드 삽입 가능). → 기록 전에 값 형식을 다시 검사하고
+		//   (setupValidateConfig), config.php 값은 var_export() 로 만든 PHP 문자열 리터럴로 기록한다(일반 값은 원본과 같은 출력).
+		if (!setupValidateConfig()) {
+?>
+  <div id="inner">
+    <div id="warning"><?php echo _t('표시된 정보가 부족합니다.');?></div>
+  </div>
+<?php
+			return false;
+		}
+		$configValue = array();
+		foreach (array('dbServer', 'dbms', 'dbName', 'dbPort', 'dbUser', 'dbPassword', 'dbPrefix', 'type', 'domain') as $key)
+			$configValue[$key] = var_export((string)$_POST[$key], true);
+		$configValue['path'] = var_export((string)$path, true);
 		$useSSL = isSecureProtocol() ? 'true' : 'false';
+		// 신뢰 프록시 기본값: 이 서버 자신(127.0.0.1 과 설치 요청을 받은 서버 주소 SERVER_ADDR)만 config.php 에 기록해
+		// 같은 서버의 리버스 프록시가 보낸 X-Forwarded-For / Client-IP 로 방문자 IP 를 결정하게 한다(framework/boot/00-UnifiedEnvironment.php).
+		// SERVER_ADDR 은 FILTER_VALIDATE_IP 를 통과한 값만 쓰고 var_export() 리터럴로 기록한다(설정 파일에 코드가 들어가지 않게).
+		$trustedProxies = array('127.0.0.1');
+		$serverAddress = isset($_SERVER['SERVER_ADDR']) ? (string)$_SERVER['SERVER_ADDR'] : '';
+		if (filter_var($serverAddress, FILTER_VALIDATE_IP) !== false && !in_array($serverAddress, $trustedProxies, true))
+			$trustedProxies[] = $serverAddress;
+		$trustedProxyLiterals = array();
+		foreach ($trustedProxies as $address) $trustedProxyLiterals[] = var_export($address, true);
+		$configValue['trustedProxies'] = 'array(' . implode(', ', $trustedProxyLiterals) . ')';
+		// DB SSL/TLS 설정 (DB 폼에서 SSL 사용 체크 시 config.php 에 기록. MySQL·MariaDB·PostgreSQL·Cubrid)
+		$sslConfig = '';
+		if(!empty($_POST['dbUseSSL'])) {
+			$sslConfig .= "\$database['ssl'] = true;\n";
+			// addslashes 결과는 작은따옴표 리터럴에서 \" 등이 그대로 남으므로 var_export() 로 변경
+			if(!empty($_POST['dbSslCa']))   $sslConfig .= "\$database['ssl_ca'] = ".var_export((string)$_POST['dbSslCa'], true).";\n";
+			if(!empty($_POST['dbSslCert'])) $sslConfig .= "\$database['ssl_cert'] = ".var_export((string)$_POST['dbSslCert'], true).";\n";
+			if(!empty($_POST['dbSslKey']))  $sslConfig .= "\$database['ssl_key'] = ".var_export((string)$_POST['dbSslKey'], true).";\n";
+			$sslConfig .= "\$database['ssl_verify'] = ".(!empty($_POST['dbSslVerify']) ? 'true' : 'false').";\n";
+		}
+		// DB 드라이버: pdo 선택 시에만 기록(native 는 기본값이므로 기존 config.php 와 동일하게 생략)
+		if(isset($_POST['dbDriver']) && $_POST['dbDriver'] === 'pdo') $sslConfig .= "\$database['driver'] = 'pdo';\n";
         $filename = $root . '/config.php';
         $fp = fopen($filename, 'w+');
 		// For first entry addition
@@ -1316,32 +1456,56 @@ INSERT INTO {$_POST['dbPrefix']}Entries (blogid, userid, id, category, visibilit
 				'port' => $_POST['dbPort'],
 				'password' => $_POST['dbPassword'],
 				'prefix'   => $_POST['dbPrefix']);
+		if(!empty($_POST['dbUseSSL'])) {
+			$database['ssl'] = true;
+			if(!empty($_POST['dbSslCa']))   $database['ssl_ca']   = $_POST['dbSslCa'];
+			if(!empty($_POST['dbSslCert'])) $database['ssl_cert'] = $_POST['dbSslCert'];
+			if(!empty($_POST['dbSslKey']))  $database['ssl_key']  = $_POST['dbSslKey'];
+			$database['ssl_verify'] = !empty($_POST['dbSslVerify']);
+		}
+		if(isset($_POST['dbDriver']) && $_POST['dbDriver'] === 'pdo') $database['driver'] = 'pdo';
         if ($fp) {
             fwrite($fp,
 "<?php
 ini_set('display_errors', 'off');
-\$database['server'] = '{$_POST['dbServer']}';
-\$database['dbms'] = '{$_POST['dbms']}';
-\$database['database'] = '{$_POST['dbName']}';
-\$database['port'] = '{$_POST['dbPort']}';
-\$database['username'] = '{$_POST['dbUser']}';
-\$database['password'] = '{$_POST['dbPassword']}';
-\$database['prefix'] = '{$_POST['dbPrefix']}';
-\$service['type'] = '{$_POST['type']}';
-\$service['domain'] = '{$_POST['domain']}';
-\$service['path'] = '$path';
+\$database['server'] = {$configValue['dbServer']};
+\$database['dbms'] = {$configValue['dbms']};
+\$database['database'] = {$configValue['dbName']};
+\$database['port'] = {$configValue['dbPort']};
+\$database['username'] = {$configValue['dbUser']};
+\$database['password'] = {$configValue['dbPassword']};
+\$database['prefix'] = {$configValue['dbPrefix']};
+{$sslConfig}\$service['type'] = {$configValue['type']};
+\$service['domain'] = {$configValue['domain']};
+\$service['path'] = {$configValue['path']};
 \$service['skin'] = 'periwinkle';
 \$service['favicon_daily_traffic'] = 10; // 10MB
 \$service['useSSL'] = {$useSSL};  // Force SSL protocol (via https)
+// Reverse proxy addresses (IP or CIDR) whose X-Forwarded-For / Client-IP headers are trusted for the visitor IP. Default: this server (127.0.0.1 and the server address at install time).
+\$service['trustedProxies'] = {$configValue['trustedProxies']};
 //\$service['memcached'] = true;  // Uncomment to enable memcached session/cache
 //\$memcached['server'] = 'localhost';  // memcached server hostname (default: localhost)
 //\$memcached['port'] = 11211;          // memcached port (default: 11211)
-//\$serviceURL = 'http://{$_POST['domain']}{$path}' ; // Override service base URL (skin/plugin/resource paths).
-                                      // Required when behind NAT/port-forwarding: e.g. 'http://example.com:8080'
+//\$memcached['cache_ttl'] = 0;
+// 유닉스 소켓: \$memcached['server'] = 'unix:///경로'; (포트는 0 으로 처리)
+//\$serviceURL = '//{$_POST['domain']}{$path}' ; // Override service base URL (skin/plugin/resource paths).
+                                      // Required when behind NAT/port-forwarding: e.g. '//example.com:8080'
                                       // *Especially required* when \$service['memcached']=true on a NAT/port-forwarded
                                       // host: skin/feed caches bake the absolute URL at write time and are shared
                                       // across requests via memcached, so the external URL must be pinned here to
                                       // avoid leaking the internal hostname/port back to clients.
+                                      // Default (recommended): leave it commented out or ''. The service URL is then computed per request
+                                      // from the scheme (https detection; X-Forwarded-Proto is honored only from trusted proxies), the
+                                      // request Host, the server port (or \$service['port'] when useConfigPort is set or the server
+                                      // port is 80/443) and \$service['path']; in domain mode a mismatched Host is normalized to the
+                                      // blog's canonical host.
+                                      // Set it only as a compatibility fallback when something goes wrong (e.g. the NAT/memcached cases above).
+                                      // When set, prefer the scheme-less form '//host[:port]/path' as in the examples above (a value such as
+                                      // 'http://example.com:8080' pins the scheme): page URLs keep it as-is, so no scheme is baked into
+                                      // page/skin caches; feeds, mail and the reader Referer get the scheme from \$service['useSSL'], and
+                                      // the social login callback gets it from the request. A value with a scheme is used as-is everywhere.
+                                      // Any set value skips https/port detection and Host normalization.
+                                      // Served over https (including TLS terminated at a proxy)? Set \$service['useSSL'] = true.
 //\$service['reader'] = true; // Use Textcube reader. You can set it to false if you do not use Textcube reader, and want to decrease DB load.
 //\$service['debugmode'] = true; // uncomment for debugging, e.g. displaying DB Query or Session info
 //\$service['pagecache'] = false; // uncomment if you want to disable page cache feature.
@@ -1359,13 +1523,22 @@ ini_set('display_errors', 'off');
 	        $filename = $root . '/.htaccess';
     	    $fp = fopen($filename, 'w+');
 
+			// Textcube-NG: 루트 .htaccess 와 맞춤 — cache 규칙 점 escape \.(R-14), 스킨 index.xml 차단(5330), mod_rewrite 는 .user.ini 차단 블록(Apache 2.2·2.4 겸용, R-6)(v3.196). ISAPI·IISRewrite 규칙은 .htaccess 로 쓰지 않으므로 <Files> 블록 대신 같은 차단을 RewriteRule 로 넣는다(r3-3). 스킨 index.xml 은 깊이와 관계없이 막는다(skin/blog/customize/<id>/index.xml 포함, r3-3)
+			// Textcube-NG: plugins/ 아래 PHP 파일(.php·.php7 등·.phps·.phtml·.phar, 뒤에 /경로가 붙는 경우 포함) 직접 요청 차단 규칙을 세 템플릿에 더한다. 플러그인 주소 /plugin/<이름> 은 plugins/ 로 시작하지 않아 영향이 없다(r3-6, R-111)
+			// Textcube-NG: attach/ 아래 PHP 파일(.php·.php7 등·.phps·.phtml·.pht·.phar, 뒤에 /경로가 붙는 경우 포함) 실행 차단 규칙을 세 템플릿의 plugins 차단 줄 뒤에 더한다. mod_rewrite 템플릿에는 루트 .htaccess 와 같은 첨부 응답 헤더 블록(mod_headers 가 있을 때만 attach 아래 nosniff, svg 는 CSP sandbox)도 넣는다(r3-20)
+			// Textcube-NG: r3-27 R-448 — attach/ 차단 규칙에 가운데 확장자(a.php.jpg)를 더했다((\.|/|$)). R-434 — mod_rewrite 템플릿의 헤더 블록에 attach 아래 .html·.htm·.xhtml 내려받기(Content-Disposition) 를 더했다
 			switch ($_POST['rewriteMode']) {
 			case 'ISAPI':
 				// Users must copy these rules to IsapiRewrite4.ini
 				$htaccessContent = <<<EOF
 RewriteRule ^{$path}/(thumbnail)/([0-9]+/.+)\$ {$path}/cache/\$1/\$2 [L,U]
 RewriteCond %{REQUEST_FILENAME} -f
-RewriteRule ^{$path}/(cache)+/+(.+[^/]).(cache|xml|txt|log)\$ - [NC,F,L,U]
+RewriteRule ^{$path}/(cache)+/+(.+[^/])\.(cache|xml|txt|log)\$ - [NC,F,L,U]
+RewriteCond %{REQUEST_FILENAME} -f
+RewriteRule ^{$path}/(plugins/+[^/]+/+(locale/+.+|index\.xml)|resources/+locale/+.+|skin/+.+/+index\.xml)\$ - [NC,F,L,U]
+RewriteRule ^{$path}/plugins/+.+\.(php[0-9]*|phps|phtml|phar)(/|\$) - [NC,F,L,U]
+RewriteRule ^{$path}/attach/+.+\.(php[0-9]*|phps|phtml|pht|phar)(\.|/|\$) - [NC,F,L,U]
+RewriteRule ^{$path}/(.+/+)?\.user\.ini\$ - [NC,F,L,U]
 RewriteCond %{REQUEST_FILENAME} -d
 RewriteRule ^{$path}/([^?]+[^/])\$ {$path}/\$1/ [L,U]
 RewriteCond %{REQUEST_FILENAME} !-f
@@ -1379,7 +1552,12 @@ EOF;
 				$htaccessContent = <<<EOF
 RewriteRule ^{$path}/(thumbnail)/([0-9]+/.+)\$ {$path}/cache/\$1/\$2 [L]
 RewriteCond %{REQUEST_FILENAME} -f
-RewriteRule ^{$path}/(cache)+/+(.+[^/]).(cache|xml|txt|log)\$ - [NC,F,L]
+RewriteRule ^{$path}/(cache)+/+(.+[^/])\.(cache|xml|txt|log)\$ - [NC,F,L]
+RewriteCond %{REQUEST_FILENAME} -f
+RewriteRule ^{$path}/(plugins/+[^/]+/+(locale/+.+|index\.xml)|resources/+locale/+.+|skin/+.+/+index\.xml)\$ - [NC,F,L]
+RewriteRule ^{$path}/plugins/+.+\.(php[0-9]*|phps|phtml|phar)(/|\$) - [NC,F,L]
+RewriteRule ^{$path}/attach/+.+\.(php[0-9]*|phps|phtml|pht|phar)(\.|/|\$) - [NC,F,L]
+RewriteRule ^{$path}/(.+/+)?\.user\.ini\$ - [NC,F,L]
 RewriteCond %{REQUEST_FILENAME} -d
 RewriteRule ^{$path}/([^?]+[^/])\$ {$path}/\$1/ [L]
 RewriteCond %{REQUEST_FILENAME} !-f
@@ -1393,11 +1571,46 @@ EOF;
 #CheckURL Off
 #</IfModule>
 #SetEnv PRELOAD_CONFIG 1
+
+# PHP 사용자 설정 파일 직접 접근 차단
+<Files ".user.ini">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order Allow,Deny
+        Deny from all
+    </IfModule>
+</Files>
+
+# Textcube-NG: 첨부 응답 헤더(r3-20) — attach 아래 모든 파일에 nosniff, svg 는 CSP sandbox(문서로 열려도 스크립트·외부 불러오기 차단).
+# mod_headers 가 없으면 건너뛴다(attach 아래 nosniff 는 mod_setenvif 도 있어야 한다)
+<IfModule mod_headers.c>
+    <IfModule mod_setenvif.c>
+        SetEnvIf Request_URI "/attach/" TC_ATTACH
+    </IfModule>
+    Header always set X-Content-Type-Options "nosniff" env=TC_ATTACH
+    # Textcube-NG: r3-27 R-434 — attach 아래 .html·.htm·.xhtml 은 문서로 열리지 않고 내려받게 한다(올린 HTML 이 블로그 주소에서 스크립트를 실행하는 것을 막음)
+    <FilesMatch "\.(?i:x?html?)\$">
+        Header always set Content-Disposition "attachment" env=TC_ATTACH
+    </FilesMatch>
+    <FilesMatch "\.(?i:svgz?)\$">
+        Header always set Content-Security-Policy "default-src 'none'; style-src 'unsafe-inline'; img-src data:; sandbox"
+        Header always set X-Content-Type-Options "nosniff"
+    </FilesMatch>
+</IfModule>
+
 RewriteEngine On
 RewriteBase {$path}/
 RewriteRule ^(thumbnail)/([0-9]+/.+)\$ cache/\$1/\$2 [L]
 RewriteCond %{REQUEST_FILENAME} -f
-RewriteRule ^(cache)+/+(.+[^/]).(cache|xml|txt|log)\$ - [NC,F,L]
+RewriteRule ^(cache)+/+(.+[^/])\.(cache|xml|txt|log)\$ - [NC,F,L]
+RewriteCond %{REQUEST_FILENAME} -f
+RewriteRule ^(plugins/+[^/]+/+(locale/+.+|index\.xml)|resources/+locale/+.+|skin/+.+/+index\.xml)\$ - [NC,F,L]
+RewriteRule ^plugins/+.+\.(php[0-9]*|phps|phtml|phar)(/|\$) - [NC,F,L]
+# Textcube-NG: 첨부 폴더(attach/) 안 PHP 실행 차단 — 올린 파일은 PHP 로 실행되면 안 된다(r3-20)
+# Textcube-NG: r3-27 R-448 — 가운데 확장자(a.php.jpg)도 막는다: 확장자 뒤에 '.' 이 이어지는 경우를 더함
+RewriteRule ^attach/+.+\.(php[0-9]*|phps|phtml|pht|phar)(\.|/|\$) - [NC,F,L]
 RewriteCond %{REQUEST_FILENAME} -d
 RewriteRule ^(.+[^/])\$ \$1/ [L]
 RewriteCond %{REQUEST_FILENAME} !-f
@@ -1431,11 +1644,11 @@ EOF;
       </p>
       <ul>
         <li><?php echo _t('텍스트큐브 주소');?><br />
-          <a href="<?php echo $blogURL.'/';?>"><?php echo $blogURL.'/';?></a><br />
+          <a href="<?php echo setupEscape($blogURL.'/');?>"><?php echo setupEscape($blogURL.'/');?></a><br />
           <br />
         </li>
         <li><?php echo _t('텍스트큐브 관리 툴 주소');?><br />
-          <a href="<?php echo $blogURL.'/';?>owner"><?php echo $blogURL.'/';?>owner</a></li>
+          <a href="<?php echo setupEscape($blogURL.'/');?>owner"><?php echo setupEscape($blogURL.'/');?>owner</a></li>
       </ul>
       <p>
 		<?php if (checkIIS()) echo _t('새로 IIS용 Rewrite 모듈을 설치하셨다면 <b>.htaccess 내용을 모듈 설정에 적용</b>해주십시오.<br />'); ?>
@@ -1450,12 +1663,12 @@ EOF;
 	else if ($step == 204) {
 ?>
   <input type="hidden" name="step" value="4" />
-  <input type="hidden" name="mode" value="<?php echo $_POST['mode'];?>" />
-  <input type="hidden" name="dbms" value="<?php echo (isset($_POST['dbms']) ? $_POST['dbms'] : '');?>" />
-  <input type="hidden" name="dbServer" value="<?php echo (isset($_POST['dbServer']) ? $_POST['dbServer'] : '');?>" />
-  <input type="hidden" name="dbPort" value="<?php echo (isset($_POST['dbPort']) ? $_POST['dbPort'] : '');?>" />
-  <input type="hidden" name="dbName" value="<?php echo (isset($_POST['dbName']) ? $_POST['dbName'] : '');?>" />
-  <input type="hidden" name="dbUser" value="<?php echo (isset($_POST['dbUser']) ? $_POST['dbUser'] : '');?>" />
+  <input type="hidden" name="mode" value="<?php echo setupEscape($_POST['mode']);?>" />
+  <input type="hidden" name="dbms" value="<?php echo (isset($_POST['dbms']) ? setupEscape($_POST['dbms']) : '');?>" />
+  <input type="hidden" name="dbServer" value="<?php echo (isset($_POST['dbServer']) ? setupEscape($_POST['dbServer']) : '');?>" />
+  <input type="hidden" name="dbPort" value="<?php echo (isset($_POST['dbPort']) ? setupEscape($_POST['dbPort']) : '');?>" />
+  <input type="hidden" name="dbName" value="<?php echo (isset($_POST['dbName']) ? setupEscape($_POST['dbName']) : '');?>" />
+  <input type="hidden" name="dbUser" value="<?php echo (isset($_POST['dbUser']) ? setupEscape($_POST['dbUser']) : '');?>" />
   <input type="hidden" name="dbPassword" value="<?php echo (isset($_POST['dbPassword']) ? htmlspecialchars($_POST['dbPassword']) : '');?>" />
   <div id="inner">
     <h2><span class="step"><?php echo _f('%1단계', 4);?></span> : <?php echo _t('삭제하고자 하는 테이블을 선택하여 주십시오.');?></h2>
@@ -1479,110 +1692,110 @@ EOF;
 				if ($entriesMatched && checkTables('1.9', $prefix = substr($table, 0, strlen($table) - 7))) {
 ?>
       <tr>
-        <th><?php echo $prefix;?></th>
+        <th><?php echo setupEscape($prefix);?></th>
         <th>1.9</th>
-        <td><?php echo implode(', ', getTables('1.9', $prefix));?></td>
-	    <th><input type="radio" name="target" value="1.9_<?php echo $prefix;?>" <?php echo $ckeckedString;?>/></th>
+        <td><?php echo setupEscape(implode(', ', getTables('1.9', $prefix)));?></td>
+	    <th><input type="radio" name="target" value="1.9_<?php echo setupEscape($prefix);?>" <?php echo $ckeckedString;?>/></th>
       </tr>
 <?php
 					$ckeckedString = '';
 				} else if ($entriesMatched && checkTables('1.8', $prefix = substr($table, 0, strlen($table) - 7))) {
 ?>
       <tr>
-        <th><?php echo $prefix;?></th>
+        <th><?php echo setupEscape($prefix);?></th>
         <th>1.8</th>
-        <td><?php echo implode(', ', getTables('1.8', $prefix));?></td>
-	    <th><input type="radio" name="target" value="1.8_<?php echo $prefix;?>" <?php echo $ckeckedString;?>/></th>
+        <td><?php echo setupEscape(implode(', ', getTables('1.8', $prefix)));?></td>
+	    <th><input type="radio" name="target" value="1.8_<?php echo setupEscape($prefix);?>" <?php echo $ckeckedString;?>/></th>
       </tr>
 <?php
 					$ckeckedString = '';
 				} else if ($entriesMatched && checkTables('1.7', $prefix = substr($table, 0, strlen($table) - 7))) {
 ?>
       <tr>
-        <th><?php echo $prefix;?></th>
+        <th><?php echo setupEscape($prefix);?></th>
         <th>1.7</th>
-        <td><?php echo implode(', ', getTables('1.7', $prefix));?></td>
-	    <th><input type="radio" name="target" value="1.7_<?php echo $prefix;?>" <?php echo $ckeckedString;?>/></th>
+        <td><?php echo setupEscape(implode(', ', getTables('1.7', $prefix)));?></td>
+	    <th><input type="radio" name="target" value="1.7_<?php echo setupEscape($prefix);?>" <?php echo $ckeckedString;?>/></th>
       </tr>
 <?php
 					$ckeckedString = '';
 				} else if ($entriesMatched && checkTables('1.6', $prefix = substr($table, 0, strlen($table) - 7))) {
 ?>
       <tr>
-        <th><?php echo $prefix;?></th>
+        <th><?php echo setupEscape($prefix);?></th>
         <th>1.6</th>
-        <td><?php echo implode(', ', getTables('1.6', $prefix));?></td>
-	    <th><input type="radio" name="target" value="1.6_<?php echo $prefix;?>" <?php echo $ckeckedString;?>/></th>
+        <td><?php echo setupEscape(implode(', ', getTables('1.6', $prefix)));?></td>
+	    <th><input type="radio" name="target" value="1.6_<?php echo setupEscape($prefix);?>" <?php echo $ckeckedString;?>/></th>
       </tr>
 <?php
 					$ckeckedString = '';
 				} else if ($entriesMatched && checkTables('1.5', $prefix = substr($table, 0, strlen($table) - 7))) {
 ?>
       <tr>
-        <th><?php echo $prefix;?></th>
+        <th><?php echo setupEscape($prefix);?></th>
         <th>1.5</th>
-        <td><?php echo implode(', ', getTables('1.5', $prefix));?></td>
-	    <th><input type="radio" name="target" value="1.5_<?php echo $prefix;?>" <?php echo $ckeckedString;?>/></th>
+        <td><?php echo setupEscape(implode(', ', getTables('1.5', $prefix)));?></td>
+	    <th><input type="radio" name="target" value="1.5_<?php echo setupEscape($prefix);?>" <?php echo $ckeckedString;?>/></th>
       </tr>
 <?php
 					$ckeckedString = '';
 				} else if ($entriesMatched && checkTables('1.1', $prefix = substr($table, 0, strlen($table) - 7))) {
 ?>
       <tr>
-        <th><?php echo $prefix;?></th>
+        <th><?php echo setupEscape($prefix);?></th>
         <th>1.1</th>
-        <td><?php echo implode(', ', getTables('1.1', $prefix));?></td>
-	    <th><input type="radio" name="target" value="1.1_<?php echo $prefix;?>" <?php echo $ckeckedString;?>/></th>
+        <td><?php echo setupEscape(implode(', ', getTables('1.1', $prefix)));?></td>
+	    <th><input type="radio" name="target" value="1.1_<?php echo setupEscape($prefix);?>" <?php echo $ckeckedString;?>/></th>
       </tr>
 <?php
 					$ckeckedString = '';
 				} else if ($entriesMatched && checkTables('1.0.2', $prefix = substr($table, 0, strlen($table) - 7))) {
 ?>
       <tr>
-        <th><?php echo $prefix;?></th>
+        <th><?php echo setupEscape($prefix);?></th>
         <th>1.0.2</th>
-        <td><?php echo implode(', ', getTables('1.0.2', $prefix));?></td>
-	    <th><input type="radio" name="target" value="1.0.2_<?php echo $prefix;?>" <?php echo $ckeckedString;?>/></th>
+        <td><?php echo setupEscape(implode(', ', getTables('1.0.2', $prefix)));?></td>
+	    <th><input type="radio" name="target" value="1.0.2_<?php echo setupEscape($prefix);?>" <?php echo $ckeckedString;?>/></th>
       </tr>
 <?php
 					$ckeckedString = '';
 				} else if ($entriesMatched && checkTables('1.0.0', $prefix = substr($table, 0, strlen($table) - 7))) {
 ?>
       <tr>
-        <th><?php echo $prefix;?></th>
+        <th><?php echo setupEscape($prefix);?></th>
         <th>1.0.0</th>
-        <td><?php echo implode(', ', getTables('1.0.0', $prefix));?></td>
-	    <th><input type="radio" name="target" value="1.0.0_<?php echo $prefix;?>" <?php echo $ckeckedString;?>/></th>
+        <td><?php echo setupEscape(implode(', ', getTables('1.0.0', $prefix)));?></td>
+	    <th><input type="radio" name="target" value="1.0.0_<?php echo setupEscape($prefix);?>" <?php echo $ckeckedString;?>/></th>
       </tr>
 <?php
 					$ckeckedString = '';
 				} else if ($entriesMatched && checkTables('1.0.b2', $prefix = substr($table, 0, strlen($table) - 7))) {
 ?>
       <tr>
-        <th><?php echo $prefix;?></th>
+        <th><?php echo setupEscape($prefix);?></th>
         <th>1.0 Beta 2</th>
-        <td><?php echo implode(', ', getTables('1.0.b2', $prefix));?></td>
-	    <th><input type="radio" name="target" value="1.0.b2_<?php echo $prefix;?>" <?php echo $ckeckedString;?>/></th>
+        <td><?php echo setupEscape(implode(', ', getTables('1.0.b2', $prefix)));?></td>
+	    <th><input type="radio" name="target" value="1.0.b2_<?php echo setupEscape($prefix);?>" <?php echo $ckeckedString;?>/></th>
       </tr>
 <?php
 					$ckeckedString = '';
 				} else if (preg_match('/^t3_(.*)_10ofmg$/', $table) && checkTables('0.97', $prefix = substr($table, 3, strlen($table) - 10))) {
 ?>
       <tr>
-        <th><?php echo $prefix;?></th>
+        <th><?php echo setupEscape($prefix);?></th>
         <th>0.97 (Classic)</th>
-        <td><?php echo implode(', ', getTables('0.97', $prefix));?></td>
-	    <th><input type="radio" name="target" value="0.97_<?php echo $prefix;?>" <?php echo $ckeckedString;?>/></th>
+        <td><?php echo setupEscape(implode(', ', getTables('0.97', $prefix)));?></td>
+	    <th><input type="radio" name="target" value="0.97_<?php echo setupEscape($prefix);?>" <?php echo $ckeckedString;?>/></th>
       </tr>
 <?php
 					$ckeckedString = '';
 				} else if (preg_match('/^t3_(.*)_ct1$/', $table) && checkTables('0.96', $prefix = substr($table, 3, strlen($table) - 7))) {
 ?>
       <tr>
-        <th><?php echo $prefix;?></th>
+        <th><?php echo setupEscape($prefix);?></th>
         <th>0.96x</th>
-        <td><?php echo implode(', ', getTables('0.96', $prefix));?></td>
-	    <th><input type="radio" name="target" value="0.96_<?php echo $prefix;?>" <?php echo $ckeckedString;?>/></th>
+        <td><?php echo setupEscape(implode(', ', getTables('0.96', $prefix)));?></td>
+	    <th><input type="radio" name="target" value="0.96_<?php echo setupEscape($prefix);?>" <?php echo $ckeckedString;?>/></th>
       </tr>
 <?php
 					$ckeckedString = '';
@@ -1617,9 +1830,9 @@ EOF;
 		if (checkTables($version, $prefix)) {
 ?>
       <tr>
-        <th><?php echo $prefix;?></th>
-        <th><?php echo $version;?></th>
-        <td><?php echo implode(', ', getTables($version, $prefix));?></td>
+        <th><?php echo setupEscape($prefix);?></th>
+        <th><?php echo setupEscape($version);?></th>
+        <td><?php echo setupEscape(implode(', ', getTables($version, $prefix)));?></td>
       </tr>
 <?php
 			$result = @POD::query('DROP TABLE ' . implode(', ', getTables($version, $prefix)));
@@ -1657,6 +1870,57 @@ function stripPath($path) {
 	while (strpos($path, '//') !== false)
 		$path = str_replace('//', '/', $path);
 	return $path;
+}
+
+// [보안] 설치 화면 출력용 HTML escape — POST 값·PHP_SELF·HTTP_HOST 유래 값($domain, SERVER_PORT) 등을 속성값/본문에 그대로 출력하던 곳에 사용
+function setupEscape($value) {
+	return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
+}
+
+// [보안] 설치에서 받는 dbms 값(framework/data/<dbms>/Adapter.php 의 디렉토리 이름)
+function setupDBMSList() {
+	return array('MySQLi', 'MySQL', 'PostgreSQL', 'SQLite3', 'Cubrid');
+}
+
+// DBMS 별 설치된 드라이버(native: DBMS 확장, pdo: PDO 드라이버). 각 어댑터 bind() 가 쓰는 확장·PDO 드라이버 이름과 같음
+function setupDriverSupport() {
+	$pdoDrivers = class_exists('PDO') ? PDO::getAvailableDrivers() : array();
+	$native = array('MySQLi' => function_exists('mysqli_connect'), 'MySQL' => class_exists('mysqli'), 'PostgreSQL' => function_exists('pg_connect'),
+		'SQLite3' => class_exists('SQLite3'), 'Cubrid' => function_exists('cubrid_connect'));
+	$pdoName = array('MySQLi' => 'mysql', 'MySQL' => 'mysql', 'PostgreSQL' => 'pgsql', 'SQLite3' => 'sqlite', 'Cubrid' => 'cubrid');
+	$support = array();
+	foreach (setupDBMSList() as $dbms) {
+		$support[$dbms] = array();
+		if ($native[$dbms]) $support[$dbms][] = 'native';
+		if (in_array($pdoName[$dbms], $pdoDrivers, true)) $support[$dbms][] = 'pdo';
+	}
+	return $support;
+}
+
+// [보안] config.php·.htaccess 기록 전(step 8) 값 형식 재검사 — 정상 설치 흐름(3·5·6단계 검사·입력 화면)에서 받는 값의 형식.
+//   preg 패턴은 D 수정자로 끝의 개행을 허용하지 않는다($ 는 문자열 끝 개행 앞에서도 일치).
+function setupValidateConfig() {
+	foreach (array('mode', 'dbms', 'dbServer', 'dbName', 'dbPort', 'dbUser', 'dbPassword', 'dbPrefix', 'type', 'domain') as $key) {
+		if (!isset($_POST[$key]) || !is_string($_POST[$key]))
+			return false;
+	}
+	foreach (array('dbUseSSL', 'dbSslCa', 'dbSslCert', 'dbSslKey', 'dbSslVerify', 'dbDriver', 'disableRewrite', 'rewriteMode', 'blog') as $key) {
+		if (isset($_POST[$key]) && !is_string($_POST[$key]))
+			return false;
+	}
+	if (isset($_POST['dbDriver']) && !in_array($_POST['dbDriver'], array('', 'native', 'pdo'), true))
+		return false;
+	if (!in_array($_POST['mode'], array('install', 'setup'), true) || !in_array($_POST['dbms'], setupDBMSList(), true))
+		return false;
+	if (empty($_POST['dbServer']) || empty($_POST['dbName']) || empty($_POST['dbUser']))
+		return false;
+	if (!preg_match('/^[0-9]{0,5}$/D', $_POST['dbPort']) || !preg_match('/^[a-zA-Z0-9_]*$/D', $_POST['dbPrefix']))
+		return false;
+	if (!in_array($_POST['type'], array('domain', 'path', 'single'), true) || !preg_match('/^[A-Za-z0-9._-]+$/D', $_POST['domain']))
+		return false;
+	if (($_POST['type'] != 'single') && (!isset($_POST['blog']) || !preg_match('/^[a-zA-Z0-9]+$/D', $_POST['blog'])))
+		return false;
+	return true;
 }
 
 function testMyself_fsocket($host, $path, $port) {

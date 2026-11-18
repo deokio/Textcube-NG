@@ -2,9 +2,17 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 
 function escapeJSInAttribute($str) {
-	return htmlspecialchars(str_replace(array('\\', '\r', '\n', '\''), array('\\\\', '\\r', '\\n', '\\\''), $str));
+	return htmlspecialchars(str_replace(array('\\', "\r", "\n", '\''), array('\\\\', '\\r', '\\n', '\\\''), $str));
 }
 
 function escapeJSInCData($str) {
@@ -28,7 +36,7 @@ function filterJavaScript($str, $removeScript = true) {
 				$strippedTag = str_replace($attribute, '', $strippedTag);
 			$str = str_replace($tag, $strippedTag, $str);
 		}
-		$str = preg_replace('/&#x0*([0-9ad]{1,2});?/ie', "chr(hexdec('\\1'))", $str);
+		$str = preg_replace_callback('/&#x0*([0-9ad]{1,2});?/i', function ($m) { return chr(hexdec($m[1])); }, $str);
 		$patterns = array(
 			'/<\/?iframe.*?>/si',
 			'/<script.*?<\/script>/si',
@@ -43,9 +51,7 @@ function filterJavaScript($str, $removeScript = true) {
 }
 
 function checkAjaxRequest() {
-	//if (preg_match("/__T__=[0-9]{13}/", $_SERVER['QUERY_STRING']))
-		return true;
-	//else
-	//	return false;
+	// Textcube-NG: 주석 처리로 늘 true였던 것을 __T__(EAF4 HTTPRequest가 붙임) 검사로 되살림(r3-8)
+	return (isset($_SERVER['QUERY_STRING']) && preg_match('/__T__=[0-9]{13}/', (string)$_SERVER['QUERY_STRING']) === 1);
 }	
 ?>

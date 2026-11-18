@@ -90,5 +90,29 @@
 		</fieldset>
 	</config>
 
+	<config dataValHandler = "KeywordStatisticsDataSet" xml:lang="en" >
+		<window width="500" height="450" />
+		<fieldset legend="Statistics page display settings" name="KSsetting1">
+			<field title="Select how many keyword ranks to show" name="limitRank" type="select">
+				<op value="5" checked="checked">Top 5</op>
+				<op value="10">Top 10</op>
+				<op value="15">Top 15</op>
+				<op value="3939">All ranks</op>
+				<caption> - Select how many ranks to show by default on the statistics page.</caption>
+			</field>
+			<field title="Select whether to show the addresses containing the keywords by default" name="showURL" type="select">
+				<op value="0" checked="checked">Do not show</op>
+				<op value="1">Show</op>
+				<caption> - Select whether to also show, by default, the addresses where each ranked keyword was found.</caption>
+			</field>
+		</fieldset>
+		<fieldset legend="Words to exclude from statistics" name="KSsetting2">
+			<field title="Separate each word with a comma (,) or a space ( )." name="WordFiltering" rows="6" cols="50" titledirection="bk" type="textarea">
+				<![CDATA[]]>
+			</field>
+
+		</fieldset>
+	</config>
+
   </binding>
 </plugin>

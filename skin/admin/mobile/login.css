@@ -183,6 +183,45 @@ hr
 	display                 : none;
 }
 
+/* login method title, social login (v3.153) */
+
+h2.login-method-title
+{
+	display: block;
+	font-size: 1em;
+	font-weight: bold;
+	margin: 10px 0 5px 0;
+}
+
+#social-login-box
+{
+	border-top: 1px solid #ccc;
+	margin-top: 20px;
+}
+
+#social-login-list
+{
+	list-style-type: none;
+	margin: 0;
+	padding: 0;
+}
+
+#social-login-list li
+{
+	list-style-type: none;
+	margin-left: 0;
+}
+
+#social-login-list .social-login-link
+{
+	border-radius: 4px;
+	display: block;
+	margin: 4px 0;
+	padding: 8px;
+	text-align: center;
+	text-decoration: none;
+}
+
 input[type=password], input[type=text] {
 	background-color: rgba(255,255,255,0.6);
 }

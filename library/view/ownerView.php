@@ -2,6 +2,14 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 
 function printFormatterSelectScript() {
 ?>
@@ -132,6 +140,12 @@ function printOwnerEditorScript($entryId = false) {
 			entryManager.stateChanged();
 	}
 
+	// Textcube-NG: 편집기 초기화가 끝났을 때(TinyMCE init) — 초기화하며 다시 직렬화한 본문을 저장된 값으로 본다(edit/index.php resetSavedContent, v3.137)
+	function editorInitialized() {
+		if ((entryManager != undefined) && (entryManager.resetSavedContent != undefined))
+			entryManager.resetSavedContent();
+	}
+
 	function getEditor() {
 <?php
 	$setEditor = $context->getProperty('editor.key');
@@ -171,21 +185,64 @@ function printOwnerEditorScript($entryId = false) {
 		return true;
 	}
 
+	// Textcube-NG: 막는 창(confirm) 대신 화면 안 확인 상자 — 관리 화면 <dialog> 방식(v3.128 PopupWindow)과 같이 showModal 로 띄우고,
+	// showModal 이 없으면 일반 요소로 표시. 확인이면 onYes 를 부르고, 취소·ESC 는 닫기만 한다(r3-8)
+	function tcConfirmDialog(msg, onYes) {
+		var d = document.createElement('dialog');
+		var modal = (typeof d.showModal == 'function');
+		var p = document.createElement('p');
+		var bar = document.createElement('div');
+		var yes = document.createElement('button');
+		var no = document.createElement('button');
+		var done = false;
+		function close() {
+			if (done) return;
+			done = true;
+			if (modal && d.open) d.close();
+			if (d.parentNode) d.parentNode.removeChild(d);
+		}
+		d.setAttribute('data-tc-confirm', '');
+		d.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);margin:0;z-index:1000;max-width:30em;padding:1em;background:#fff;color:#000;border:1px solid #999';
+		p.appendChild(document.createTextNode(msg));
+		bar.style.textAlign = 'right';
+		yes.type = 'button';
+		no.type = 'button';
+		yes.className = 'input-button';
+		no.className = 'input-button';
+		yes.appendChild(document.createTextNode("<?php echo _t('확인');?>"));
+		no.appendChild(document.createTextNode("<?php echo _t('취소');?>"));
+		yes.onclick = function() { close(); onYes(); };
+		no.onclick = function() { close(); };
+		d.addEventListener('cancel', function(e) { e.preventDefault(); close(); }, false);
+		bar.appendChild(yes);
+		bar.appendChild(document.createTextNode(' '));
+		bar.appendChild(no);
+		d.appendChild(p);
+		d.appendChild(bar);
+		document.body.appendChild(d);
+		if (modal) d.showModal(); else d.style.display = 'block';
+		no.focus();
+	}
+
 	function changeEditor(key, formatter) {
 		if (entryManager.nowsaving == true) {
-			alert("<?php echo _t('현재 자동 저장 중입니다. 저장이 완료된 후 다시 시도해 주세요.');?>");
+			PM.showErrorMessage("<?php echo _t('현재 자동 저장 중입니다. 저장이 완료된 후 다시 시도해 주세요.');?>", "center", "bottom");
 			return false;
 		}
-		if (!confirm("<?php echo _t('정말로 에디터를 변경하시겠습니까?');?>")) {
-			return false;
-		}
-		if (editor != null) {
-			try { editor.syncTextarea(); } catch(e) {}
-			editor.finalize();
-		}
-		entryManager.changeEditor = true;
-		entryManager.currentEditor = key;
-		entryManager.saveDraft();
+		// Textcube-NG: confirm 대신 tcConfirmDialog — 확인하면 진행. 상자가 떠 있는 사이 자동 저장이 시작됐으면 위와 같이 알리고 멈춤(r3-8)
+		tcConfirmDialog("<?php echo _t('정말로 에디터를 변경하시겠습니까?');?>", function() {
+			if (entryManager.nowsaving == true) {
+				PM.showErrorMessage("<?php echo _t('현재 자동 저장 중입니다. 저장이 완료된 후 다시 시도해 주세요.');?>", "center", "bottom");
+				return;
+			}
+			if (editor != null) {
+				try { editor.syncTextarea(); } catch(e) {}
+				editor.finalize();
+			}
+			entryManager.changeEditor = true;
+			entryManager.currentEditor = key;
+			entryManager.saveDraft();
+		});
 	}
 	
 	function reloadEditor() {
@@ -282,7 +339,7 @@ function printEntryFileList($attachments, $param) {
 														var fileList = document.getElementById('TCfilelist');		
 														
 														if (fileList.selectedIndex < 0) {
-															alert("<?php echo _t('삭제할 파일을 선택해 주십시오\t');?>");
+															PM.showErrorMessage("<?php echo _t('삭제할 파일을 선택해 주십시오\t');?>", "center", "bottom");
 															return false;
 														}
 														
@@ -298,13 +355,11 @@ function printEntryFileList($attachments, $param) {
 																}
 															}
 														} catch(e) {
-															alert("<?php echo _t('파일을 삭제하지 못했습니다');?> ::"+e.message);
+															PM.showErrorMessage("<?php echo _t('파일을 삭제하지 못했습니다');?> ::"+String(e.message).replace(/[&<>"']/g, function(c) { return {"&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;"}[c]; }), "center", "bottom");
 														}
 												
 														var request = new HTTPRequest("POST", "<?php echo $param['deletePath'];?>"+entryManager.entryId);
-														request.onVerify = function () { 
-															return true 
-														}
+														// Textcube-NG: 원본은 onVerify 가 항상 true 라 서버가 삭제하지 못했다고 답해도(-1) 목록에서 지웠다 → 기본 onVerify(/response/error == 0)
 												
 														request.onSuccess = function() {				
 															for(var i=deleteFileList.length-1; i>=0; i--) {
@@ -322,7 +377,8 @@ function printEntryFileList($attachments, $param) {
 														}
 														
 														request.onError = function() {
-															alert("<?php echo _t('파일을 삭제하지 못했습니다');?>");
+															PM.showErrorMessage("<?php echo _t('파일을 삭제하지 못했습니다');?>", "center", "bottom");
+															refreshAttachList();	// Textcube-NG: 일부만 지워졌을 수 있으므로 서버 기준으로 목록을 다시 읽음
 														}
 														request.send("names="+targetStr);
 													}
@@ -337,7 +393,7 @@ function printEntryFileList($attachments, $param) {
 															return false;
 														var fileName = fileList.value.split("|")[0];
 														
-														if((new RegExp("\\.(gif|jpe?g|png)$", "gi").exec(fileName))) {
+														if((new RegExp("\\.(gif|jpe?g|png|webp|avif|svg)$", "gi").exec(fileName))) {	// Textcube-NG: webp·avif·svg 도 미리보기(r3-20)
 															try {
 																var width = new RegExp('width="(\\d+)').exec(fileList.value);
 																width = width[1];
@@ -368,21 +424,15 @@ function printEntryFileList($attachments, $param) {
 								}
 														
 														if((new RegExp("\\.(mov)$", "gi").exec(fileName))) {			
-															code = '<object classid="clsid:02BF25D5-8C17-4B23-BC80-D3488ABDDC6B" codebase="http://www.apple.com/qtactivex/qtplugin.cab" width="'+width+'" height="'+height+'"><param name="src" value="<?php echo $context->getProperty('service.path');?>/attach/<?php echo $blogid;?>/'+fileName+'"/><param name="controller" value="true"><param name="autoplay" value="false"><param name="scale" value="Aspect">';
-															code += '<!--[if !IE]> <--><object type="video/quicktime" data="<?php echo $context->getProperty('service.path');?>/attach/<?php echo $blogid;?>/'+fileName+'" width="'+width+'" height="'+height+'" showcontrols="true" TYPE="video/quicktime" scale="Aspect" nomenu="true"><param name="showcontrols" value="true"><param name="autoplay" value="false"><param name="scale" value="ToFit"><\/object><!--> <![endif]--><\/object>';
+															// Textcube-NG: IE 전용 ActiveX(clsid) object 를 HTML5 video 로 바꿈(r3-30 R-429)
+															code = '<video controls style="width:100%"><source src="<?php echo $context->getProperty('service.path');?>/attach/<?php echo $blogid;?>/'+fileName+'" \/><\/video>';
 															writeCode(code,'previewSelected');
 															return false;
 														}
 													
 														if((new RegExp("\\.(mp2|wma|mid|midi|mpg|wav|avi|mp4)$", "gi").exec(fileName))) {
-															code ='<object width="'+width+'" height="'+height+'" classid="CLSID:22D6F312-B0F6-11D0-94AB-0080C74C7E95" codebase="http://activex.microsoft.com/activex/controls/mplayer/en/nsmp2inf.cab#Version=5,1,52,701" standby="Loading for you" type="application/x-oleobject" align="middle">';		
-															code +='<param name="FileName" value="<?php echo $context->getProperty('service.path');?>/attach/<?php echo $blogid;?>/'+fileName+'">';
-															code +='<param name="ShowStatusBar" value="False">';
-															code +='<param name="DefaultFrame" value="mainFrame">';
-															code +='<param name="autoplay" value="false">';
-															code +='<param name="showControls" value="true">';
-															code +='<embed type="application/x-mplayer2" pluginspage = "http://www.microsoft.com/Windows/MediaPlayer/" src="<?php echo $context->getProperty('service.path');?>/attach/<?php echo $blogid;?>/'+fileName+'" align="middle" width="'+width+'" height="'+height+'" showControls="true" defaultframe="mainFrame" showstatusbar="false" autoplay="false"><\/embed>';
-															code +='<\/object>';
+															// Textcube-NG: IE 전용 ActiveX(clsid) object 를 HTML5 video 로 바꿈(r3-30 R-429)
+															code = '<video controls style="width:100%"><source src="<?php echo $context->getProperty('service.path');?>/attach/<?php echo $blogid;?>/'+fileName+'" \/><\/video>';
 															
 															writeCode(code,'previewSelected');
 															
@@ -406,7 +456,7 @@ function printEntryFileList($attachments, $param) {
 														return false;
 														} catch (e) {
 															document.getElementById('previewSelected').innerHTML = "<table width=\"100%\" height=\"100%\"><tr><td valign=\"middle\" align=\"center\"><?php echo _t('미리보기');?><\/td><\/tr><\/table>";	
-															alert(e.message);
+															PM.showErrorMessage(String(e.message).replace(/[&<>"']/g, function(c) { return {"&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;"}[c]; }), "center", "bottom");
 															return true;
 														}
 													}				
@@ -430,7 +480,7 @@ function printEntryFileList($attachments, $param) {
 																}
 															}
 														} catch(e) {
-															alert(e.message);
+															PM.showErrorMessage(String(e.message).replace(/[&<>"']/g, function(c) { return {"&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;"}[c]; }), "center", "bottom");
 														}
 													}
 
@@ -449,8 +499,11 @@ function printEntryFileList($attachments, $param) {
 													
 													function refreshAttachList() {
 														var request = new HTTPRequest("POST", "<?php echo $param['refreshPath'];?>"+entryManager.entryId);
-														request.onVerify = function () { 	
-															return true 
+														request.onVerify = function () {
+															// Textcube-NG: 원본은 항상 true 라 실패·빈 응답(DB 잠금, 로그인 만료 등)으로도 목록을 덮어썼다
+															// → HTTP 200 이고 목록(<select id="TCfilelist">…</select>)이 끝까지 온 경우에만 바꿈
+															var text = this.getText();
+															return (this._request.status == 200 && text != null && text.indexOf('id="TCfilelist"') >= 0 && text.indexOf('</select>') >= 0);
 														}
 														request.onSuccess = function() {
 															var fileListObj = document.getElementById("attachManagerSelect");
@@ -467,7 +520,7 @@ function printEntryFileList($attachments, $param) {
 														request.onError = function() {
 															entryManager.delay     = true;
 															entryManager.nowsaving = false;
-														
+															PM.showErrorMessage("<?php echo _t('불러오지 못했습니다');?>", "center", "bottom");	// Textcube-NG: 목록은 그대로 둠
 														}
 														request.send();					
 													}
@@ -717,9 +770,7 @@ function printEntryFileList($attachments, $param) {
 													function refreshFileSize() {
 														try {
 															var request = new HTTPRequest("POST", "<?php echo $param['fileSizePath'];?>"+entryManager.entryId);
-															request.onVerify = function () {
-																return true;
-															}
+															// Textcube-NG: 원본은 onVerify 가 항상 true 라 실패하면 '총 용량: null' → 기본 onVerify(/response/error == 0), 실패하면 기존 표시 유지
 															
 															request.onSuccess = function() {
 																try {
@@ -735,7 +786,7 @@ function printEntryFileList($attachments, $param) {
 															request.send();
 															
 														} catch(e) {
-															alert(e.message);
+															PM.showErrorMessage(String(e.message).replace(/[&<>"']/g, function(c) { return {"&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;"}[c]; }), "center", "bottom");
 														}
 													}
  
@@ -751,6 +802,8 @@ function printEntryFileList($attachments, $param) {
 													//<![CDATA[
 													var html5UploadXhr = null;
 													var html5UploadAborted = false;
+													var html5UploadSvgWarn = [];	// Textcube-NG: svg 외부 참조를 지운 파일 알림(묶음 끝에 알림, r3-20)
+													var html5UploadFailed = [];	// Textcube-NG: 첨부하지 못한 파일 이름(묶음 끝에 알림)
 
 													function reloadUploader() {
 														var uploaderHtml = '<div id="html5Uploader">'
@@ -779,6 +832,8 @@ function printEntryFileList($attachments, $param) {
 													function startHtml5Upload(files) {
 														if (!files || files.length === 0) return;
 														html5UploadAborted = false;
+														html5UploadFailed = [];
+														html5UploadSvgWarn = [];	// Textcube-NG: r3-20
 														document.getElementById('html5StopBtn').style.display = '';
 														uploadNextHtml5File(files, 0, files.length);
 													}
@@ -789,13 +844,22 @@ function printEntryFileList($attachments, $param) {
 															document.getElementById('html5UploadBar').style.display = 'none';
 															document.getElementById('html5UploadStatus').innerHTML = '';
 															refreshAttachList();
+															if (html5UploadFailed.length > 0) {
+																PM.showErrorMessage("<?php echo _t('첨부하지 못했습니다.');?><br /><br />" + String(html5UploadFailed.join("\n")).replace(/[&<>"']/g, function(c) { return {"&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;"}[c]; }).replace(/\n/g, "<br />"), "center", "bottom");
+																html5UploadFailed = [];
+															}
+															if (html5UploadSvgWarn.length > 0) {	// Textcube-NG: svg 외부 참조를 지운 파일을 묶음 끝에 알림(r3-20, 파일 이름은 사용자 PC 의 이름이라 escape)
+																PM.showErrorMessage(String(html5UploadSvgWarn.join("\n")).replace(/[&<>"']/g, function(c) { return {"&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;"}[c]; }).replace(/\n/g, "<br />"), "center", "bottom", 8000);
+																html5UploadSvgWarn = [];
+															}
 															return;
 														}
 														var file = files[index];
 														var statusEl = document.getElementById('html5UploadStatus');
 														var barFill  = document.getElementById('html5UploadBarFill');
 														document.getElementById('html5UploadBar').style.display = '';
-														statusEl.innerHTML = (index + 1) + ' / ' + total + ': ' + file.name + ' 0%';
+														// Textcube-NG: 파일 이름은 사용자 PC 의 이름 그대로라 innerHTML 이 아닌 textContent 로 넣는다
+														statusEl.textContent = (index + 1) + ' / ' + total + ': ' + file.name + ' 0%';
 														barFill.style.width = '0%';
 
 														// 파일 목록에 진행 중 항목 추가 (원본 uploadProgress 방식과 동일)
@@ -803,7 +867,7 @@ function printEntryFileList($attachments, $param) {
 														var tempOpt = document.createElement('option');
 														var shortName = file.name.replace(/.*[\/\\]/, '');
 														tempOpt.value = '__uploading__' + index;
-														tempOpt.innerHTML = shortName + ' <?php echo _t('업로드 중..');?> 0%';
+														tempOpt.textContent = shortName + ' <?php echo _t('업로드 중..');?> 0%';
 														tempOpt.style.backgroundColor = '#A4C3F0';
 														if (fileListObj) { fileListObj.appendChild(tempOpt); fileListObj.setAttribute('size', Math.max(8, Math.min(fileListObj.length, 30))); }
 
@@ -815,18 +879,30 @@ function printEntryFileList($attachments, $param) {
 															if (e.lengthComputable) {
 																var pct = Math.round(e.loaded / e.total * 100);
 																barFill.style.width = pct + '%';
-																statusEl.innerHTML = (index + 1) + ' / ' + total + ': ' + file.name + ' ' + pct + '%';
-																if (tempOpt) tempOpt.innerHTML = shortName + ' ' + pct + '%';
+																statusEl.textContent = (index + 1) + ' / ' + total + ': ' + file.name + ' ' + pct + '%';
+																if (tempOpt) tempOpt.textContent = shortName + ' ' + pct + '%';
 															}
 														};
+														// Textcube-NG: 응답 상태를 보지 않고 성공으로 표시했다 → HTTP 200 + &success 일 때만 성공, 그 밖에는 실패로 모음
 														xhr.onload = function() {
-															barFill.style.width = '100%';
-															if (tempOpt) { tempOpt.innerHTML = shortName + ' ✓'; tempOpt.style.backgroundColor = '#C8DAF3'; }
-															uploadNextHtml5File(files, index + 1, total);
+															if (xhr.status == 200 && xhr.responseText.indexOf('&success') >= 0) {
+																barFill.style.width = '100%';
+																if (tempOpt) { tempOpt.textContent = shortName + ' ✓'; tempOpt.style.backgroundColor = '#C8DAF3'; }
+																var svgExt = /&svgext=(\d+)/.exec(xhr.responseText);	// Textcube-NG: 응답 &success&svgext=N 의 N(svg 에서 지운 외부 참조 수, r3-20). 성공 판정(indexOf('&success'))은 그대로
+																if (svgExt && parseInt(svgExt[1], 10) > 0) html5UploadSvgWarn.push(shortName + ': ' + "<?php echo escapeJSInCData(_t('외부 참조 %1개를 지웠습니다. 이미지가 원본과 다르게 보일 수 있습니다.'));?>".replace('%1', parseInt(svgExt[1], 10)));
+																uploadNextHtml5File(files, index + 1, total);
+															} else {
+																xhr.onerror();
+															}
 														};
 														xhr.onerror = function() {
-															statusEl.innerHTML += ' — <?php echo _t('오류');?>';
-															if (tempOpt) { tempOpt.innerHTML = shortName + ' <?php echo _t('오류');?>'; tempOpt.style.backgroundColor = '#fcc'; }
+															html5UploadFailed.push(shortName);
+															statusEl.textContent += ' — <?php echo _t('오류');?>';
+															if (tempOpt) { tempOpt.textContent = shortName + ' <?php echo _t('오류');?>'; tempOpt.style.backgroundColor = '#fcc'; }
+															uploadNextHtml5File(files, index + 1, total);
+														};
+														// Textcube-NG: 중지(abort())는 load·error 가 아니라 abort 이벤트 → 다음 단계(중지 버튼 숨김·목록 갱신)로 넘김
+														xhr.onabort = function() {
 															uploadNextHtml5File(files, index + 1, total);
 														};
 														xhr.open('POST', '<?php echo $param['uploadPath'];?>' + entryManager.entryId);

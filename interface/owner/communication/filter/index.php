@@ -2,6 +2,14 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 $IV = array(
 	'POST' => array(
 		'mode' => array( array('ip','content','url','name','whiteurl') ,'default'=>null),
@@ -105,15 +113,15 @@ function printFilterBox($mode, $title) {
 								}
 								
 								function deleteFilter(caller, mode, value, id) {
-									if (!confirm('<?php echo _t('선택된 목록을 필터링에서 제외합니다. 계속 하시겠습니까?');?>')) return false;
+									tcConfirm('<?php echo _t('선택된 목록을 필터링에서 제외합니다. 계속 하시겠습니까?');?>', function () {	// Textcube-NG: 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396)
 									var execute = 'close';
 									
-									param  = '?mode=' + mode;
+									param  = 'mode=' + mode;
 									param += '&value=' + value;
 									param += '&command=unblock';
 									param += '&id=' + id;
 									
-									var request = new HTTPRequest("GET", "<?php echo $blogURL;?>/owner/communication/filter/change/" + param);
+									var request = new HTTPRequest("POST", "<?php echo $blogURL;?>/owner/communication/filter/change/");
 									request.onSuccess = function() {
 										PM.removeRequest(this);
 										PM.showMessage("<?php echo _t('필터를 삭제하였습니다.');?>", "center", "bottom");							
@@ -140,7 +148,9 @@ function printFilterBox($mode, $title) {
 										alert("<?php echo _t('필터링을 삭제하지 못했습니다.');?>");
 									}
 									PM.addRequest(request, "<?php echo _t('삭제하고 있습니다.');?>");
-									request.send();
+									request.send(param);
+									});
+									return false;
 								}
 
 								function add(callerId,mode) {
@@ -200,10 +210,10 @@ function printFilterBox($mode, $title) {
 											}
 										}
 									}
-									param  = '?mode=' + mode;
-									param += '&value=' + target.value;
+									param  = 'mode=' + mode;
+									param += '&value=' + encodeURIComponent(target.value); // Textcube-NG: & + % 가 든 값이 잘리지 않게(r3-8)
 									
-									var request = new HTTPRequest("GET", "<?php echo $blogURL;?>/owner/communication/filter/change/" + param);
+									var request = new HTTPRequest("POST", "<?php echo $blogURL;?>/owner/communication/filter/change/");
 									request.onSuccess = function() {
 										PM.removeRequest(this);
 										PM.showMessage("<?php echo _t('필터를 추가하였습니다.');?>", "center", "bottom");
@@ -231,7 +241,7 @@ function printFilterBox($mode, $title) {
 										var deleteA = document.createElement("A");
 										deleteA.className = "delete-button button";
 										deleteA.setAttribute("href", "#void");
-										deleteA.onclick = function() { deleteFilter(tr,mode,target.value,elementId); return false;};
+										deleteA.onclick = (function(v, id) { return function() { deleteFilter(tr,mode,v,id); return false;}; })(encodeURIComponent(target.value), elementId); // Textcube-NG: L79 처럼 인코딩한 값을 넘기고, 값·필터 번호는 추가한 때의 것을 쓴다(전역 elementId 는 다음 추가 때 바뀜)(r3-8)
 										deleteA.setAttribute("title", "<?php echo _t('이 필터링을 제거합니다.');?>");
 										
 										deleteSpan = document.createElement("SPAN");
@@ -250,7 +260,7 @@ function printFilterBox($mode, $title) {
 										alert("<?php echo _t('예외를 추가하지 못했습니다.');?>");
 									}
 									PM.addRequest(request, "<?php echo _t('추가하고 있습니다.');?>");
-									request.send();
+									request.send(param);
 									
 								}
 								

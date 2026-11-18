@@ -2,6 +2,14 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 
 #[AllowDynamicProperties]
 final class Locales extends Singleton {
@@ -21,18 +29,25 @@ final class Locales extends Singleton {
 	}
 
 	public function set($locale, $domain = 'global') {
-		list($common) = explode('-', $locale, 2);
 		if(!isset($this->resource)) $this->resource = array();
 		if(!isset($this->locale)) $this->locale = array();
 		if(!isset($this->directory)) $this->directory = null;
+		// [보안] $locale 은 include 경로(directory/<locale>.php)에 쓰인다 → 문자열이 아니거나 빈 값, 경로 구분자('/' '\')·NUL·'..' 를
+		//   포함하면 거부(setup.php 의 POST Lang 이 설치 여부 확인 전에 그대로 전달되던 문제). 정상 locale 이름(ko, en, zh-TW 등)은 해당 없음.
+		//   null 은 원본에서도 false 였으나 explode() 에 null 전달(PHP 8.1+ deprecated) 전에 반환한다.
+		if(!is_string($locale) || $locale === '' || strpbrk($locale, "/\\\0") !== false || strpos($locale, '..') !== false) return false;
+		list($common) = explode('-', $locale, 2);
 		if (file_exists($this->directory . '/' . $locale .'.php')) { // If locale file exists
-			if(!isset($this->resource[$domain])) {
+			// Textcube-NG: 도메인별로 처음 읽은 언어가 끝까지 남아, 같은 domain 을 다른 언어로 set() 해도 바뀌지 않았다
+			// (fireEvent 는 /plugin/ 이벤트와 그 밖의 이벤트에서 고르는 언어가 다르다). 읽어 둔 언어와 다를 때만 다시 읽는다(v3.188)
+			if(!isset($this->resource[$domain]) || ($this->locale[$domain] ?? null) !== $locale) {
 				$this->resource[$domain] = $this->includeLocaleFile($this->directory . '/' . $locale . '.php');
 				$this->locale[$domain] = $locale;
 			}
 			return true;
 		} else if (($common != $locale) && file_exists($this->directory . '/' . $common . '.php')) {
-			if(!isset($this->resource[$domain])) {
+			// Textcube-NG: 위와 같다 — 읽어 둔 언어(앞 부분)와 다를 때만 다시 읽는다(v3.188)
+			if(!isset($this->resource[$domain]) || ($this->locale[$domain] ?? null) !== $common) {
 				$this->resource[$domain] = $this->includeLocaleFile($this->directory . '/' . $common . '.php');
 				$this->locale[$domain] = $common;
 			}
@@ -43,7 +58,9 @@ final class Locales extends Singleton {
 
 	private function includeLocaleFile($languageFile) {
 		$__text = array();
-		include_once($languageFile);
+		// Textcube-NG: include_once 는 같은 파일을 두 번째로 읽을 때 아무것도 하지 않아 빈 배열이 돌아왔다(언어를 되돌릴 때).
+		// locale 파일은 $__text 배열만 채우고 함수·클래스·상수를 정의하지 않으므로 include 로 바꾼다(v3.188)
+		include($languageFile);
 		return $__text;
 	}
 

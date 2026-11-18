@@ -2,6 +2,14 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 
 global $__gCacheLink;
 $__gCacheLink = array();
@@ -62,7 +70,7 @@ function addLink($blogid, $link) {
 	$name = POD::escapeString($name);
 	$url = POD::escapeString($url);
 	if(isset($link['newCategory']) && !empty($link['newCategory'])) { // Add new category information
-		$newCategoryTitle = POD::escapeString(UTF8::lessenAsEncoding(trim($link['newCategory']), 255));
+		$newCategoryTitle = UTF8::lessenAsEncoding(trim($link['newCategory']), 255); // Textcube-NG: addLinkCategory가 escape하므로 이중 escape 제거(updateLink와 같게)(r3-8)
 		$newCategoryId = addLinkCategory($blogid, $newCategoryTitle);
 		if(!empty($newCategoryId)) $category = $newCategoryId;
 		else return false;
@@ -87,7 +95,7 @@ function updateLink($blogid, $link) {
 	$url = UTF8::lessenAsEncoding(trim($link['url']), 255);
 	if (empty($name) || empty($url))
 		return false;
-	$category = (isset($link['category'])) ? $link['category'] : 0;
+	$category = (isset($link['category'])) ? (int)$link['category'] : 0; // Textcube-NG: 빈 값('')을 0으로(r3-8)
 	$name = POD::escapeString($name);
 	$url = POD::escapeString($url);
 
@@ -110,7 +118,10 @@ function updateLink($blogid, $link) {
 	// Garbage correction
 	$existCategories = POD::queryColumn("SELECT DISTINCT category FROM {$database['prefix']}Links
 			WHERE blogid = $blogid");
-	@POD::execute("DELETE FROM {$database['prefix']}LinkCategories
+	// Textcube-NG: 조회가 실패하면(queryColumn null) PHP 8 에서 implode() TypeError(HTTP 500, 링크는 이미 수정된 뒤 — PHP 7.4 는 경고)가 났고,
+	// 결과가 비면 'NOT IN ()'(MySQL·PostgreSQL 문법 오류)였다. 쓰는 분류 목록이 있을 때만 정리한다(v3.140)
+	if (!empty($existCategories))
+		@POD::execute("DELETE FROM {$database['prefix']}LinkCategories
 			WHERE blogid = $blogid AND id NOT IN (".implode(",",$existCategories).")");
 	return $result;
 }

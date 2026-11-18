@@ -2,6 +2,14 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 $IV = array(
 	'GET' => array(
 		'includeFileContents' => array(array('true', 'false'))
@@ -9,18 +17,24 @@ $IV = array(
 );
 require ROOT . '/library/preprocessor.php';
 requireStrictRoute();
+/* [보안] 원본은 이 핸들러에서 권한을 확인하지 않고 ACL 표에 의존했는데 표에 /owner/data 가 없어 전 구성원에게 허용됐다 →
+   표 보완(framework/boot/30-Auth.php)과 함께 핸들러에서도 관리자 이상 확인 */
+requirePrivilege('group.administrators');
 set_time_limit(0);
 $includeFileContents = Validator::getBool(@$_GET['includeFileContents']);
 $writer = new OutputWriter();
 if (defined('__TEXTCUBE_BACKUP__')) {
 	if (!file_exists(__TEXTCUBE_CACHE_DIR__.'/backup')) {
 		mkdir(__TEXTCUBE_CACHE_DIR__.'/backup');
-		@chmod(__TEXTCUBE_CACHE_DIR__.'/backup', 0777);
+		// [보안] 백업(블로그 설정·플러그인 설정·사용자 설정·댓글 비밀번호 해시 등 포함) 디렉토리는 웹 서버 사용자만 (원본 0777)
+		@chmod(__TEXTCUBE_CACHE_DIR__.'/backup', 0700);
 	}
 	if (!is_dir(__TEXTCUBE_CACHE_DIR__.'/backup')) {
 		exit;
 	}
 	if ($writer->openFile(__TEXTCUBE_CACHE_DIR__."/backup/$blogid.xml")) {
+		// [보안] 쓰는 동안에도 웹 서버 사용자만 읽고 쓰도록(원본은 끝난 뒤 0666 = 누구나 읽기·쓰기)
+		@chmod(__TEXTCUBE_CACHE_DIR__."/backup/$blogid.xml", 0600);
 	} else {
 		exit;
 	}
@@ -123,13 +137,13 @@ if ($post->open('', '*', 'published, id')) {
 		if ($comment = $post->getComments()) {
 			do {
 				if($comment->isfiltered == 0) {
-					$writer->write('<comment>' . '<id>'. $comment->id . '</id>' . '<commenter' . ' id="' . $comment->commenter . '">' . '<name>' . htmlspecialchars(UTF8::correct($comment->name)) . '</name>' . '<homepage>' . htmlspecialchars(UTF8::correct($comment->homepage)) . '</homepage>' . '<ip>' . $comment->ip . '</ip>' . '<openid>' . $comment->openid . '</openid>' . '</commenter>' .
+					$writer->write('<comment>' . '<id>'. $comment->id . '</id>' . '<commenter' . ' id="' . $comment->commenter . '">' . '<name>' . htmlspecialchars(UTF8::correct($comment->name)) . '</name>' . '<homepage>' . htmlspecialchars(UTF8::correct($comment->homepage)) . '</homepage>' . '<ip>' . $comment->ip . '</ip>' . '<openid>' . htmlspecialchars($comment->openid) . '</openid>' . '</commenter>' .
 					'<content>' . htmlspecialchars($comment->content) . '</content>' . '<password>' . htmlspecialchars($comment->password) . '</password>' . '<secret>' . htmlspecialchars($comment->secret) . '</secret>' .'<longitude>'.$comment->longitude .'</longitude>'.'<latitude>'.$comment->latitude.'</latitude>' . '<written>' . $comment->written . '</written>' . '<isFiltered>' . $comment->isfiltered . '</isFiltered>');
 					$writer->write(CRLF);
 					if ($childComment = $comment->getChildren()) {
 						do {
 							if($childComment->isfiltered == 0) {
-								$writer->write('<comment>' . '<id>' . $childComment->id . '</id>' . '<commenter' . ' id="' . $childComment->commenter . '"' . '>' . '<name>' . htmlspecialchars(UTF8::correct($childComment->name)) . '</name>' . '<homepage>' . htmlspecialchars(UTF8::correct($childComment->homepage)) . '</homepage>' . '<ip>' . $childComment->ip . '</ip>' . '<openid>' . $comment->openid . '</openid>' . '</commenter>' . '<content>' . htmlspecialchars($childComment->content) . '</content>' . '<password>' . htmlspecialchars($childComment->password) . '</password>' . '<secret>' . htmlspecialchars($childComment->secret) . '</secret>' . '<written>' . $childComment->written . '</written>' . '<isFiltered>' . $childComment->isfiltered . '</isFiltered>' . '</comment>');
+								$writer->write('<comment>' . '<id>' . $childComment->id . '</id>' . '<commenter' . ' id="' . $childComment->commenter . '"' . '>' . '<name>' . htmlspecialchars(UTF8::correct($childComment->name)) . '</name>' . '<homepage>' . htmlspecialchars(UTF8::correct($childComment->homepage)) . '</homepage>' . '<ip>' . $childComment->ip . '</ip>' . '<openid>' . htmlspecialchars($childComment->openid) . '</openid>' . '</commenter>' . '<content>' . htmlspecialchars($childComment->content) . '</content>' . '<password>' . htmlspecialchars($childComment->password) . '</password>' . '<secret>' . htmlspecialchars($childComment->secret) . '</secret>' . '<written>' . $childComment->written . '</written>' . '<isFiltered>' . $childComment->isfiltered . '</isFiltered>' . '</comment>');
 							$writer->write(CRLF);
 							}
 						} while ($childComment->shift());
@@ -381,12 +395,12 @@ if ($comment->open('parent IS NULL')) {
 	$writer->write('<guestbook>');
 	do {
 		if ($comment->isfiltered == 0) {
-			$writer->write('<comment>' . '<commenter' . ' id="' . $comment->commenter . '">' . '<name>' . htmlspecialchars(UTF8::correct($comment->name)) . '</name>' . '<homepage>' . htmlspecialchars(UTF8::correct($comment->homepage)) . '</homepage>' . '<ip>' . $comment->ip . '</ip>' . '<openid>' . $comment->openid . '</openid>' . '</commenter>' . '<content>' . htmlspecialchars(UTF8::correct($comment->content)) . '</content>' . '<password>' . htmlspecialchars($comment->password) . '</password>' . '<secret>' . htmlspecialchars($comment->secret) . '</secret>' . '<written>' . $comment->written . '</written>');
+			$writer->write('<comment>' . '<commenter' . ' id="' . $comment->commenter . '">' . '<name>' . htmlspecialchars(UTF8::correct($comment->name)) . '</name>' . '<homepage>' . htmlspecialchars(UTF8::correct($comment->homepage)) . '</homepage>' . '<ip>' . $comment->ip . '</ip>' . '<openid>' . htmlspecialchars($comment->openid) . '</openid>' . '</commenter>' . '<content>' . htmlspecialchars(UTF8::correct($comment->content)) . '</content>' . '<password>' . htmlspecialchars($comment->password) . '</password>' . '<secret>' . htmlspecialchars($comment->secret) . '</secret>' . '<written>' . $comment->written . '</written>');
 			$writer->write(CRLF);
 			if ($childComment = $comment->getChildren()) {
 				do {
 					if ($childComment->isfiltered == 0) {
-						$writer->write('<comment>' . '<commenter' . ' id="' . $childComment->commenter . '">' . '<name>' . htmlspecialchars(UTF8::correct($childComment->name)) . '</name>' . '<homepage>' . htmlspecialchars(UTF8::correct($childComment->homepage)) . '</homepage>' . '<ip>' . $childComment->ip . '</ip>' . '<openid>' . $comment->openid . '</openid>' . '</commenter>' . '<content>' . htmlspecialchars(UTF8::correct($childComment->content)) . '</content>' . '<password>' . htmlspecialchars($childComment->password) . '</password>' . '<secret>' . htmlspecialchars($childComment->secret) . '</secret>' . '<written>' . $childComment->written . '</written>' . '</comment>');
+						$writer->write('<comment>' . '<commenter' . ' id="' . $childComment->commenter . '">' . '<name>' . htmlspecialchars(UTF8::correct($childComment->name)) . '</name>' . '<homepage>' . htmlspecialchars(UTF8::correct($childComment->homepage)) . '</homepage>' . '<ip>' . $childComment->ip . '</ip>' . '<openid>' . htmlspecialchars($childComment->openid) . '</openid>' . '</commenter>' . '<content>' . htmlspecialchars(UTF8::correct($childComment->content)) . '</content>' . '<password>' . htmlspecialchars($childComment->password) . '</password>' . '<secret>' . htmlspecialchars($childComment->secret) . '</secret>' . '<written>' . $childComment->written . '</written>' . '</comment>');
 						$writer->write(CRLF);
 					}
 				} while ($childComment->shift());
@@ -436,7 +450,7 @@ if($lines = $line->get()) {
 $writer->write('</blog>');
 $writer->close();
 if (defined('__TEXTCUBE_BACKUP__')) {
-	@chmod(__TEXTCUBE_CACHE_DIR__."/backup/$blogid.xml", 0666);
+	@chmod(__TEXTCUBE_CACHE_DIR__."/backup/$blogid.xml", 0600);	// [보안] 원본 0666
 	Respond::ResultPage(0);
 }
 ?>

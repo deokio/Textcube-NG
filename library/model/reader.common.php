@@ -2,6 +2,14 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 
 function getReaderSetting($blogid) {
 	global $database;
@@ -278,7 +286,7 @@ function getFeedEntry($blogid, $group = 0, $feed = 0, $entry = 0, $unreadOnly = 
 		if ($position == 'current') {
 			if ($row = POD::queryRow("$sql LIMIT 1")) {
 				$row['description'] = adjustRelativePathImage($row['description'], $row['permalink']);
-				$row['description'] = filterJavaScript($row['description'], ($setting['allowscript'] == 1 ? false : true));
+				$row['description'] = ($setting['allowscript'] == 1 ? filterJavaScript($row['description'], false) : sanitizeHTML($row['description']));
 			}
 			return $row;
 		} else {
@@ -295,7 +303,7 @@ function getFeedEntry($blogid, $group = 0, $feed = 0, $entry = 0, $unreadOnly = 
 							POD::query("REPLACE INTO {$database['prefix']}FeedReads VALUES($blogid, {$row['id']})");
 						if ($row) {
 							$row['description'] = adjustRelativePathImage($row['description'], $row['permalink']);
-							$row['description'] = filterJavaScript($row['description'], ($setting['allowscript'] == 1 ? false : true));
+							$row['description'] = ($setting['allowscript'] == 1 ? filterJavaScript($row['description'], false) : sanitizeHTML($row['description']));
 						}
 						return $row;
 					} else if ($position == 'after') {
@@ -303,7 +311,7 @@ function getFeedEntry($blogid, $group = 0, $feed = 0, $entry = 0, $unreadOnly = 
 							POD::query("REPLACE INTO {$database['prefix']}FeedReads VALUES($blogid, {$prevRow['id']})");
 						if ($prevRow) {
 							$prevRow['description'] = adjustRelativePathImage($prevRow['description'], $row['permalink']);
-							$prevRow['description'] = filterJavaScript($prevRow['description'], ($setting['allowscript'] == 1 ? false : true));
+							$prevRow['description'] = ($setting['allowscript'] == 1 ? filterJavaScript($prevRow['description'], false) : sanitizeHTML($prevRow['description']));
 						}
 						return $prevRow;
 					}
@@ -331,7 +339,7 @@ function getFeedEntry($blogid, $group = 0, $feed = 0, $entry = 0, $unreadOnly = 
 						f.id = i.feed";
 		if ($row = POD::queryRow($sql)) {
 			$row['description'] = adjustRelativePathImage($row['description'], $row['permalink']);
-			$row['description'] = filterJavaScript($row['description'], ($setting['allowscript'] == 1 ? false : true));
+			$row['description'] = ($setting['allowscript'] == 1 ? filterJavaScript($row['description'], false) : sanitizeHTML($row['description']));
 		}
 		return $row;
 	}
@@ -378,9 +386,9 @@ function deleteFeedGroup($blogid, $id) {
 	return 0;
 }
 
-function addFeed($blogid, $group = 0, $url, $getEntireFeed = true, $htmlURL = '', $blogTitle = '', $blogDescription = '') {
+function addFeed($blogid, $group, $url, $getEntireFeed = true, $htmlURL = '', $blogTitle = '', $blogDescription = '') {
 	global $database;
-	if(strpos(strtolower($url), 'http://') !== 0)
+	if(!preg_match('#^https?://#i', $url)) // Textcube-NG: https 주소 앞에 http://를 덧붙이지 않음(r3-8)
 		$url = 'http://'.$url;
 	$url = rtrim($url, '/');
 	$escapedURL = POD::escapeString($url);
@@ -422,12 +430,17 @@ function addFeed($blogid, $group = 0, $url, $getEntireFeed = true, $htmlURL = ''
 	return 0;
 }
 
-function getRemoteFeed($url) {
+function getRemoteFeed($url, $depth = 0) {
 	global $service, $serviceURL;
 	$xml = fireEvent('GetRemoteFeed', null, $url);
 	if (empty($xml)) {
 		$request = new HTTPRequest($url);
-		$request->referer = $serviceURL;
+		// Textcube-NG: 리더 피드 추가·갱신(/owner/reader, 저장된 피드는 익명 /feeder 의 무작위 갱신으로도 요청됨)이 주소를 검사하지 않고 연결해
+		// 서버 안쪽(루프백·사설망·링크로컬 — 클라우드 메타데이터 169.254.169.254 등) 응답을 피드로 읽어 저장할 수 있었고(SSRF), 리다이렉트도
+		// 대상 검사 없이 따라갔다. 링크 사이트 정보 get_remotefile()(v3.141)과 같은 기준으로 http·https 의 80/443 포트, 공인 IPv4 주소만
+		// 확인한 IP 로 연결한다(v3.79 HTTPRequest::$publicOnly — 리다이렉트마다 send() 에서 같은 검사)(v3.144)
+		$request->publicOnly = true;
+		$request->referer = URL::toAbsolute($serviceURL);	// Textcube-NG: Referer 는 절대 URI(RFC 9110), 서비스 주소가 //host 이면 useSSL 기준 스킴을 붙인다(r3-34)
 		$request->timeout = 3;
 		if (!$request->send())
 			return array(2, null, null);
@@ -443,16 +456,20 @@ function getRemoteFeed($url) {
 					$urlInfo = parse_url($url);
 					$rssInfo = parse_url($attributes['href']);
 					$rssURL = false;
-					if(isset($rssInfo['scheme']) && $rssInfo['scheme'] == 'http')
+					if(isset($rssInfo['scheme']) && in_array(strtolower($rssInfo['scheme']), array('http', 'https'), true)) // Textcube-NG: https 피드 주소도 절대 주소로 인정(r3-8)
 						$rssURL = $attributes['href'];
-					else if(isset($rssInfo['path'])) {
+					else if(!isset($rssInfo['scheme']) && isset($rssInfo['host'])) // Textcube-NG: 스킴 생략(//host/path) 피드 주소는 페이지 스킴을 붙임(r3-8)
+						$rssURL = (isset($urlInfo['scheme']) ? $urlInfo['scheme'] : 'http').':'.$attributes['href'];
+					else if(isset($rssInfo['path']) && $rssInfo['path'] !== '') { // Textcube-NG: 빈 path의 [0] 접근 방지(r3-8)
 						if($rssInfo['path'][0] == '/')
 							$rssURL = "{$urlInfo['scheme']}://{$urlInfo['host']}{$rssInfo['path']}";
 						else
 							$rssURL = "{$urlInfo['scheme']}://{$urlInfo['host']}".(isset($urlInfo['path']) ? rtrim($urlInfo['path'], '/') : '').'/'.$rssInfo['path'];
 					}
-					if($rssURL && $url != $rssURL)
-						return getRemoteFeed($rssURL);
+					// Textcube-NG: HTML 페이지의 alternate 링크를 따라가는 횟수에 제한이 없어 서로를 가리키는 페이지가 요청·재귀를 끝없이 반복했다.
+					// 3단계까지만 따라간다(get_remotefile 리다이렉트 3회와 같은 값). 따라간 주소도 위 publicOnly 검사를 받는다(v3.144)
+					if($rssURL && $url != $rssURL && $depth < 3)
+						return getRemoteFeed($rssURL, $depth + 1);
 				}
 			}
 		}
@@ -760,6 +777,9 @@ function str_month_check($str) {
 function importOPMLFromURL($blogid, $url) {
 	global $database, $service;
 	$request = new HTTPRequest($url);
+	// Textcube-NG: OPML 주소 가져오기(/owner/reader/opml/import/url)도 주소를 검사하지 않아 서버 안쪽 응답을 읽을 수 있었다.
+	// 피드와 같이 80/443 포트의 공인 IPv4 주소만 연결한다(리다이렉트마다 다시 검사)(v3.144)
+	$request->publicOnly = true;
 	if (!$request->send())
 		return array('error' => 1);
 	$result = importOPMLFromFile($blogid, $request->responseText);

@@ -29,5 +29,6 @@ Setting::setBlogSettingGlobal('atomURL',$_POST['atomURL']);
 Setting::setBlogSettingGlobal('rssURL',$_POST['rssURL']);
 clearFeed();
 CacheControl::flushSkin();
+CacheControl::flushEntry();	// Textcube-NG: 피드 공개 범위(publishWholeOnRSS 등)가 바뀌면 글 캐시(RSS 요약 본문 포함)도 비운다. 원본은 피드·스킨 캐시만 비웠다(r3-5)
 Respond::ResultPage(0);
 ?>

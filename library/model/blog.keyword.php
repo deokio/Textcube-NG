@@ -2,10 +2,20 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 
 function getKeywordCount($blogid) {
 	global $database;
 	$visibility = doesHaveOwnership() ? '' : 'AND visibility > 0';
+	// Textcube-NG: 글관리 권한(group.editors)이 없는 구성원은 자기 글과 비공개가 아닌 글만(원본은 남의 비공개 글 포함)(v3.145)
+	$visibility .= (doesHaveOwnership() && !Acl::check('group.editors')) ? ' AND (userid = '.getUserId().' OR visibility > 0)' : '';
 	return POD::queryCell("SELECT COUNT(*) FROM {$database['prefix']}Entries WHERE blogid = $blogid AND draft = 0 $visibility AND category = -1");
 }
 
@@ -13,6 +23,8 @@ function getKeywordNames($blogid) {
 	global $database;
 	$names = array();
 	$visibility = doesHaveOwnership() ? '' : 'AND visibility > 0';
+	// Textcube-NG: 글관리 권한(group.editors)이 없는 구성원은 자기 글과 비공개가 아닌 글만(원본은 남의 비공개 글 포함)(v3.145)
+	$visibility .= (doesHaveOwnership() && !Acl::check('group.editors')) ? ' AND (userid = '.getUserId().' OR visibility > 0)' : '';
 	$names = POD::queryColumn("SELECT title FROM {$database['prefix']}Entries WHERE blogid = $blogid AND draft = 0 $visibility AND category = -1 ORDER BY char_length(title) DESC");
 	return $names;
 }
@@ -20,6 +32,8 @@ function getKeywordNames($blogid) {
 function getKeywords($blogid) {
 	global $database;
 	$visibility = doesHaveOwnership() ? '' : 'AND visibility > 0';
+	// Textcube-NG: 글관리 권한(group.editors)이 없는 구성원은 자기 글과 비공개가 아닌 글만(원본은 남의 비공개 글 포함)(v3.145)
+	$visibility .= (doesHaveOwnership() && !Acl::check('group.editors')) ? ' AND (userid = '.getUserId().' OR visibility > 0)' : '';
 	return POD::queryAll("SELECT * 
 		FROM {$database['prefix']}Entries 
 		WHERE blogid = $blogid 
@@ -37,6 +51,8 @@ function getKeywordsWithPaging($blogid, $search, $page, $count) {
 	}
 
 	$visibility = doesHaveOwnership() ? '' : 'AND visibility > 0';
+	// Textcube-NG: 글관리 권한(group.editors)이 없는 구성원은 자기 글과 비공개가 아닌 글만(원본은 남의 비공개 글 포함)(v3.145)
+	$visibility .= (doesHaveOwnership() && !Acl::check('group.editors')) ? ' AND (userid = '.getUserId().' OR visibility > 0)' : '';
 	$sql = "SELECT * 
 		FROM {$database['prefix']}Entries 
 		WHERE blogid = $blogid 
@@ -54,6 +70,8 @@ function getKeylogByTitle($blogid, $title) {
 	global $database;
 	$title = POD::escapeString($title);
 	$visibility = doesHaveOwnership() ? '' : 'AND visibility > 0';
+	// Textcube-NG: 글관리 권한(group.editors)이 없는 구성원은 자기 글과 비공개가 아닌 글만(원본은 남의 비공개 글 포함)(v3.145)
+	$visibility .= (doesHaveOwnership() && !Acl::check('group.editors')) ? ' AND (userid = '.getUserId().' OR visibility > 0)' : '';
 	return POD::queryRow("SELECT * 
 			FROM {$database['prefix']}Entries 
 			WHERE blogid = $blogid 
@@ -67,6 +85,8 @@ function getEntriesByKeyword($blogid, $keyword) {
 	global $database;
 	$keyword = POD::escapeString($keyword);
 	$visibility = doesHaveOwnership() ? '' : 'AND visibility > 1';
+	// Textcube-NG: 글관리 권한(group.editors)이 없는 구성원은 자기 글과 비공개가 아닌 글만(원본은 남의 비공개 글 포함)(v3.145)
+	$visibility .= (doesHaveOwnership() && !Acl::check('group.editors')) ? ' AND (userid = '.getUserId().' OR visibility > 0)' : '';
 	return POD::queryAll("SELECT id, userid, title, category, comments, published 
 			FROM {$database['prefix']}Entries 
 			WHERE blogid = $blogid 

@@ -24,7 +24,7 @@ $page = $_GET['page'];
 		<form onsubmit="return false;">
 			<fieldset>
 				<dl>
-					<dt><label for="bi-owner-loginid"><?php echo _t('소유자'); ?></label>
+					<dt><label for="bi-owner-loginid"><?php echo _t('소유자'); ?></label></dt><?php /* Textcube-NG: 원본에 빠진 </dt> 를 닫는다(원본 결함, r3-14) */ ?>
 					<dd id="suggestContainer"><input id="bi-owner-loginid" class="input-text" name="location" value="<?php echo getUserEmail(1);?>" /></dd>
 					<dt><label for="bi-identify"><?php echo _t('블로그 구분자'); ?></label></dt>
 					<dd><input type="text" id="bi-identify" name="bi-identify" /></dd>
@@ -83,13 +83,13 @@ if($bloglist){
 						<?php echo $itemBlogId?>
 					</td>
 					<td>
-						<a href="<?php echo $blogURL?>/control/blog/detail/<?php echo $itemBlogId?>"><?php echo $bsetting['name']?></a>
+						<a href="<?php echo $blogURL?>/control/blog/detail/<?php echo $itemBlogId?>"><?php echo htmlspecialchars($bsetting['name'])?></a>
 					</td>
 					<td>
-						<?php echo $bsetting['title']?>
+						<?php echo htmlspecialchars($bsetting['title'])?>
 					</td>
 					<td>
-						<?php echo User::getName($bsetting['owner'])."(".User::getEmail($bsetting['owner']).")";?>
+						<?php echo htmlspecialchars((string)User::getName($bsetting['owner']))."(".htmlspecialchars((string)User::getEmail($bsetting['owner'])).")";?>
 					</td><?php if ( $service['type'] != "single" ) {?>
 					<td class="name">
 						<a href="<?php echo getDefaultUrl($itemBlogId);?>"><?php echo _t('보기');?></a>

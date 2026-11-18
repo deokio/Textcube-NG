@@ -9,7 +9,8 @@
  * Released under LGPL License.
  *
  */
-tinymce.create('tinymce.Textcube.TTMLsupport', {
+// PHP port(Textcube-NG): TinyMCE 6.0.0 에서 Class API(tinymce.create) 제거 → 원형 객체로 두고 아래 PluginManager.add 에서 인스턴스를 돌려줌(R-173)
+var TTMLsupportPrototype = {
     /**
      */
     init: function (ed, url) {
@@ -18,8 +19,11 @@ tinymce.create('tinymce.Textcube.TTMLsupport', {
         t.propertyNames = ["propertyInsertObject", "propertyImage1", "propertyImage2", "propertyImage3", "propertyObject", "propertyObject1", "propertyObject2", "propertyiMazing", "propertyGallery", "propertyJukebox", "propertyEmbed", "propertyFlash", "propertyMoreLess"];
         t.styleUnknown = 'style="width: 90px; height: 30px; border: 2px outset #796; background-color: #efd; background-repeat: no-repeat; background-position: center center; background-image: url(\'' + servicePath + '/resources/image/extension/unknown.gif\')"';
         t.editorMode = 'wysiwyg';
+        // PHP port(Textcube-NG): TinyMCE 6+ 의 LoadContent 인자에는 content 가 없음(4.x 는 setContent 인자 객체를 그대로 넘겨 content 가 있었음) → 문자열일 때만 변환(R-173 회귀)
         ed.on('LoadContent', function (e) {
-            e.content = t.TTMLtoHTML(e.content);
+            if (typeof e.content === 'string') {
+                e.content = t.TTMLtoHTML(e.content);
+            }
         });
         ed.on('BeforeSetContent', function (e) {
             if (e.set) {
@@ -78,20 +82,32 @@ tinymce.create('tinymce.Textcube.TTMLsupport', {
             t.command('ToggleTextarea');
             return false;
         });
-        ed.addButton('tcattach', {
-            title: 'Upload and insert files',
-            cmd: 'textcubeToggleUploadDlg',
-            icon: 'browse'
+        // PHP port(Textcube-NG): r3-11 Textcube 전용 버튼 3개의 툴팁을 관리 화면 언어로 옮기고 앞에 [TC] 를 붙여 Textcube 전용 기능임을 표시한다
+        // (사용자 결정 11-08 16:52, 원본 4.x 는 ed.addButton 의 영어 title 고정). 번역표는 ED_tinyMCE/index.php tinyMCE_generateButtonTranslationJavascript() 가
+        // window.tcTinyMCEButtonText(영어 원문 → 번역)로 낸다. 표가 없거나 그 버튼 번역이 없으면 영어 원문에 [TC] 만 붙인다.
+        // tinymce.addI18n 은 쓰지 않는다: 모든 편집기가 함께 쓰는 언어 자료를 고치게 되고, 편집기 언어(blog.language)와 locale 언어가 다를 수 있으며,
+        // 렌더 전에 부르면 언어 파일(langs/ko_KR.js 등)을 읽지 않게 된다. 붙인 문자열은 silver 테마가 다시 번역(editor.translate)하지만 같은 키가 없어 그대로 나온다.
+        // 버튼 테두리·바탕색은 ED_tinyMCE/override.css 가 data-mce-name(등록 이름)으로 준다
+        var tcText = (window.tcTinyMCEButtonText && typeof window.tcTinyMCEButtonText === 'object') ? window.tcTinyMCEButtonText : {};
+        var tcTooltip = function (text) {
+            var s = Object.prototype.hasOwnProperty.call(tcText, text) ? tcText[text] : '';
+            return '[TC] ' + ((typeof s === 'string' && s !== '') ? s : text);
+        };
+        // PHP port(Textcube-NG): 5.0 이후 버튼은 ed.ui.registry.addButton(tooltip·icon·onAction), 아이콘 pagebreak→page-break
+        ed.ui.registry.addButton('tcattach', {
+            tooltip: tcTooltip('Upload and insert files'),
+            icon: 'browse',
+            onAction: function () { ed.execCommand('textcubeToggleUploadDlg'); }
         });
-        ed.addButton('tcsave', {
-            title: 'Save current post',
-            cmd: 'textcubeSavePost',
-            icon: 'save'
+        ed.ui.registry.addButton('tcsave', {
+            tooltip: tcTooltip('Save current post'),
+            icon: 'save',
+            onAction: function () { ed.execCommand('textcubeSavePost'); }
         });
-        ed.addButton('tcmoreless', {
-            title: 'Add more/less block',
-            cmd: 'textcubeMoreLessBlock',
-            icon: 'pagebreak'
+        ed.ui.registry.addButton('tcmoreless', {
+            tooltip: tcTooltip('Add more/less block'),
+            icon: 'page-break',
+            onAction: function () { ed.execCommand('textcubeMoreLessBlock'); }
         });
         //ed.addButton('tcsourcecodeedit', {
         //    title: 'Source code editor',
@@ -351,6 +367,21 @@ tinymce.create('tinymce.Textcube.TTMLsupport', {
 
             str = str.replaceAll(body, "[##_Jukebox|" + files + t.un_htmlspecialchars(trim(longdesc[longdesc.length - 2])) + "|_##]");
         }
+
+        // Textcube-NG: r3-32 R-525 tatterObject 자리 그림을 object 코드로 되돌림(원본 TTMLsupport 에 없어 저장 때 자리 그림이 남았다). FM_Modern editor.js HTMLtoTTML 의 'Object 처리'를 옮김. r3-36 R-537 width·height 는 속성 앞 공백까지 맞춰 주소 쿼리의 width= 를 건드리지 않음
+        var regObject = new RegExp("<img[^>]*class=[\"']?tatterObject.*?>", "i");
+        while (result = regObject.exec(str)) {
+            var body = result[0];
+            var object = t.objectUnSerialize(t.parseAttribute(body, "longdesc"));
+            var widthString = new RegExp("(\\s)width=[\"']?\\w+[\"']?", "i").exec(object);
+            var heightString = new RegExp("(\\s)height=[\"']?\\w+[\"']?", "i").exec(object);
+            var size = t.parseImageSize(body, "array");
+            if (widthString)
+                object = object.replaceAll(widthString[0], widthString[1] + 'width="' + size[0] + '"');
+            if (heightString)
+                object = object.replaceAll(heightString[0], heightString[1] + 'height="' + size[1] + '"');
+            str = str.replaceAll(body, object);
+        }
         return str;
     },
     /** Internal methods **/
@@ -467,6 +498,33 @@ tinymce.create('tinymce.Textcube.TTMLsupport', {
         var t = this;
         return t.removeQuot(str.replace(new RegExp("&amp;", "gi"), "&").replace(new RegExp("&lt;", "gi"), "<").replace(new RegExp("&gt;", "gi"), ">"));
     },
+    // Textcube-NG: r3-32 R-525 원본 TTMLsupport 는 objectSerialize·objectUnSerialize 를 부르기만 하고 정의하지 않았다(원본 1.10.10 도 같음, TypeError). FM_Modern editor.js TTModernEditor.prototype 의 같은 이름 함수를 옮김
+    objectSerialize: function (str) {
+        str = str.replace(new RegExp("<br\\s*/?>", "gi"), "");
+        str = str.replace(new RegExp("\r?\n", "g"), "");
+        str = str.replace(new RegExp("<", "g"), "__LT__");
+        str = str.replace(new RegExp(">", "g"), "__GT__");
+        str = str.replace(new RegExp('"', "g"), "__QUOT__");
+        return str;
+    },
+    objectUnSerialize: function (str) {
+        str = str.replaceAll("__QUOT__", '"');
+        str = str.replaceAll("__GT__", ">");
+        str = str.replaceAll("__LT__", "<");
+        return str;
+    },
+    // Textcube-NG: 속성 창 코드 칸 왕복용. DOM 의 longDesc 값은 HTML 파서가 엔터티를 푼 값이라, 코드 칸에 보일 때는 다시 인코드한 뒤 unserialize 하고, 반영할 때는 serialize 뒤 엔터티를 풀어 넣는다(삽입 경로가 만드는 DOM 값과 같게). 푸는 엔터티는 인코드한 4개와 &#39; 뿐이다 (r3-38 R-540)
+    objectEncodeEntities: function (str) {
+        return str.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    },
+    objectDecodeEntities: function (str) {
+        return str.replace(/&(quot|amp|lt|gt|#39);/g, function (m, n) { return {"quot": "\"", "amp": "&", "lt": "<", "gt": ">", "#39": "'"}[n]; });
+    },
+    // Textcube-NG: TinyMCE 는 직렬화(getContent)할 때 style 대신 data-mce-style 을 쓰므로, 속성 창에서 크기를 바꾼 뒤 둘을 맞춘다. style 이 비면 data-mce-style 을 지운다 (r3-38 R-539)
+    syncMceStyle: function (obj) {
+        if (obj.style.cssText) obj.setAttribute("data-mce-style", obj.style.cssText);
+        else obj.removeAttribute("data-mce-style");
+    },
     // " -> &quot; / ' -> &#39;
     addQuot: function (str) {
         return str.replace(new RegExp('"', "g"), "&quot;").replace(new RegExp("'", "g"), "&#39;");
@@ -521,7 +579,8 @@ tinymce.create('tinymce.Textcube.TTMLsupport', {
             var size = t.parseImageSize(obj, "array");
             getObject(t.id + "propertyObject_width").value = size[0];
             getObject(t.id + "propertyObject_height").value = size[1];
-            getObject(t.id + "propertyObject_chunk").value = t.objectUnSerialize(attribute);
+            // Textcube-NG: DOM 값(엔터티가 풀림)을 다시 인코드한 뒤 unserialize 해서 &quot;·&amp;·&lt; 가 코드 칸에서 풀리지 않게 한다 (r3-38 R-540)
+            getObject(t.id + "propertyObject_chunk").value = t.objectUnSerialize(t.objectEncodeEntities(attribute));
             getObject(t.id + "propertyInsertObject").style.display = "none";
             getObject(t.id + "propertyObject").style.display = "block";
         } else if (obj.className == "tatterEmbed") {
@@ -563,7 +622,7 @@ tinymce.create('tinymce.Textcube.TTMLsupport', {
 
                     var size = t.parseImageSize(obj, "array");
 
-                    if (t.propertyCurrentImage == obj.getAttribute("src")) {
+                    if (t.propertyCurrentObject === obj && t.propertyCurrentImage == obj.getAttribute("src")) {	// Textcube-NG: r3-44 R-571 같은 이미지인지를 src 만이 아니라 선택한 요소로도 판정한다(같은 src 의 다른 이미지를 고르면 앞 이미지 비율로 크기가 바뀌던 것)
                         var newWidth = size[0];
                         var newHeight = parseInt(size[0] * t.propertyCurrentProportion1);
                         t.propertyCurrentProportion1 = newHeight / newWidth;
@@ -573,10 +632,13 @@ tinymce.create('tinymce.Textcube.TTMLsupport', {
                             obj.style.width = newWidth + "px";
                         if (!isNaN(newHeight))
                             obj.style.height = newHeight + "px";
+                        // Textcube-NG: 같은 이미지를 다시 골라 비율로 크기를 다시 넣었을 때도 data-mce-style 을 맞춘다 (r3-38 R-539)
+                        t.syncMceStyle(obj);
                     }
                     else {
                         t.propertyCurrentProportion1 = size[1] / size[0];
                         t.propertyCurrentImage = obj.getAttribute("src");
+                        t.propertyCurrentObject = obj;	// Textcube-NG: r3-44 R-571
                     }
                 }
                 else {
@@ -723,11 +785,14 @@ tinymce.create('tinymce.Textcube.TTMLsupport', {
                     obj.style.height = height + "px";
             } catch (e) {
             }
+            // Textcube-NG: 바꾼 크기를 data-mce-style 에도 맞춰 저장 HTML 에 반영한다 (r3-38 R-539)
+            t.syncMceStyle(obj);
 
             if (obj.className == "tatterEmbed" || obj.className == "tatterFlash")
                 obj.setAttribute("longDesc", getObject(t.propertyWindowId + "_src").value);
             else {
-                obj.setAttribute("longDesc", t.objectSerialize(getObject(t.propertyWindowId + "_chunk").value));
+                // Textcube-NG: serialize 뒤 엔터티를 풀어 넣는다(삽입 경로에서 HTML 파서가 만든 DOM 값과 같게) (r3-38 R-540)
+                obj.setAttribute("longDesc", t.objectDecodeEntities(t.objectSerialize(getObject(t.propertyWindowId + "_chunk").value)));
             }
         } else if (obj.tagName && obj.tagName.toLowerCase() == "img" && attribute) {
             if (t.propertyWindowId.indexOf(t.id + "propertyImage") == 0) {
@@ -751,6 +816,8 @@ tinymce.create('tinymce.Textcube.TTMLsupport', {
                         }
                     } catch (e) {
                     }
+                    // Textcube-NG: 바꾼 크기를 data-mce-style 에도 맞춘다 (r3-38 R-539)
+                    t.syncMceStyle(obj);
                 }
 
                 var imageSize = "";
@@ -878,6 +945,8 @@ tinymce.create('tinymce.Textcube.TTMLsupport', {
                     obj.style.width = obj.style.height = 100 + "px";
                     size = 'width="100" height="100"';
                 }
+                // Textcube-NG: 바꾼 크기를 data-mce-style 에도 맞춘다 (r3-38 R-539)
+                t.syncMceStyle(obj);
 
                 longdesc += size;
                 longdesc += ' frame="' + getObject(t.id + "propertyiMazing_frame").value + '"';
@@ -927,6 +996,8 @@ tinymce.create('tinymce.Textcube.TTMLsupport', {
                     obj.style.width = obj.style.height = 100 + "px";
                     size = 'width=100 height=100';
                 }
+                // Textcube-NG: 바꾼 크기를 data-mce-style 에도 맞춘다 (r3-38 R-539)
+                t.syncMceStyle(obj);
 
                 longdesc += trim(size) + "|";
 
@@ -956,6 +1027,7 @@ tinymce.create('tinymce.Textcube.TTMLsupport', {
             obj.setAttribute("less", t._htmlspecialchars(getObject(t.id + "propertyMoreLess_less").value));
         }
     },
+    // Textcube-NG: _t() 값은 HTML 문자열에 넣기 전에 _htmlspecialchars 로 escape 한다(v3.193)
     getEditorProperty: function (/*$alt*/) {
         //$fixPosition = getUserSetting('editorPropertyPositionFix', 0);
         var t = this;
@@ -966,34 +1038,34 @@ tinymce.create('tinymce.Textcube.TTMLsupport', {
             '<div id="__ID__propertyInsertObject" class="entry-editor-property" style="display: none;">' +
             '<div class="entry-editor-property-option">' +
             '<input type="checkbox" class="checkbox" id="__ID__propertyInsertObject-fix-position" onclick="__EDITOR__.setPropertyPosition(1); return true;"' + (fixPosition ? ' checked="checked"' : '') + '/>' +
-            '<label for="__ID__propertyInsertObject-fix-position">' + _t('위치 고정') + '</label>' +
+            '<label for="__ID__propertyInsertObject-fix-position">' + t._htmlspecialchars(_t('위치 고정')) + '</label>' +
             '</div>' +
-            '<h4>' + _t('오브젝트 삽입') + '</h4>' +
+            '<h4>' + t._htmlspecialchars(_t('오브젝트 삽입')) + '</h4>' +
             '<div class="group">' +
             '<dl class="line">' +
-            '<dt class="property-name"><label for="__ID__propertyInsertObject_type">' + _t('유형') + '</label></dt>' +
+            '<dt class="property-name"><label for="__ID__propertyInsertObject_type">' + t._htmlspecialchars(_t('유형')) + '</label></dt>' +
             '<dd>' +
             '<select id="__ID__propertyInsertObject_type" style="width: 105px" onchange="getObject(\'__ID__propertyInsertObject_part_url\').style.display=getObject(\'__ID__propertyInsertObject_part_raw\').style.display=\'none\';getObject(\'__ID__propertyInsertObject_part_\' + t.value).style.display = \'block\'">' +
-            '<option value="url">' + _t('주소입력') + '</option>' +
-            '<option value="raw">' + _t('코드 붙여넣기') + '</option>' +
+            '<option value="url">' + t._htmlspecialchars(_t('주소입력')) + '</option>' +
+            '<option value="raw">' + t._htmlspecialchars(_t('코드 붙여넣기')) + '</option>' +
             '</select>' +
             '</dd>' +
             '</dl>' +
             '<dl id="__ID__propertyInsertObject_part_url" class="line">' +
-            '<dt class="property-name"><label for="__ID__propertyInsertObject_url">' + _t('파일 주소') + '</label></dt>' +
+            '<dt class="property-name"><label for="__ID__propertyInsertObject_url">' + t._htmlspecialchars(_t('파일 주소')) + '</label></dt>' +
             '<dd><input type="text" id="__ID__propertyInsertObject_url" class="input-text" onkeypress="return preventEnter(event);" /></dd>' +
             '</dl>' +
             '<dl id="__ID__propertyInsertObject_part_raw" class="line" style="display: none">' +
-            '<dt class="property-name"><label for="__ID__propertyInsertObject_chunk">' + _t('코드') + '</label></dt>' +
+            '<dt class="property-name"><label for="__ID__propertyInsertObject_chunk">' + t._htmlspecialchars(_t('코드')) + '</label></dt>' +
             '<dd>' +
             '<textarea id="__ID__propertyInsertObject_chunk" cols="30" rows="10"></textarea>' +
             '</dd>' +
             '</dl>' +
             '</div>' +
             '<div class="button-box">' +
-            '<span class="insert-button button" onclick="__EDITOR__.command(\'InsertObject\'); return false"><span class="text">' + _t('삽입하기') + '</span></span>' +
+            '<span class="insert-button button" onclick="__EDITOR__.command(\'InsertObject\'); return false"><span class="text">' + t._htmlspecialchars(_t('삽입하기')) + '</span></span>' +
             '<span class="divider"> | </span>' +
-            '<span class="cancel-button button" onclick="__EDITOR__.command(\'HideObjectBlock\'); return false"><span class="text">' + _t('취소하기') + '</span></span>' +
+            '<span class="cancel-button button" onclick="__EDITOR__.command(\'HideObjectBlock\'); return false"><span class="text">' + t._htmlspecialchars(_t('취소하기')) + '</span></span>' +
             '</div>' +
             '</div>';
 
@@ -1002,20 +1074,20 @@ tinymce.create('tinymce.Textcube.TTMLsupport', {
             '<div id="__ID__propertyImage1" class="entry-editor-property" style="display: none;">' +
             '<div class="entry-editor-property-option">' +
             '<input type="checkbox" class="checkbox" id="__ID__propertyImage1-fix-position" onclick="__EDITOR__.setPropertyPosition(1); return true;"' + (fixPosition ? ' checked="checked"' : '') + '/>' +
-            '<label for="__ID__propertyImage1-fix-position">' + _t('위치 고정') + '</label>' +
+            '<label for="__ID__propertyImage1-fix-position">' + t._htmlspecialchars(_t('위치 고정')) + '</label>' +
             '</div>' +
-            '<h4>' + _t('Image') + '</h4>' +
+            '<h4>' + t._htmlspecialchars(_t('Image')) + '</h4>' +
             '<div class="group">' +
             '<dl class="line">' +
-            '<dt class="property-name"><label for="__ID__propertyImage1_width1">' + _t('폭') + '</label></dt>' +
+            '<dt class="property-name"><label for="__ID__propertyImage1_width1">' + t._htmlspecialchars(_t('폭')) + '</label></dt>' +
             '<dd><input type="text" class="input-text" id="__ID__propertyImage1_width1" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
             '</dl>' +
             '<dl class="line">' +
-            '<dt class="property-name"><label for="__ID__propertyImage1_alt1">' + _t('대체 텍스트') + '</label></dt>' +
+            '<dt class="property-name"><label for="__ID__propertyImage1_alt1">' + t._htmlspecialchars(_t('대체 텍스트')) + '</label></dt>' +
             '<dd><input type="text" class="input-text" id="__ID__propertyImage1_alt1" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
             '</dl>' +
             '<dl class="line">' +
-            '<dt class="property-name"><label for="__ID__propertyImage1_caption1">' + _t('자막') + '</label></dt>' +
+            '<dt class="property-name"><label for="__ID__propertyImage1_caption1">' + t._htmlspecialchars(_t('자막')) + '</label></dt>' +
             '<dd><textarea class="input-text" id="__ID__propertyImage1_caption1" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);"></textarea></dd>' +
             '</dl>' +
             '</div>' +
@@ -1026,36 +1098,36 @@ tinymce.create('tinymce.Textcube.TTMLsupport', {
             '<div id="__ID__propertyImage2" class="entry-editor-property" style="display: none;">' +
             '<div class="entry-editor-property-option">' +
             '<input type="checkbox" class="checkbox" id="__ID__propertyImage2-fix-position" onclick="__EDITOR__.setPropertyPosition(1); return true;"' + (fixPosition ? ' checked="checked"' : '') + '/>' +
-            '<label for="__ID__propertyImage2-fix-position">' + _t('위치 고정') + '</label>' +
+            '<label for="__ID__propertyImage2-fix-position">' + t._htmlspecialchars(_t('위치 고정')) + '</label>' +
             '</div>' +
-            '<h4>' + _t('Image') + '</h4>' +
+            '<h4>' + t._htmlspecialchars(_t('Image')) + '</h4>' +
             '<div class="group">' +
-            '<div class="title">' + _t('첫번째 이미지') + '</div>' +
+            '<div class="title">' + t._htmlspecialchars(_t('첫번째 이미지')) + '</div>' +
             '<dl class="line">' +
-            '<dt class="property-name"><label for="__ID__propertyImage2_width1">' + _t('폭') + '</label></dt>' +
+            '<dt class="property-name"><label for="__ID__propertyImage2_width1">' + t._htmlspecialchars(_t('폭')) + '</label></dt>' +
             '<dd><input type="text" class="input-text" id="__ID__propertyImage2_width1" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
             '</dl>' +
             '<dl class="line">' +
-            '<dt class="property-name"><label for="__ID__propertyImage2_alt1">' + _t('대체 텍스트') + '</label></dt>' +
+            '<dt class="property-name"><label for="__ID__propertyImage2_alt1">' + t._htmlspecialchars(_t('대체 텍스트')) + '</label></dt>' +
             '<dd><input type="text" class="input-text" id="__ID__propertyImage2_alt1" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
             '</dl>' +
             '<dl class="line">' +
-            '<dt class="property-name"><label for="__ID__propertyImage2_caption1">' + _t('자막') + '</label></dt>' +
+            '<dt class="property-name"><label for="__ID__propertyImage2_caption1">' + t._htmlspecialchars(_t('자막')) + '</label></dt>' +
             '<dd><textarea class="input-text" id="__ID__propertyImage2_caption1" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);"></textarea></dd>' +
             '</dl>' +
             '</div>' +
             '<div class="group">' +
-            '<div class="title">' + _t('두번째 이미지') + '</div>' +
+            '<div class="title">' + t._htmlspecialchars(_t('두번째 이미지')) + '</div>' +
             '<dl class="line">' +
-            '<dt class="property-name"><label for="__ID__propertyImage2_width2">' + _t('폭') + '</label></dt>' +
+            '<dt class="property-name"><label for="__ID__propertyImage2_width2">' + t._htmlspecialchars(_t('폭')) + '</label></dt>' +
             '<dd><input type="text" class="input-text" id="__ID__propertyImage2_width2" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
             '</dl>' +
             '<dl class="line">' +
-            '<dt class="property-name"><label for="__ID__propertyImage2_alt2">' + _t('대체 텍스트') + '</label></dt>' +
+            '<dt class="property-name"><label for="__ID__propertyImage2_alt2">' + t._htmlspecialchars(_t('대체 텍스트')) + '</label></dt>' +
             '<dd><input type="text" class="input-text" id="__ID__propertyImage2_alt2" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
             '</dl>' +
             '<dl class="line">' +
-            '<dt class="property-name"><label for="__ID__propertyImage2_caption2">' + _t('자막') + '</label></dt>' +
+            '<dt class="property-name"><label for="__ID__propertyImage2_caption2">' + t._htmlspecialchars(_t('자막')) + '</label></dt>' +
             '<dd><textarea class="input-text" id="__ID__propertyImage2_caption2" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);"></textarea></dd>' +
             '</dl>' +
             '</div>' +
@@ -1066,51 +1138,51 @@ tinymce.create('tinymce.Textcube.TTMLsupport', {
             '<div id="__ID__propertyImage3" class="entry-editor-property" style="display: none;">' +
             '<div class="entry-editor-property-option">' +
             '<input type="checkbox" class="checkbox" id="__ID__propertyImage3-fix-position" onclick="__EDITOR__.setPropertyPosition(1); return true;"' + (fixPosition ? ' checked="checked"' : '') + '/>' +
-            '<label for="__ID__propertyImage3-fix-position">' + _t('위치 고정') + '</label>' +
+            '<label for="__ID__propertyImage3-fix-position">' + t._htmlspecialchars(_t('위치 고정')) + '</label>' +
             '</div>' +
-            '<h4>' + _t('Image') + '</h4>' +
+            '<h4>' + t._htmlspecialchars(_t('Image')) + '</h4>' +
             '<div class="group">' +
-            '<div class="title">' + _t('첫번째 이미지') + '</div>' +
+            '<div class="title">' + t._htmlspecialchars(_t('첫번째 이미지')) + '</div>' +
             '<dl class="line">' +
-            '<dt class="property-name"><label for="__ID__propertyImage3_width1">' + _t('폭') + '</label></dt>' +
+            '<dt class="property-name"><label for="__ID__propertyImage3_width1">' + t._htmlspecialchars(_t('폭')) + '</label></dt>' +
             '<dd><input type="text" class="input-text" id="__ID__propertyImage3_width1" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
             '</dl>' +
             '<dl class="line">' +
-            '<dt class="property-name"><label for="__ID__propertyImage3_alt1">' + _t('대체 텍스트') + '</label></dt>' +
+            '<dt class="property-name"><label for="__ID__propertyImage3_alt1">' + t._htmlspecialchars(_t('대체 텍스트')) + '</label></dt>' +
             '<dd><input type="text" class="input-text" id="__ID__propertyImage3_alt1" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
             '</dl>' +
             '<dl class="line">' +
-            '<dt class="property-name"><label for="__ID__propertyImage3_caption1">' + _t('자막') + '</label></dt>' +
+            '<dt class="property-name"><label for="__ID__propertyImage3_caption1">' + t._htmlspecialchars(_t('자막')) + '</label></dt>' +
             '<dd><textarea class="input-text" id="__ID__propertyImage3_caption1" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);"></textarea></dd>' +
             '</dl>' +
             '</div>' +
             '<div class="group">' +
-            '<div class="title">' + _t('두번째 이미지') + '</div>' +
+            '<div class="title">' + t._htmlspecialchars(_t('두번째 이미지')) + '</div>' +
             '<dl class="line">' +
-            '<dt class="property-name"><label for="__ID__propertyImage3_width2">' + _t('폭') + '</label></dt>' +
+            '<dt class="property-name"><label for="__ID__propertyImage3_width2">' + t._htmlspecialchars(_t('폭')) + '</label></dt>' +
             '<dd><input type="text" class="input-text" id="__ID__propertyImage3_width2" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
             '</dl>' +
             '<dl class="line">' +
-            '<dt class="property-name"><label for="__ID__propertyImage3_alt2">' + _t('대체 텍스트') + '</label></dt>' +
+            '<dt class="property-name"><label for="__ID__propertyImage3_alt2">' + t._htmlspecialchars(_t('대체 텍스트')) + '</label></dt>' +
             '<dd><input type="text" class="input-text" id="__ID__propertyImage3_alt2" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
             '</dl>' +
             '<dl class="line">' +
-            '<dt class="property-name"><label for="__ID__propertyImage3_caption2">' + _t('자막') + '</label></dt>' +
+            '<dt class="property-name"><label for="__ID__propertyImage3_caption2">' + t._htmlspecialchars(_t('자막')) + '</label></dt>' +
             '<dd><textarea class="input-text" id="__ID__propertyImage3_caption2" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);"></textarea></dd>' +
             '</dl>' +
             '</div>' +
             '<div class="group">' +
-            '<div class="title">' + _t('세번째 이미지') + '</div>' +
+            '<div class="title">' + t._htmlspecialchars(_t('세번째 이미지')) + '</div>' +
             '<dl class="line">' +
-            '<dt class="property-name"><label for="__ID__propertyImage3_width3">' + _t('폭') + '</label></dt>' +
+            '<dt class="property-name"><label for="__ID__propertyImage3_width3">' + t._htmlspecialchars(_t('폭')) + '</label></dt>' +
             '<dd><input type="text" class="input-text" id="__ID__propertyImage3_width3" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
             '</dl>' +
             '<dl class="line">' +
-            '<dt class="property-name"><label for="__ID__propertyImage3_alt3">' + _t('대체 텍스트') + '</label></dt>' +
+            '<dt class="property-name"><label for="__ID__propertyImage3_alt3">' + t._htmlspecialchars(_t('대체 텍스트')) + '</label></dt>' +
             '<dd><input type="text" class="input-text" id="__ID__propertyImage3_alt3" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
             '</dl>' +
             '<dl class="line">' +
-            '<dt class="property-name"><label for="__ID__propertyImage3_caption3">' + _t('자막') + '</label></dt>' +
+            '<dt class="property-name"><label for="__ID__propertyImage3_caption3">' + t._htmlspecialchars(_t('자막')) + '</label></dt>' +
             '<dd><textarea class="input-text" id="__ID__propertyImage3_caption3" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);"></textarea></dd>' +
             '</dl>' +
             '</div>' +
@@ -1121,20 +1193,20 @@ tinymce.create('tinymce.Textcube.TTMLsupport', {
             '<div id="__ID__propertyObject" class="entry-editor-property" style="display: none;">' +
             '<div class="entry-editor-property-option">' +
             '<input type="checkbox" class="checkbox" id="__ID__propertyObject-fix-position" onclick="__EDITOR__.setPropertyPosition(1); return true;"' + (fixPosition ? ' checked="checked"' : '') + '/>' +
-            '<label for="__ID__propertyObject-fix-position">' + _t('위치 고정') + '</label>' +
+            '<label for="__ID__propertyObject-fix-position">' + t._htmlspecialchars(_t('위치 고정')) + '</label>' +
             '</div>' +
-            '<h4>' + _t('Object') + '</h4>' +
+            '<h4>' + t._htmlspecialchars(_t('Object')) + '</h4>' +
             '<div class="group">' +
             '<dl class="line">' +
-            '<dt class="property-name"><label for="__ID__propertyObject_width">' + _t('폭') + '</label></dt>' +
+            '<dt class="property-name"><label for="__ID__propertyObject_width">' + t._htmlspecialchars(_t('폭')) + '</label></dt>' +
             '<dd><input type="text" class="input-text" id="__ID__propertyObject_width" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
             '</dl>' +
             '<dl class="line">' +
-            '<dt class="property-name"><label for="__ID__propertyObject_height">' + _t('높이') + '</label></dt>' +
+            '<dt class="property-name"><label for="__ID__propertyObject_height">' + t._htmlspecialchars(_t('높이')) + '</label></dt>' +
             '<dd><input type="text" class="input-text" id="__ID__propertyObject_height" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
             '</dl>' +
             '<dl class="line">' +
-            '<dt class="property-name"><label for="__ID__propertyObject_chunk">' + _t('코드') + '</label></dt>' +
+            '<dt class="property-name"><label for="__ID__propertyObject_chunk">' + t._htmlspecialchars(_t('코드')) + '</label></dt>' +
             '<dd><textarea id="__ID__propertyObject_chunk" class="propertyObject_chunk" cols="30" rows="10" onkeyup="__EDITOR__.setProperty()"></textarea></dd>' +
             '</dl>' +
             '</div>' +
@@ -1145,16 +1217,16 @@ tinymce.create('tinymce.Textcube.TTMLsupport', {
             '<div id="__ID__propertyObject1" class="entry-editor-property" style="display: none;">' +
             '<div class="entry-editor-property-option">' +
             '<input type="checkbox" class="checkbox" id="__ID__propertyObject1-fix-position" onclick="__EDITOR__.setPropertyPosition(1); return true;"' + (fixPosition ? ' checked="checked"' : '') + '/>' +
-            '<label for="__ID__propertyObject1-fix-position">' + _t('위치 고정') + '</label>' +
+            '<label for="__ID__propertyObject1-fix-position">' + t._htmlspecialchars(_t('위치 고정')) + '</label>' +
             '</div>' +
-            '<h4>' + _t('Object 1') + '</h4>' +
+            '<h4>' + t._htmlspecialchars(_t('Object 1')) + '</h4>' +
             '<div class="group">' +
             '<dl class="line">' +
-            '<dt class="property-name"><label for="__ID__propertyObject1_caption1">' + _t('자막') + '</label></dt>' +
+            '<dt class="property-name"><label for="__ID__propertyObject1_caption1">' + t._htmlspecialchars(_t('자막')) + '</label></dt>' +
             '<dd><textarea class="input-text" id="__ID__propertyObject1_caption1" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);"></textarea></dd>' +
             '</dl>' +
             '<dl class="line">' +
-            '<dt class="property-name"><label for="__ID__propertyObject1_filename1">' + _t('파일명(수정불가)') + '</label></dt>' +
+            '<dt class="property-name"><label for="__ID__propertyObject1_filename1">' + t._htmlspecialchars(_t('파일명(수정불가)')) + '</label></dt>' +
             '<dd><input type="text" class="input-text" id="__ID__propertyObject1_filename1" readonly="readonly" /></dd>' +
             '</dl>' +
             '</div>' +
@@ -1165,28 +1237,28 @@ tinymce.create('tinymce.Textcube.TTMLsupport', {
             '<div id="__ID__propertyObject2" class="entry-editor-property" style="display: none;">' +
             '<div class="entry-editor-property-option">' +
             '<input type="checkbox" class="checkbox" id="__ID__propertyObject2-fix-position" onclick="__EDITOR__.setPropertyPosition(1); return true;"' + (fixPosition ? ' checked="checked"' : '') + '/>' +
-            '<label for="__ID__propertyObject2-fix-position">' + _t('위치 고정') + '</label>' +
+            '<label for="__ID__propertyObject2-fix-position">' + t._htmlspecialchars(_t('위치 고정')) + '</label>' +
             '</div>' +
-            '<h4>' + _t('Object') + '</h4>' +
+            '<h4>' + t._htmlspecialchars(_t('Object')) + '</h4>' +
             '<div class="group">' +
-            '<div class="title">' + _t('첫번째 오브젝트') + '</div>' +
+            '<div class="title">' + t._htmlspecialchars(_t('첫번째 오브젝트')) + '</div>' +
             '<dl class="line">' +
-            '<dt class="property-name"><label for="__ID__propertyObject2_caption1">' + _t('자막') + '</label></dt>' +
+            '<dt class="property-name"><label for="__ID__propertyObject2_caption1">' + t._htmlspecialchars(_t('자막')) + '</label></dt>' +
             '<dd><textarea class="input-text" id="__ID__propertyObject2_caption1" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);"></textarea></dd>' +
             '</dl>' +
             '<dl class="line">' +
-            '<dt class="property-name"><label for="__ID__propertyObject2_filename1">' + _t('파일명') + '</label></dt>' +
+            '<dt class="property-name"><label for="__ID__propertyObject2_filename1">' + t._htmlspecialchars(_t('파일명')) + '</label></dt>' +
             '<dd><input type="text" class="input-text" id="__ID__propertyObject2_filename1" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
             '</dl>' +
             '</div>' +
             '<div class="group">' +
-            '<div class="title">' + _t('두번째 오브젝트') + '</div>' +
+            '<div class="title">' + t._htmlspecialchars(_t('두번째 오브젝트')) + '</div>' +
             '<dl class="line">' +
-            '<dt class="property-name"><label for="__ID__propertyObject2_caption2">' + _t('자막') + '</label></dt>' +
+            '<dt class="property-name"><label for="__ID__propertyObject2_caption2">' + t._htmlspecialchars(_t('자막')) + '</label></dt>' +
             '<dd><textarea class="input-text" id="__ID__propertyObject2_caption2" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);"></textarea></dd>' +
             '</dl>' +
             '<dl class="line">' +
-            '<dt class="property-name"><label for="__ID__propertyObject2_filename2">' + _t('파일명') + '</label></dt>' +
+            '<dt class="property-name"><label for="__ID__propertyObject2_filename2">' + t._htmlspecialchars(_t('파일명')) + '</label></dt>' +
             '<dd><input type="text" class="input-text" id="__ID__propertyObject2_filename2" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
             '</dl>' +
             '</div>' +
@@ -1197,39 +1269,39 @@ tinymce.create('tinymce.Textcube.TTMLsupport', {
             '<div id="__ID__propertyObject3" class="entry-editor-property" style="display: none;">' +
             '<div class="entry-editor-property-option">' +
             '<input type="checkbox" class="checkbox" id="__ID__propertyObject3-fix-position" onclick="__EDITOR__.setPropertyPosition(1); return true;"' + (fixPosition ? ' checked="checked"' : '') + '/>' +
-            '<label for="__ID__propertyObject3-fix-position">' + _t('위치 고정') + '</label>' +
+            '<label for="__ID__propertyObject3-fix-position">' + t._htmlspecialchars(_t('위치 고정')) + '</label>' +
             '</div>' +
-            '<h4>' + _t('Object') + '</h4>' +
+            '<h4>' + t._htmlspecialchars(_t('Object')) + '</h4>' +
             '<div class="group">' +
-            '<div class="title">' + _t('첫번째 오브젝트') + '</div>' +
+            '<div class="title">' + t._htmlspecialchars(_t('첫번째 오브젝트')) + '</div>' +
             '<dl class="line">' +
-            '<dt class="property-name"><label for="__ID__propertyObject3_caption1">' + _t('자막') + '</label></dt>' +
+            '<dt class="property-name"><label for="__ID__propertyObject3_caption1">' + t._htmlspecialchars(_t('자막')) + '</label></dt>' +
             '<dd><textarea class="input-text" id="__ID__propertyObject3_caption1" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);"></textarea></dd>' +
             '</dl>' +
             '<dl class="line">' +
-            '<dt class="property-name"><label for="__ID__propertyObject3_filename1">' + _t('파일명') + '</label></dt>' +
+            '<dt class="property-name"><label for="__ID__propertyObject3_filename1">' + t._htmlspecialchars(_t('파일명')) + '</label></dt>' +
             '<dd><input type="text" class="input-text" id="__ID__propertyObject3_filename1" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
             '</dl>' +
             '</div>' +
             '<div class="group">' +
-            '<div class="title">' + _t('두번째 오브젝트') + '</div>' +
+            '<div class="title">' + t._htmlspecialchars(_t('두번째 오브젝트')) + '</div>' +
             '<dl class="line">' +
-            '<dt class="property-name"><label for="__ID__propertyObject3_caption2">' + _t('자막') + '</label></dt>' +
+            '<dt class="property-name"><label for="__ID__propertyObject3_caption2">' + t._htmlspecialchars(_t('자막')) + '</label></dt>' +
             '<dd><textarea class="input-text" id="__ID__propertyObject3_caption2" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);"></textarea></dd>' +
             '</dl>' +
             '<dl class="line">' +
-            '<dt class="property-name"><label for="__ID__propertyObject3_filename2">' + _t('파일명') + '</label></dt>' +
+            '<dt class="property-name"><label for="__ID__propertyObject3_filename2">' + t._htmlspecialchars(_t('파일명')) + '</label></dt>' +
             '<dd><input type="text" class="input-text" id="__ID__propertyObject3_filename2" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
             '</dl>' +
             '</div>' +
             '<div class="group">' +
-            '<div class="title">' + _t('세번째 오브젝트') + '</div>' +
+            '<div class="title">' + t._htmlspecialchars(_t('세번째 오브젝트')) + '</div>' +
             '<dl class="line">' +
-            '<dt class="property-name"><label for="__ID__propertyObject3_caption3">' + _t('자막') + '</label></dt>' +
+            '<dt class="property-name"><label for="__ID__propertyObject3_caption3">' + t._htmlspecialchars(_t('자막')) + '</label></dt>' +
             '<dd><textarea class="input-text" id="__ID__propertyObject3_caption3" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);"></textarea></dd>' +
             '</dl>' +
             '<dl class="line">' +
-            '<dt class="property-name"><label for="__ID__propertyObject3_filename3">' + _t('파일명') + '</label></dt>' +
+            '<dt class="property-name"><label for="__ID__propertyObject3_filename3">' + t._htmlspecialchars(_t('파일명')) + '</label></dt>' +
             '<dd><input type="text" class="input-text" id="__ID__propertyObject3_filename3" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
             '</dl>' +
             '</div>' +
@@ -1240,81 +1312,81 @@ tinymce.create('tinymce.Textcube.TTMLsupport', {
             '<div id="__ID__propertyiMazing" class="entry-editor-property" style="display: none;">' +
             '<div class="entry-editor-property-option">' +
             '<input type="checkbox" class="checkbox" id="__ID__propertyiMazing-fix-position" onclick="__EDITOR__.setPropertyPosition(1); return true;"' + (fixPosition ? ' checked="checked"' : '') + '/>' +
-            '<label for="__ID__propertyiMazing-fix-position">' + _t('위치 고정') + '</label>' +
+            '<label for="__ID__propertyiMazing-fix-position">' + t._htmlspecialchars(_t('위치 고정')) + '</label>' +
             '</div>' +
-            '<h4>' + _t('iMazing') + '</h4>' +
+            '<h4>' + t._htmlspecialchars(_t('iMazing')) + '</h4>' +
             '<div class="group">' +
-            '<div class="title">' + _t('설정') + '</div>' +
+            '<div class="title">' + t._htmlspecialchars(_t('설정')) + '</div>' +
             '<dl class="line">' +
-            '<dt class="property-name"><label for="__ID__propertyiMazing_width">' + _t('폭') + '</label></dt>' +
+            '<dt class="property-name"><label for="__ID__propertyiMazing_width">' + t._htmlspecialchars(_t('폭')) + '</label></dt>' +
             '<dd><input type="text" class="input-text" id="__ID__propertyiMazing_width" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
             '</dl>' +
             '<dl class="line">' +
-            '<dt class="property-name"><label for="__ID__propertyiMazing_height">' + _t('높이') + '</label></dt>' +
+            '<dt class="property-name"><label for="__ID__propertyiMazing_height">' + t._htmlspecialchars(_t('높이')) + '</label></dt>' +
             '<dd><input type="text" class="input-text" id="__ID__propertyiMazing_height" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
             '</dl>' +
             '<dl class="line">' +
-            '<dt class="property-name"><label for="__ID__propertyiMazing_frame">' + _t('테두리') + '</label></dt>' +
+            '<dt class="property-name"><label for="__ID__propertyiMazing_frame">' + t._htmlspecialchars(_t('테두리')) + '</label></dt>' +
             '<dd>' +
             '<select id="__ID__propertyiMazing_frame" onchange="__EDITOR__.setProperty()">' +
-            '<option value="net_imazing_frame_none">' + _t('테두리 없음') + '</option>' +
+            '<option value="net_imazing_frame_none">' + t._htmlspecialchars(_t('테두리 없음')) + '</option>' +
             '</select>' +
             '</dd>' +
             '</dl>' +
             '<dl class="line">' +
-            '<dt class="property-name"><label for="__ID__propertyiMazing_tran">' + _t('장면전환효과') + '</label></dt>' +
+            '<dt class="property-name"><label for="__ID__propertyiMazing_tran">' + t._htmlspecialchars(_t('장면전환효과')) + '</label></dt>' +
             '<dd>' +
             '<select id="__ID__propertyiMazing_tran" onchange="__EDITOR__.setProperty()">' +
-            '<option value="net_imazing_show_window_transition_none">' + _t('효과없음') + '</option>' +
-            '<option value="net_imazing_show_window_transition_alpha">' + _t('투명전환') + '</option>' +
-            '<option value="net_imazing_show_window_transition_contrast">' + _t('플래쉬') + '</option>' +
-            '<option value="net_imazing_show_window_transition_sliding">' + _t('슬라이딩') + '</option>' +
+            '<option value="net_imazing_show_window_transition_none">' + t._htmlspecialchars(_t('효과없음')) + '</option>' +
+            '<option value="net_imazing_show_window_transition_alpha">' + t._htmlspecialchars(_t('투명전환')) + '</option>' +
+            '<option value="net_imazing_show_window_transition_contrast">' + t._htmlspecialchars(_t('플래쉬')) + '</option>' +
+            '<option value="net_imazing_show_window_transition_sliding">' + t._htmlspecialchars(_t('슬라이딩')) + '</option>' +
             '</select>' +
             '</dd>' +
             '</dl>' +
             '<dl class="line">' +
-            '<dt class="property-name"><label for="__ID__propertyiMazing_nav">' + _t('내비게이션') + '</label></dt>' +
+            '<dt class="property-name"><label for="__ID__propertyiMazing_nav">' + t._htmlspecialchars(_t('내비게이션')) + '</label></dt>' +
             '<dd>' +
             '<select id="__ID__propertyiMazing_nav" onchange="__EDITOR__.setProperty()">' +
-            '<option value="net_imazing_show_window_navigation_none">' + _t('기본') + '</option>' +
-            '<option value="net_imazing_show_window_navigation_simple">' + _t('심플') + '</option>' +
-            '<option value="net_imazing_show_window_navigation_sidebar">' + _t('사이드바') + '</option>' +
+            '<option value="net_imazing_show_window_navigation_none">' + t._htmlspecialchars(_t('기본')) + '</option>' +
+            '<option value="net_imazing_show_window_navigation_simple">' + t._htmlspecialchars(_t('심플')) + '</option>' +
+            '<option value="net_imazing_show_window_navigation_sidebar">' + t._htmlspecialchars(_t('사이드바')) + '</option>' +
             '</select>' +
             '</dd>' +
             '</dl>' +
             '<dl class="line">' +
-            '<dt class="property-name">' + _t('슬라이드쇼 간격') + '</dt>' +
+            '<dt class="property-name">' + t._htmlspecialchars(_t('슬라이드쇼 간격')) + '</dt>' +
             '<dd><input type="text" class="input-text" id="__ID__propertyiMazing_sshow" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
             '</dl>' +
             '<dl class="line">' +
-            '<dt class="property-name">' + _t('화면당 이미지 수') + '</dt>' +
+            '<dt class="property-name">' + t._htmlspecialchars(_t('화면당 이미지 수')) + '</dt>' +
             '<dd><input type="text" class="input-text" id="__ID__propertyiMazing_page" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
             '</dl>' +
             '<dl class="line">' +
-            '<dt class="property-name"><label for="__ID__propertyiMazing_align">' + _t('정렬방법') + '</label></dt>' +
+            '<dt class="property-name"><label for="__ID__propertyiMazing_align">' + t._htmlspecialchars(_t('정렬방법')) + '</label></dt>' +
             '<dd>' +
             '<select id="__ID__propertyiMazing_align" onchange="__EDITOR__.setProperty()">' +
-            '<option value="h">' + _t('가로') + '</option>' +
-            '<option value="v">' + _t('세로') + '</option>' +
+            '<option value="h">' + t._htmlspecialchars(_t('가로')) + '</option>' +
+            '<option value="v">' + t._htmlspecialchars(_t('세로')) + '</option>' +
             '</select>' +
             '</dd>' +
             '</dl>' +
             '<dl class="line">' +
-            '<dt class="property-name"><label for="__ID__propertyiMazing_caption">' + _t('자막') + '</label></dt>' +
+            '<dt class="property-name"><label for="__ID__propertyiMazing_caption">' + t._htmlspecialchars(_t('자막')) + '</label></dt>' +
             '<dd><textarea class="input-text" id="__ID__propertyiMazing_caption" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);"></textarea></dd>' +
             '</dl>' +
             '</div>' +
             '<div class="group">' +
-            '<div class="title">' + _t('파일') + '</div>' +
+            '<div class="title">' + t._htmlspecialchars(_t('파일')) + '</div>' +
             '<dl class="file-list-line line">' +
             '<dd>' +
             '<select id="__ID__propertyiMazing_list" class="file-list" size="10" onchange="__EDITOR__.listChanged(\'propertyiMazing_list\')" onclick="__EDITOR__.listChanged(\'propertyiMazing_list\')"></select>' +
             '</dd>' +
             '</dl>' +
             '<div class="button-box">' +
-            '<span class="up-button button" onclick="__EDITOR__.moveUpFileList(\'__ID__propertyiMazing_list\'); return false" title="' + _t('선택한 항목을 위로 이동합니다.') + '"><span class="text">' + _t('위로') + '</span></span>' +
+            '<span class="up-button button" onclick="__EDITOR__.moveUpFileList(\'__ID__propertyiMazing_list\'); return false" title="' + t._htmlspecialchars(_t('선택한 항목을 위로 이동합니다.')) + '"><span class="text">' + t._htmlspecialchars(_t('위로')) + '</span></span>' +
             '<span class="divider"> | </span>' +
-            '<span class="dn-button button" onclick="__EDITOR__.moveDownFileList(\'__ID__propertyiMazing_list\'); return false" title="' + _t('선택한 항목을 아래로 이동합니다.') + '"><span class="text">' + _t('아래로') + '</span></span>' +
+            '<span class="dn-button button" onclick="__EDITOR__.moveDownFileList(\'__ID__propertyiMazing_list\'); return false" title="' + t._htmlspecialchars(_t('선택한 항목을 아래로 이동합니다.')) + '"><span class="text">' + t._htmlspecialchars(_t('아래로')) + '</span></span>' +
             '</div>' +
             '<div id="__ID__propertyiMazing_preview" class="preview-box" style="display: none;"></div>' +
             '</div>' +
@@ -1325,35 +1397,35 @@ tinymce.create('tinymce.Textcube.TTMLsupport', {
             '<div id="__ID__propertyGallery" class="entry-editor-property" style="display: none;">' +
             '<div class="entry-editor-property-option">' +
             '<input type="checkbox" class="checkbox" id="__ID__propertyGallery-fix-position" onclick="__EDITOR__.setPropertyPosition(1); return true;"' + (fixPosition ? ' checked="checked"' : '') + '/>' +
-            '<label for="__ID__propertyGallery-fix-position">' + _t('위치 고정') + '</label>' +
+            '<label for="__ID__propertyGallery-fix-position">' + t._htmlspecialchars(_t('위치 고정')) + '</label>' +
             '</div>' +
-            '<h4>' + _t('Gallery') + '</h4>' +
+            '<h4>' + t._htmlspecialchars(_t('Gallery')) + '</h4>' +
             '<div class="group">' +
-            '<div class="title">' + _t('설정') + '</div>' +
+            '<div class="title">' + t._htmlspecialchars(_t('설정')) + '</div>' +
             '<dl class="line">' +
-            '<dt class="property-name"><label for="__ID__propertyGallery_width">' + _t('최대너비') + '</label></dt>' +
+            '<dt class="property-name"><label for="__ID__propertyGallery_width">' + t._htmlspecialchars(_t('최대너비')) + '</label></dt>' +
             '<dd><input type="text" class="input-text" id="__ID__propertyGallery_width" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
             '</dl>' +
             '<dl class="line">' +
-            '<dt class="property-name"><label for="__ID__propertyGallery_height">' + _t('최대높이') + '</label></dt>' +
+            '<dt class="property-name"><label for="__ID__propertyGallery_height">' + t._htmlspecialchars(_t('최대높이')) + '</label></dt>' +
             '<dd><input type="text" class="input-text" id="__ID__propertyGallery_height" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
             '</dl>' +
             '<dl id="__ID__propertyGallery_captionLine" class="line" style="display: none;">' +
-            '<dt class="property-name"><label for="__ID__propertyGallery_caption">' + _t('자막') + '</label></dt>' +
+            '<dt class="property-name"><label for="__ID__propertyGallery_caption">' + t._htmlspecialchars(_t('자막')) + '</label></dt>' +
             '<dd><textarea class="input-text" id="__ID__propertyGallery_caption" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);"></textarea></dd>' +
             '</dl>' +
             '</div>' +
             '<div class="group">' +
-            '<div class="title">' + _t('파일') + '</div>' +
+            '<div class="title">' + t._htmlspecialchars(_t('파일')) + '</div>' +
             '<dl class="file-list-line line">' +
             '<dd>' +
             '<select id="__ID__propertyGallery_list" class="file-list" size="10" onchange="__EDITOR__.listChanged(\'propertyGallery_list\')" onclick="__EDITOR__.listChanged(\'propertyGallery_list\'); return false"></select>' +
             '</dd>' +
             '</dl>' +
             '<div class="button-box">' +
-            '<span class="up-button button" onclick="__EDITOR__.moveUpFileList(\'__ID__propertyGallery_list\')" title="' + _t('선택한 항목을 위로 이동합니다.') + '"><span class="text">' + _t('위로') + '</span></span>' +
+            '<span class="up-button button" onclick="__EDITOR__.moveUpFileList(\'__ID__propertyGallery_list\')" title="' + t._htmlspecialchars(_t('선택한 항목을 위로 이동합니다.')) + '"><span class="text">' + t._htmlspecialchars(_t('위로')) + '</span></span>' +
             '<span class="divider"> | </span>' +
-            '<span class="dn-button button" onclick="__EDITOR__.moveDownFileList(\'__ID__propertyGallery_list\')" title="' + _t('선택한 항목을 아래로 이동합니다.') + '"><span class="text">' + _t('아래로') + '</span></span>' +
+            '<span class="dn-button button" onclick="__EDITOR__.moveDownFileList(\'__ID__propertyGallery_list\')" title="' + t._htmlspecialchars(_t('선택한 항목을 아래로 이동합니다.')) + '"><span class="text">' + t._htmlspecialchars(_t('아래로')) + '</span></span>' +
             '</div>' +
             '<div id="__ID__propertyGallery_preview" class="preview-box" style="display: none;"></div>' +
             '</div>' +
@@ -1364,32 +1436,32 @@ tinymce.create('tinymce.Textcube.TTMLsupport', {
             '<div id="__ID__propertyJukebox" class="entry-editor-property" style="display: none;">' +
             '<div class="entry-editor-property-option">' +
             '<input type="checkbox" class="checkbox" id="__ID__propertyJukebox-fix-position" onclick="__EDITOR__.setPropertyPosition(1); return true;"' + (fixPosition ? ' checked="checked"' : '') + '/>' +
-            '<label for="__ID__propertyJukebox-fix-position">' + _t('위치 고정') + '</label>' +
+            '<label for="__ID__propertyJukebox-fix-position">' + t._htmlspecialchars(_t('위치 고정')) + '</label>' +
             '</div>' +
-            '<h4>' + _t('Jukebox') + '</h4>' +
+            '<h4>' + t._htmlspecialchars(_t('Jukebox')) + '</h4>' +
             '<div class="group">' +
             '<dl class="line">' +
-            '<dt class="property-name"><label for="__ID__propertyJukebox_title">' + _t('제목') + '</label></dt>' +
+            '<dt class="property-name"><label for="__ID__propertyJukebox_title">' + t._htmlspecialchars(_t('제목')) + '</label></dt>' +
             '<dd><input type="text" class="input-text" id="__ID__propertyJukebox_title" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
             '</dl>' +
             '<dl class="line">' +
-            '<dd><input type="checkbox" id="__ID__propertyJukebox_autoplay" onclick="__EDITOR__.setProperty()" /> <label for="__ID__propertyJukebox_autoplay">' + _t('자동재생') + '</label></dd>' +
+            '<dd><input type="checkbox" id="__ID__propertyJukebox_autoplay" onclick="__EDITOR__.setProperty()" /> <label for="__ID__propertyJukebox_autoplay">' + t._htmlspecialchars(_t('자동재생')) + '</label></dd>' +
             '</dl>' +
             '<dl class="line">' +
-            '<dd><input type="checkbox" id="__ID__propertyJukebox_visibility" onclick="__EDITOR__.setProperty()" /> <label for="__ID__propertyJukebox_visibility">' + _t('플레이어 보이기') + '</label></dd>' +
+            '<dd><input type="checkbox" id="__ID__propertyJukebox_visibility" onclick="__EDITOR__.setProperty()" /> <label for="__ID__propertyJukebox_visibility">' + t._htmlspecialchars(_t('플레이어 보이기')) + '</label></dd>' +
             '</dl>' +
             '</div>' +
             '<div class="group">' +
-            '<div class="title">' + _t('파일') + '</div>' +
+            '<div class="title">' + t._htmlspecialchars(_t('파일')) + '</div>' +
             '<dl class="file-list-line line">' +
             '<dd>' +
             '<select id="__ID__propertyJukebox_list" class="file-list" size="10" onchange="__EDITOR__.listChanged(\'propertyJukebox_list\')" onclick="__EDITOR__.listChanged(\'propertyJukebox_list\')"></select>' +
             '</dd>' +
             '</dl>' +
             '<div class="button-box">' +
-            '<span class="up-button button" onclick="__EDITOR__.moveUpFileList(\'__ID__propertyJukebox_list\')" title="' + _t('선택한 항목을 위로 이동합니다.') + '"><span class="text">' + _t('위로') + '</span></span>' +
+            '<span class="up-button button" onclick="__EDITOR__.moveUpFileList(\'__ID__propertyJukebox_list\')" title="' + t._htmlspecialchars(_t('선택한 항목을 위로 이동합니다.')) + '"><span class="text">' + t._htmlspecialchars(_t('위로')) + '</span></span>' +
             '<span class="divider"> | </span>' +
-            '<span class="dn-button button" onclick="__EDITOR__.moveDownFileList(\'__ID__propertyJukebox_list\')" title="' + _t('선택한 항목을 아래로 이동합니다.') + '"><span class="text">' + _t('아래로') + '</span></span>' +
+            '<span class="dn-button button" onclick="__EDITOR__.moveDownFileList(\'__ID__propertyJukebox_list\')" title="' + t._htmlspecialchars(_t('선택한 항목을 아래로 이동합니다.')) + '"><span class="text">' + t._htmlspecialchars(_t('아래로')) + '</span></span>' +
             '</div>' +
             '</div>' +
             '</div>';
@@ -1399,16 +1471,16 @@ tinymce.create('tinymce.Textcube.TTMLsupport', {
             '<div id="__ID__propertyEmbed" class="entry-editor-property" style="display: none;">' +
             '<div class="entry-editor-property-option">' +
             '<input type="checkbox" class="checkbox" id="__ID__propertyEmbed-fix-position" onclick="__EDITOR__.setPropertyPosition(1); return true;"' + (fixPosition ? ' checked="checked"' : '') + '/>' +
-            '<label for="__ID__propertyEmbed-fix-position">' + _t('위치 고정') + '</label>' +
+            '<label for="__ID__propertyEmbed-fix-position">' + t._htmlspecialchars(_t('위치 고정')) + '</label>' +
             '</div>' +
-            '<h4>' + _t('Embed') + '</h4>' +
+            '<h4>' + t._htmlspecialchars(_t('Embed')) + '</h4>' +
             '<div class="group">' +
             '<dl class="line">' +
-            '<dt class="property-name"><label for="__ID__propertyEmbed_width">' + _t('폭') + '</label></dt>' +
+            '<dt class="property-name"><label for="__ID__propertyEmbed_width">' + t._htmlspecialchars(_t('폭')) + '</label></dt>' +
             '<dd><input type="text" class="input-text" id="__ID__propertyEmbed_width" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
             '</dl>' +
             '<dl class="line">' +
-            '<dt class="property-name"><label for="__ID__propertyEmbed_height">' + _t('높이') + '</label></dt>' +
+            '<dt class="property-name"><label for="__ID__propertyEmbed_height">' + t._htmlspecialchars(_t('높이')) + '</label></dt>' +
             '<dd><input type="text" class="input-text" id="__ID__propertyEmbed_height" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
             '</dl>' +
             '<dl class="line">' +
@@ -1423,16 +1495,16 @@ tinymce.create('tinymce.Textcube.TTMLsupport', {
             '<div id="__ID__propertyFlash" class="entry-editor-property" style="display: none;">' +
             '<div class="entry-editor-property-option">' +
             '<input type="checkbox" class="checkbox" id="__ID__propertyFlash-fix-position" onclick="__EDITOR__.setPropertyPosition(1); return true;"' + (fixPosition ? ' checked="checked"' : '') + '/>' +
-            '<label for="__ID__propertyFlash-fix-position">' + _t('위치 고정') + '</label>' +
+            '<label for="__ID__propertyFlash-fix-position">' + t._htmlspecialchars(_t('위치 고정')) + '</label>' +
             '</div>' +
-            '<h4>' + _t('Embed') + '</h4>' +
+            '<h4>' + t._htmlspecialchars(_t('Embed')) + '</h4>' +
             '<div class="group">' +
             '<dl class="line">' +
-            '<dt class="property-name"><label for="__ID__propertyFlash_width">' + _t('폭') + '</label></dt>' +
+            '<dt class="property-name"><label for="__ID__propertyFlash_width">' + t._htmlspecialchars(_t('폭')) + '</label></dt>' +
             '<dd><input type="text" class="input-text" id="__ID__propertyFlash_width" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
             '</dl>' +
             '<dl class="line">' +
-            '<dt class="property-name"><label for="__ID__propertyFlash_height">' + _t('높이') + '</label></dt>' +
+            '<dt class="property-name"><label for="__ID__propertyFlash_height">' + t._htmlspecialchars(_t('높이')) + '</label></dt>' +
             '<dd><input type="text" class="input-text" id="__ID__propertyFlash_height" onkeyup="__EDITOR__.setProperty()" onkeypress="return preventEnter(event);" /></dd>' +
             '</dl>' +
             '<dl class="line">' +
@@ -1447,9 +1519,9 @@ tinymce.create('tinymce.Textcube.TTMLsupport', {
             '<div id="__ID__propertyMoreLess" class="entry-editor-property" style="display: none;">' +
             '<div class="entry-editor-property-option">' +
             '<input type="checkbox" class="checkbox" id="__ID__propertyMoreLess-fix-position" onclick="__EDITOR__.setPropertyPosition(1); return true;"' + (fixPosition ? ' checked="checked"' : '') + '/>' +
-            '<label for="__ID__propertyMoreLess-fix-position">' + _t('위치 고정') + '</label>' +
+            '<label for="__ID__propertyMoreLess-fix-position">' + t._htmlspecialchars(_t('위치 고정')) + '</label>' +
             '</div>' +
-            '<h4>' + _t('More/Less') + '</h4>' +
+            '<h4>' + t._htmlspecialchars(_t('More/Less')) + '</h4>' +
             '<div class="group">' +
             '<dl class="line">' +
             '<dt class="property-name"><label for="__ID__propertyMoreLess_more">More Text</label></dt>' +
@@ -1510,7 +1582,13 @@ tinymce.create('tinymce.Textcube.TTMLsupport', {
             if (list.selectedIndex > -1) {
                 var values = list[list.selectedIndex].value.split("|");
                 getObject(t.id + "propertyGallery_preview").style.display = "block";
-                getObject(t.id + "propertyGallery_preview").innerHTML = '<img src="' + t.propertyFilePath + values[0] + '" width="198" />';
+                // Textcube-NG: 미리보기 이미지는 DOM 으로 만든다 — 본문에서 온 파일 이름(values[0])을 HTML 로 해석하지 않는다(r3-15, R-293)
+                var preview = getObject(t.id + "propertyGallery_preview");
+                var previewImage = document.createElement("img");
+                previewImage.src = t.propertyFilePath + values[0];
+                previewImage.width = 198;
+                preview.innerHTML = "";
+                preview.appendChild(previewImage);
                 getObject(t.id + "propertyGallery_captionLine").style.display = "block";
                 getObject(t.id + "propertyGallery_caption").value = values[1];
             }
@@ -1520,7 +1598,13 @@ tinymce.create('tinymce.Textcube.TTMLsupport', {
             if (list.selectedIndex > -1) {
                 var values = list[list.selectedIndex].value.split("|");
                 getObject(t.id + "propertyiMazing_preview").style.display = "block";
-                getObject(t.id + "propertyiMazing_preview").innerHTML = '<img src="' + t.propertyFilePath + values[0] + '" width="198" />';
+                // Textcube-NG: 미리보기 이미지는 DOM 으로 만든다 — 본문에서 온 파일 이름(values[0])을 HTML 로 해석하지 않는다(r3-15, R-293)
+                var preview = getObject(t.id + "propertyiMazing_preview");
+                var previewImage = document.createElement("img");
+                previewImage.src = t.propertyFilePath + values[0];
+                previewImage.width = 198;
+                preview.innerHTML = "";
+                preview.appendChild(previewImage);
             }
         }
         else if (id == "propertyJukebox_list") {
@@ -1682,16 +1766,13 @@ tinymce.create('tinymce.Textcube.TTMLsupport', {
                     var ext = new RegExp("\\.(\\w+)(?:$|\\?)").exec(url);
                     ext = (ext && ext.length == 2) ? ext[1].toLowerCase() : "";
                     var code = "";
-                    if (ext == "swf" || ext == "") {
-                        code = '<object classid="clsid:d27cdb6e-ae6d-11cf-96b8-444553540000" codebase="http://download.macromedia.com/pub/shockwave/cabs/flash/swflash.cab#version=7,0,0,0" width="400" height="300">' +
-                        '<param name="wmode" value="transparent"/>' +
-                        '<param name="movie" value="' + url + '"/>' +
-                        '<!--[if !IE]> <-->' +
-                        '<object type="application/x-shockwave-flash" transparent="yes" data="' + url + '" width="400" height="300">' +
-                        '<p><a href="' + url + '">[Flash] ' + url + '</a></p>' +
-                        '<\/object>' +
-                        '<!--> <![endif]-->' +
-                        '<\/object>';
+                    // Textcube-NG: IE 전용 ActiveX(clsid)·Flash object 를 HTML5 audio·video 로 바꿈(r3-31 R-429 B). swf·확장자 없는 주소는 넣지 않고 알 수 없는 형식으로 알린다. 주소는 escape 한다
+                    var _u = url.replace(/[&<>"']/g, function(c) { return {"&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;"}[c]; });
+                    // Textcube-NG: r3-32 objectSerialize 표지(__QUOT__·__LT__·__GT__)가 든 주소는 되돌릴 때 따옴표·꺾쇠로 바뀌어 속성이 주입되므로 넣지 않는다
+                    // Textcube-NG: 주소가 덜 끝난 표지(__QUOT·__QUOT_)로 끝나도 되돌릴 때 뒤에 붙는 표지와 이어져 src 가 잘리므로 함께 거부한다 (r3-38 R-535)
+                    if (ext == "swf" || ext == "" || new RegExp("__(?:QUOT|LT|GT)__|__QUOT_?$").test(url)) {
+                        alert(typeof s_unknownFileType != "undefined" ? s_unknownFileType : (typeof _t == "function" ? _t('알 수 없는 형식의 파일명입니다.') : '알 수 없는 형식의 파일명입니다.'));
+                        return;
                     }
                     else {
                         var type = null;
@@ -1729,6 +1810,13 @@ tinymce.create('tinymce.Textcube.TTMLsupport', {
                             case "wmv":
                                 type = "video/x-ms-wmv";
                                 break;
+                            // Textcube-NG: r3-32 R-522 mp4·mkv 분기(원본 TTMLsupport 에 없음). FM_Modern editor.js InsertObject 와 같은 MIME
+                            case "mp4":
+                                type = "video/mp4";
+                                break;
+                            case "mkv":
+                                type = "video/x-matroska";
+                                break;
                             case "wm":
                                 type = "video/x-ms-wm";
                                 break;
@@ -1737,33 +1825,14 @@ tinymce.create('tinymce.Textcube.TTMLsupport', {
                                 break;
                         }
                         if (type === null) {
-                            alert(s_unknownFileType);
+                            alert(typeof s_unknownFileType != "undefined" ? s_unknownFileType : (typeof _t == "function" ? _t('알 수 없는 형식의 파일명입니다.') : '알 수 없는 형식의 파일명입니다.'));
                             return;
                         }
-                        else if (type == "video/quicktime") {
-                            code = '<object classid="clsid:02BF25D5-8C17-4B23-BC80-D3488ABDDC6B" codebase="http://www.apple.com/qtactivex/qtplugin.cab" width="320" height="260">' +
-                            '<param name="src" value="' + url + '"/>' +
-                            '<param name="controller" value="true"/>' +
-                            '<param name="autoplay" value="false"/>' +
-                            '<!--[if !IE]>-->' +
-                            '<object type="video/quicktime" data="' + url + '" width="320" height="260">' +
-                            '<param name="autoplay" value="false"/>' +
-                            '<param name="controller" value="true"/>' +
-                            '</object>' +
-                            '<!--<![endif]-->' +
-                            '</object>';
+                        else if (type.indexOf("audio/") == 0) {
+                            code = '<audio controls src="' + _u + '" style="width:320px;height:40px"></audio>';
                         }
                         else {
-                            code = '<object classid="clsid:22D6F312-B0F6-11D0-94AB-0080C74C7E95">' +
-                            '<param name="Filename" value="' + url + '"/>' +
-                            '<param name="AutoStart" value="false"/>' +
-                            '<!--[if !IE]> <-->' +
-                            '<object type="' + type + '" data="' + url + '" width="320" height="' + (type == "audio/mpeg" ? "20" : "240") + '">' +
-                            '<param name="AutoStart" value="0"/>' +
-                            '<embed pluginspage="http://www.microsoft.com/Windows/Downloads/Contents/Products/MediaPlayer/" src="' + url + '" width="320" height="' + (type == "audio/mpeg" ? "20" : "240") + '" type="application/x-mplayer2" autostart="0"></embed>' +
-                            '</object>' +
-                            '<!--> <![endif]-->' +
-                            '</object>';
+                            code = '<video controls src="' + _u + '" width="320" height="240"></video>';
                         }
                     }
                 }
@@ -1791,16 +1860,16 @@ tinymce.create('tinymce.Textcube.TTMLsupport', {
             case "ToggleTextarea":
                 if (t.editorMode == 'wysiwyg') {
                     editor.save();
-                    jQuery(".mce-edit-area").hide();
-                    jQuery(".mce-statusbar").hide();
+                    jQuery(".tox-edit-area").hide(); // PHP port(Textcube-NG): 5.0 이후 UI 클래스 tox-*
+                    jQuery(".tox-statusbar").hide();
                     document.getElementById('editWindow').style.display = "block";
                     document.getElementById('editWindow').style.width = "100%";
                     t.editorMode = 'raw';
                 } else {
                     editor.load();
                     document.getElementById('editWindow').style.display = "none";
-                    jQuery(".mce-edit-area").show();
-                    jQuery(".mce-statusbar").show();
+                    jQuery(".tox-edit-area").show();
+                    jQuery(".tox-statusbar").show();
                     t.editorMode = 'wysiwyg';
                 }
                 break;
@@ -1816,7 +1885,11 @@ tinymce.create('tinymce.Textcube.TTMLsupport', {
             version: "2.5.0"
         };
     }
-});
+};
 
 // Register plugin
-tinymce.PluginManager.add('TTMLsupport', tinymce.Textcube.TTMLsupport);
+// PHP port(Textcube-NG): 6.x 이후 플러그인 함수의 반환값이 editor.plugins.TTMLsupport 가 됨(new 로 만들지 않음, 6.8.6 CHANGELOG 665 #TINY-8256).
+// 코어(initPlugin)가 돌려받은 객체의 init(editor, url)을 한 번 부르므로 여기서는 부르지 않는다(R-173)
+tinymce.PluginManager.add('TTMLsupport', function (editor, url) {
+    return Object.create(TTMLsupportPrototype);
+});

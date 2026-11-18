@@ -2,6 +2,14 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 
 function printHtmlHeader($title = '') {
 ?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
@@ -22,6 +30,7 @@ function printHtmlFooter() {
 }
 
 function dress($tag, $value, & $contents, $useCache = false, $forcePatch = false) {
+	$value = $value ?? '';
 	global $__gDressTags;
 	if($useCache == true) {
 		if(strpos($tag, 'sidebar_') !== false ||
@@ -68,26 +77,40 @@ function getScriptsOnHead($paging, $entryIds = null) {
 	$context = Model_Context::getInstance();
 	ob_start();
 ?>
-	<script type="text/javascript" src="<?php echo (doesHaveOwnership() ? $context->getProperty('service.path').'/resources' : $context->getProperty('service.resourcepath'));?>/script/jquery/jquery-<?php echo JQUERY_VERSION;?>.js"></script>
-	<script type="text/javascript" src="<?php echo (doesHaveOwnership() ? $context->getProperty('service.path').'/resources' : $context->getProperty('service.resourcepath'));?>/script/jquery/jquery.bpopup-<?php echo JQUERY_BPOPUP_VERSION;?>.js"></script>
+<?php /* Textcube-NG: 이식본에서 고친 스크립트(EAF4.js·common3.js·gallery.js·jQuery, v3.147·v3.207)는 externalresources 설정과 관계없이 이 서버의 /resources 에서 읽는다 — 외부 리소스 주소의 원본 스크립트에는 CSRF 토큰 패치가 없다(r3-3) */ ?>
+	<script type="text/javascript" src="<?php echo $context->getProperty('service.path').'/resources';?>/script/jquery/jquery-<?php echo JQUERY_VERSION;?>.js"></script>
+	<script type="text/javascript" src="<?php echo $context->getProperty('service.path').'/resources';?>/script/jquery/jquery.bpopup-<?php echo JQUERY_BPOPUP_VERSION;?>.js?v=<?php echo filemtime(ROOT . '/resources/script/jquery/jquery.bpopup-' . JQUERY_BPOPUP_VERSION . '.js');?>"></script>
 	<script type="text/javascript">jQuery.noConflict();</script>
 
-	<script type="text/javascript" src="<?php echo $context->getProperty('service.resourcepath');?>/script/EAF4.js"></script>
-	<script type="text/javascript" src="<?php echo $context->getProperty('service.resourcepath');?>/script/common3.js"></script>
-	<script type="text/javascript" src="<?php echo $context->getProperty('service.resourcepath');?>/script/gallery.js" ></script>
+	<script type="text/javascript" src="<?php echo $context->getProperty('service.path');?>/resources/script/EAF4.js?v=<?php echo filemtime(ROOT . '/resources/script/EAF4.js');?>"></script>
+	<script type="text/javascript" src="<?php echo $context->getProperty('service.path');?>/resources/script/common3.js?v=<?php echo filemtime(ROOT . '/resources/script/common3.js');?>"></script>
+	<script type="text/javascript" src="<?php echo $context->getProperty('service.path');?>/resources/script/gallery.js" ></script>
 	<script type="text/javascript">
 	//<![CDATA[
-		var servicePath = "<?php echo $context->getProperty('service.path');?>";
-		var serviceURL  = "<?php echo $context->getProperty('uri.service');?>";
-		var blogURL = "<?php echo $context->getProperty('uri.blog');?>";
+<?php
+	// Textcube-NG: servicePath·serviceURL·blogURL 도 json_encode() 로 JS 문자열 escape — 아래 displayMode 등(v3.181)과 같은 방식. 원본처럼 JS 문자열로 나간다(r3-3)
+?>
+		var servicePath = <?php echo json_encode((string)$context->getProperty('service.path'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?: '""';?>;
+		var serviceURL  = <?php echo json_encode((string)$context->getProperty('uri.service'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?: '""';?>;
+		var blogURL = <?php echo json_encode((string)$context->getProperty('uri.blog'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?: '""';?>;
 		var prevURL = "<?php echo isset($paging['prev']) ? escapeJSInCData("{$paging['url']}{$paging['prefix']}{$paging['prev']}{$paging['postfix']}") : '';?>";
 		var nextURL = "<?php echo isset($paging['next']) ? escapeJSInCData("{$paging['url']}{$paging['prefix']}{$paging['next']}{$paging['postfix']}") : '';?>";
 		var commentKey = "<?php echo md5(filemtime(ROOT . '/config.php'));?>";
 		var doesHaveOwnership = <?php echo doesHaveOwnership() ? 'true' : 'false'; ?>;
+<?php
+	if (doesHaveOwnership()) {	// Textcube-NG: 소유자에게만 CSRF 토큰 출력 — 블로그 화면의 관리 동작(XHR)에 EAF4.js 가 붙인다(v3.147)
+?>
+		var csrfToken = "<?php echo getCSRFToken();?>";
+<?php
+	}
+?>
 		var isReaderEnabled = <?php echo ($context->getProperty('service.reader') ? 'true' : 'false'); ?>;
-		var displayMode = "<?php echo $context->getProperty('blog.displaymode','desktop');?>";
-		var workMode = "<?php echo $context->getProperty('blog.workmode','enhanced');?>";
-		var cookie_prefix = "<?php echo $context->getProperty('service.cookie_prefix','');?>";
+<?php
+	// Textcube-NG: displayMode·workMode·cookie_prefix 를 같은 블록 messages(v3.167)와 같은 json_encode() 로 JS 문자열 escape — cookie_prefix 는 /control/server 설정값(문자 제한 없음)이라 따옴표·</script> 로 블록이 깨지거나 스크립트가 들어갈 수 있었음. 원본처럼 JS 문자열로 나가도록 (string) 으로 바꿔 넘긴다(v3.181)
+?>
+		var displayMode = <?php echo json_encode((string)$context->getProperty('blog.displaymode','desktop'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?: '""';?>;
+		var workMode = <?php echo json_encode((string)$context->getProperty('blog.workmode','enhanced'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?: '""';?>;
+		var cookie_prefix = <?php echo json_encode((string)$context->getProperty('service.cookie_prefix',''), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?: '""';?>;
 <?php
 	if (!is_null($entryIds)) {
 ?>
@@ -96,11 +119,11 @@ function getScriptsOnHead($paging, $entryIds = null) {
 	}
 ?>
 		var messages = {
-			"trackbackUrlCopied": "<?php echo _text('엮인글 주소가 복사되었습니다.');?>",
-			"operationFailed": "<?php echo _text('실패했습니다.');?>",
-			"confirmTrackbackDelete": "<?php echo _text('선택된 글걸기를 삭제합니다. 계속 하시겠습니까?');?>",
-			"confirmEntryDelete": "<?php echo _text('이 글 및 이미지 파일을 완전히 삭제합니다. 계속 하시겠습니까?');?>",
-			"onSaving": "<?php echo _text('저장하고 있습니다');?>"
+			"trackbackUrlCopied": <?php echo json_encode(_text('엮인글 주소가 복사되었습니다.'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?: '""';?>,
+			"operationFailed": <?php echo json_encode(_text('실패했습니다.'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?: '""';?>,
+			"confirmTrackbackDelete": <?php echo json_encode(_text('선택된 글걸기를 삭제합니다. 계속 하시겠습니까?'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?: '""';?>,
+			"confirmEntryDelete": <?php echo json_encode(_text('이 글 및 이미지 파일을 완전히 삭제합니다. 계속 하시겠습니까?'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?: '""';?>,
+			"onSaving": <?php echo json_encode(_text('저장하고 있습니다'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?: '""'; echo "\n";?>
 		}
 	//]]>
 	</script>
@@ -115,7 +138,7 @@ function getUpperView() {
 	ob_start();
 ?>
 	<!--
-		<?php echo TEXTCUBE_NAME." ".TEXTCUBE_VERSION.CRLF;?>
+		<?php echo TEXTCUBE_NAME." ".TEXTCUBE_VERSION." (NG ".TEXTCUBE_NG_VERSION.")".CRLF;?>
 
 		Homepage: <?php echo TEXTCUBE_HOMEPAGE.CRLF;?>
 		<?php echo TEXTCUBE_COPYRIGHT.CRLF;?>
@@ -254,7 +277,7 @@ function getCommentView($entry, $skin, $inputBlock = true, $page = 1, $count = n
 			}
 			foreach ($comments as $key => $value) {
 				if ($value['secret'] == 1) {
-					if (!$authorized) {
+					if (!canReadSecretComment(0, $value)) {	// Textcube-NG: 방명록 비밀 글은 editors 이상·본인·회원 글의 답글(r3-7, 결정 447)
 						if( !doesHaveOpenIDPriv($value) ) {
 							$comments[$key]['name'] = _text('비밀방문자');
 							$comments[$key]['homepage'] = '';
@@ -277,8 +300,10 @@ function getCommentView($entry, $skin, $inputBlock = true, $page = 1, $count = n
 				if($isComment) $skin->commentGuest = $dressCommentBlock;
 				else $skin->guestGuest = $dressCommentBlock;
 			} else {
-				if($isComment) $dressCommentBlock = $skin->commentGuest = addOpenIDPannel( $skin->commentGuest, 'rp' );
-				else $dressCommentBlock = $skin->guestGuest = addOpenIDPannel( $skin->guestGuest, 'guest' );
+				// Textcube-NG: 방문자 입력 블록을 플러그인이 덧붙일 수 있게 ViewCommentGuestForm 이벤트를 부른다(대상=블록, 둘째 인자='rp'|'guest').
+				// CL_SocialLogin 이 이 블록 앞에 방문자용 소셜 로그인 버튼을 넣는다(r3-39)
+				if($isComment) $dressCommentBlock = $skin->commentGuest = fireEvent( 'ViewCommentGuestForm', addOpenIDPannel( $skin->commentGuest, 'rp' ), 'rp' );
+				else $dressCommentBlock = $skin->guestGuest = fireEvent( 'ViewCommentGuestForm', addOpenIDPannel( $skin->guestGuest, 'guest' ), 'guest' );
 			}
 			$skin->dressCommentBlock = true;
 		}
@@ -298,7 +323,7 @@ function getCommentView($entry, $skin, $inputBlock = true, $page = 1, $count = n
 					$rp_class = $prefix1 . '_admin';
 				else if ($commentSubItem['secret'] == 1) {
 					$rp_class = $prefix1 . '_secret';
-					if ($authorized) {
+					if (canReadSecretComment($entry['id'], $commentSubItem)) {	// Textcube-NG: 비밀 댓글 열람(r3-7, 결정 447)
 						$commentSubItem['comment'] = '<span class="hiddenCommentTag_content">' . _text('[비밀댓글]') . '</span> ' . $commentSubItem['comment'];
 					} else {
 						$rp_class .= ' hiddenComment';
@@ -311,7 +336,7 @@ function getCommentView($entry, $skin, $inputBlock = true, $page = 1, $count = n
 					$commentSubItemView = "<a id=\"comment{$commentSubItem['id']}\"></a>" . $commentSubItemView;
 				}
 				if (empty($commentSubItem['homepage']) ||
-					(($commentSubItem['secret'] == 1) && !doesHaveOwnership())) {
+					(($commentSubItem['secret'] == 1) && !canReadSecretComment($entry['id'], $commentSubItem))) {
 					dress($prefix1 . '_rep_name', fireEvent(($isComment ? 'ViewCommenter' : 'ViewGuestCommenter'), "<span $fn_nickname>".$commentSubItem['name']."</span>", $commentSubItem), $commentSubItemView);
 				} else {
 					dress($prefix1 . '_rep_name', fireEvent(($isComment ? 'ViewCommenter' : 'ViewGuestCommenter'), '<a '.$fn.'rel="external nofollow" href="' . htmlspecialchars(addProtocolSense($commentSubItem['homepage'])) . '" onclick="return openLinkInNewWindow(this)">' . $commentSubItem['name'] . '</a>', $commentSubItem), $commentSubItemView);
@@ -338,7 +363,7 @@ function getCommentView($entry, $skin, $inputBlock = true, $page = 1, $count = n
 				$rp_class = $prefix1 . '_admin';
 			else if ($commentItem['secret'] == 1) {
 				$rp_class = $prefix1 . '_secret';
-				if ($authorized) {
+				if (canReadSecretComment($entry['id'], $commentItem)) {	// Textcube-NG: 비밀 댓글 열람(r3-7, 결정 447)
 					$commentItem['comment'] = '<span class="hiddenCommentTag_content">' . _text('[비밀댓글]') . '</span> ' . $commentItem['comment'];
 				} else {
 					$rp_class .= ' hiddenComment';
@@ -350,7 +375,7 @@ function getCommentView($entry, $skin, $inputBlock = true, $page = 1, $count = n
 				$commentItemView = "<a id=\"comment{$commentItem['id']}\"></a>" . $commentItemView;
 			}
 			if (empty($commentItem['homepage']) ||
-				(($commentItem['secret'] == 1) && !doesHaveOwnership())) {
+				(($commentItem['secret'] == 1) && !canReadSecretComment($entry['id'], $commentItem))) {
 				dress($prefix1 . '_rep_name', fireEvent(($isComment ? 'ViewCommenter' : 'ViewGuestCommenter'), "<span $fn_nickname>".$commentItem['name']."</span>", $commentItem), $commentItemView);
 			} else {
 				dress($prefix1 . '_rep_name', fireEvent(($isComment ? 'ViewCommenter' : 'ViewGuestCommenter'), '<a '.$fn.'rel="external nofollow" href="' . htmlspecialchars(addProtocolSense($commentItem['homepage'])) . '" onclick="return openLinkInNewWindow(this)">' . $commentItem['name'] . '</a>', $commentItem), $commentItemView);
@@ -359,7 +384,7 @@ function getCommentView($entry, $skin, $inputBlock = true, $page = 1, $count = n
 			dress($prefix1 . '_rep_desc', setTempTag("{$prefix1}_{$commentItem['id']}"), $commentItemView);
 			dress($prefix1 . '_rep_date', fireEvent(($isComment ? 'ViewCommentDate' : 'ViewGuestCommentDate'), Timestamp::format5($commentItem['written']), $commentItem['written']), $commentItemView);
 			if ((!$context->getProperty('blog.acceptComments',true))||($prefix1 == 'guest' && $authorized != true && $context->getProperty('blog.allowWriteDblCommentOnGuestbook') == 0)) {
-				$doubleCommentPermissionScript = 'alert(\'' . _text('댓글을 사용할 수 없습니다.') . '\'); return false;';
+				$doubleCommentPermissionScript = htmlspecialchars('alert(' . json_encode(_text('댓글을 사용할 수 없습니다.'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) . '); return false;', ENT_QUOTES);
 			} else {
 				$doubleCommentPermissionScript = '';
 			}
@@ -396,6 +421,7 @@ function getCommentView($entry, $skin, $inputBlock = true, $page = 1, $count = n
 			$acceptcomment = $pool->getCell('acceptcomment');
 		}
 		$useForm = false;
+		$openidOnlyView = null;
 		$openid_identity = Acl::getIdentity('openid');
 		if ($isComment) {
 			if (!($skin->commentForm == '')) {
@@ -452,18 +478,40 @@ function getCommentView($entry, $skin, $inputBlock = true, $page = 1, $count = n
 			dress($prefix1 . '_textarea_body', 'comment', $commentView);
 			dress($prefix1 . '_textarea_body_value', '', $commentView);
 			dress('article_rep_id', $entry['id'], $commentView);
+			// 댓글 오픈아이디 전용 모드(AddCommentMode)에서 이 방문자가 쓸 수 없으면 — 서버 판정(blog.comment.php)과 같은 함수 —
+			// 스킨의 <s_rp_input_form_openid_only>·<s_guest_input_form_openid_only> 블록을 입력 폼 대신 보여 준다. 블록이 없으면 폼 그대로(v3.153).
+			if ($useForm == true && isCommentOpenIDOnlyBlocked()) {
+				if ($isComment) {
+					$openidOnlyView = isset($skin->commentFormOpenIDOnly) ? $skin->commentFormOpenIDOnly : null;
+				} else {
+					$openidOnlyView = isset($skin->guestFormOpenIDOnly) ? $skin->guestFormOpenIDOnly : null;
+				}
+			}
 		} else if ($useForm == true) {
 			$commentView = '';
 		}
 
 		if ($useForm == true) {
-			dress($prefix1 . '_input_form', "<form id=\"entry".$entry['id']."WriteComment\" method=\"post\" action=\"".$context->getProperty('uri.blog')."/comment/add/{$entry['id']}\" onsubmit=\"return false\" style=\"margin: 0\">" . $commentView . '</form>', $commentRrevView);
+			if ($openidOnlyView !== null) {
+				// 입력 폼 대신 오픈아이디 로그인 안내(v3.153). [##_guest_openid_login_##] = 방문자 OpenID 로그인 화면 주소(돌아올 주소는 OpenID::getReturnURI), escape.
+				// Textcube-NG: 오픈아이디 전용 모드 안내 블록도 ViewCommentOpenIDOnlyForm 이벤트로 플러그인이 덧붙일 수 있게 한다(둘째 인자='rp'|'guest', r3-39)
+				$openidOnlyView = fireEvent('ViewCommentOpenIDOnlyForm', $openidOnlyView, $prefix1);
+				dress('guest_openid_login', htmlspecialchars(OpenID::getGuestLoginURI(), ENT_QUOTES), $openidOnlyView);
+				dress('article_rep_id', $entry['id'], $openidOnlyView);
+				dress($prefix1 . '_input_form', '', $commentRrevView);
+				dress($prefix1 . '_input_form_openid_only', $openidOnlyView, $commentRrevView);
+			} else {
+				dress($prefix1 . '_input_form', "<form id=\"entry".$entry['id']."WriteComment\" method=\"post\" action=\"".$context->getProperty('uri.blog')."/comment/add/{$entry['id']}\" onsubmit=\"return false\" style=\"margin: 0\">" . $commentView . '</form>', $commentRrevView);
+				dress($prefix1 . '_input_form_openid_only', '', $commentRrevView);
+			}
 			$commentView = $commentRrevView;
 		} else {
+			dress($prefix1 . '_input_form_openid_only', '', $commentView);
 			$commentView = "<form id=\"entry".$entry['id']."WriteComment\" method=\"post\" action=\"".$context->getProperty('uri.blog')."/comment/add/{$entry['id']}\" onsubmit=\"return false\" style=\"margin: 0\">" . $commentView . '</form>';
 		}
 	} else {
 		dress($prefix1 . '_input_form', "", $commentView);
+		dress($prefix1 . '_input_form_openid_only', '', $commentView);
 	}
 	/// Adding feed links.
 	dress('article_rep_rp_atomurl', $context->getProperty('uri.default').'/atom/comment/'.$entry['id'], $commentView);
@@ -885,8 +933,9 @@ function getCalendarView($calendar) {
 	$current = $calendar['year'] . $calendar['month'];
 	$previous = addPeriod($current, - 1);
 	$next = addPeriod($current, 1);
-	$firstWeekday = date('w', mktime(0, 0, 0, $calendar['month'], 1, $calendar['year']));
-	$lastDay = date('t', mktime(0, 0, 0, $calendar['month'], 1, $calendar['year']));
+	// Textcube-NG: 4자리 기간이면 month 가 substr() 결과 ''(PHP 5 는 false) — PHP 8.0 부터 mktime() 의 int 인자에 '' 는 TypeError, PHP 7.x 는 경고 뒤 false 라 요일이 달라진다. 원본(PHP 5)처럼 정수로 넘긴다(v3.181)
+	$firstWeekday = date('w', mktime(0, 0, 0, (int)$calendar['month'], 1, (int)$calendar['year']));
+	$lastDay = date('t', mktime(0, 0, 0, (int)$calendar['month'], 1, (int)$calendar['year']));
 	$today = ($current == Timestamp::get('Ym') ? Timestamp::get('j') : null);
 
 	$currentMonthStr = fireEvent('ViewCalendarHead', Timestamp::format('%Y/%m', getTimeFromPeriod($current)));
@@ -1032,7 +1081,7 @@ function getRecentNoticesView($notices, $noticeView, $noticeItemView, $isPage = 
 	return $noticeView;
 }
 
-function getRecentEntriesView($entries, $entriesView = null, $template) {
+function getRecentEntriesView($entries, $entriesView, $template) {
 	global $blog, $service, $blogURL, $skinSetting, $contentContainer;
 	$recentEntriesView = '';
 	foreach ($entries as $entry) {
@@ -1058,7 +1107,7 @@ function getRecentEntriesView($entries, $entriesView = null, $template) {
 	return $recentEntriesView;
 }
 
-function getRecentCommentsView($comments, $commentView = null, $template) {
+function getRecentCommentsView($comments, $commentView, $template) {
 	global $blog, $service, $blogURL, $skinSetting, $contentContainer;
 	$recentCommentView = '';
 	foreach ($comments as $comment) {
@@ -1080,7 +1129,7 @@ function getRecentCommentsView($comments, $commentView = null, $template) {
 	return $recentCommentView;
 }
 
-function getRecentTrackbacksView($trackbacks, $trackbackView = null, $template) {
+function getRecentTrackbacksView($trackbacks, $trackbackView, $template) {
 	global $blogURL, $blog, $skinSetting, $service;
 	$recentTrackbackView = '';
 	foreach ($trackbacks as $trackback) {
@@ -1195,7 +1244,11 @@ function getEntryContentView($blogid, $id, $content, $formatter, $keywords = arr
 	requireModel('blog.keyword');
 	requireLibrary('blog.skin');
 	$context  = Model_Context::getInstance();
-	$cacheKey = 'entry-'.$id.'-'.$type.($bRssMode ? 'format' : 'summarize').($useAbsolutePath ? 'absoultePath' : 'relativePath').($context->getProperty('blog.displaymode','desktop'));
+	// Textcube-NG: 캐시 키 라벨을 실제 변환 함수와 맞춘다(원본은 RSS=summarizeContent 를 'format', 본문=formatContent 를 'summarize' 로 적었음). 옛 캐시와 이름이 엇갈리므로 점검 개정 번호를 올려 clearCache() 로 비운다(config.default.php TEXTCUBE_NG_CHECKUP_REVISION 3, v3.181)
+	// Textcube-NG: 글 본문 캐시 키에 현재 언어(locale domain·언어)를 넣는다. 원본은 언어가 없어, 포매터·플러그인이 언어별 문구를 넣은 본문이
+	// 다른 언어 화면에도 그대로 나왔다(ownerView.php 도 이 함수를 거친다). 'entry-<id>-' 접두는 그대로라 flushEntry() 가 함께 지운다(r3-5)
+	$cacheLocale = Locales::getInstance();
+	$cacheKey = 'entry-'.$id.'-'.$type.($bRssMode ? 'summarize' : 'format').($useAbsolutePath ? 'absoultePath' : 'relativePath').($context->getProperty('blog.displaymode','desktop')).((isset($cacheLocale->domain) && isset($cacheLocale->locale[$cacheLocale->domain])) ? '-'.$cacheLocale->domain.'.'.$cacheLocale->locale[$cacheLocale->domain] : '');
 	$cache = pageCache::getInstance();
 	$cache->reset($cacheKey);
 	if(!defined('__TEXTCUBE_NO_ENTRY_CACHE__') && $cache->load()) {	// If cached content exists.
@@ -1229,7 +1282,8 @@ function getEntryContentView($blogid, $id, $content, $formatter, $keywords = arr
 					$attributes .= preg_match('/(alt="([^"]*)")/si', $images[$i][2], $matches) ? ' '.$matches[1] : ' alt="resize"';
 					$attributes .= preg_match('/(title="([^"]*)")/si', $images[$i][2], $matches) ? $title = ' '.$matches[1] : '';
 
-					$tempFileName = array_pop(explode('/', $images[$i][1]));
+					$tempPath = explode('/', $images[$i][1]);	// Textcube-NG: array_pop() 은 참조 인자를 받으므로 함수 결과를 바로 넘기지 않고 변수에 담는다 — PHP 7.0+ E_NOTICE "Only variables should be passed by reference" 제거, 결과 같음(v3.181)
+					$tempFileName = array_pop($tempPath);
 					if (preg_match('/(.+)\.w(\d{1,})\-h(\d{1,})\.(.+)/', $tempFileName, $matches))
 						$tempFileName = $matches[1].'.'.$matches[4];
 
@@ -1240,6 +1294,7 @@ function getEntryContentView($blogid, $id, $content, $formatter, $keywords = arr
 						if (isset($tempAttributes['width']) && ($tempOriginInfo[0] > $tempAttributes['width'])) {
 							$image = Utils_Image::getInstance();
 							list($tempImageURL, $tempImageWidth, $tempImageHeight, $tempImageSrc) = $image->getImageResizer($tempFileName, array('width' => $tempAttributes['width']));
+							if ($bRssMode) $tempImageURL = URL::toAbsolute($tempImageURL);	// Textcube-NG: 피드(bRssMode)에서만 //host 에 스킴을 붙인다(getImageResizer 는 uri.service 기준). 화면은 그대로(r3-34)
 							$newImage = "<img src=\"{$tempImageURL}\" width=\"{$tempImageWidth}\" height=\"{$tempImageHeight}\"{$attributes}/>";
 						}
 					}
@@ -1461,7 +1516,7 @@ function printFeedEntries($blogid, $group = 0, $feed = 0, $unreadOnly = false, $
 	return $count;
 }
 
-function printFeedEntriesMore($blogid, $group = 0, $feed = 0, $unreadOnly = false, $starredOnly = false, $searchKeyword = null, $offset) {
+function printFeedEntriesMore($blogid, $group, $feed, $unreadOnly, $starredOnly, $searchKeyword, $offset) {
 	global $service;
 ?>
 												<table cellpadding="0" cellspacing="0">
@@ -1587,7 +1642,15 @@ function addOpenIDPannel( $comment, $prefix ) {
 		return $comment;
 	}
 	global $service,$blogURL;
+	require_once ROOT . '/framework/legacy/Textcube.Control.OIDC.php';
+	$oidcEnabled = OIDCClient::isEnabled();
+	// 이 패널은 OpenID(OIDC) 신원만 로그인 상태로 표시한다. 소셜 신원(CL_SocialLogin)은 미로그인과 같이 다루고
+	// "오픈아이디"로 표시하거나 식별자 원문을 출력하지 않는다(신원 종류를 섞지 않음, v3.153).
 	$openid_identity = Acl::getIdentity('openid');
+	$socialIdentity = (OpenID::identityKind($openid_identity) === 'social');
+	if( OpenID::identityKind($openid_identity) !== 'oidc' ) {
+		$openid_identity = null;
+	}
 	$whatisopenid = '<a target="_blank" href="'._text('http://www.google.co.kr/search?q=OpenID&amp;lr=lang_ko').'"><span style="color:#ff6200">'._text('오픈아이디란?').'</span></a>';
 	//$lastcomment = ' | <a href="#" onClick="recallLastComment([##_article_rep_id_##]); return false"><span style="color:#ff6200">'._text('마지막 댓글로 채우기').'</span></a>';
 	$lastcomment = '';
@@ -1597,13 +1660,17 @@ function addOpenIDPannel( $comment, $prefix ) {
 		$openidOnlySettingNotice = "<b>"._text('오픈아이디로만 댓글을 남길 수 있습니다')."</b>";
 	}
 
-	$tag_login = '<a href="'.$blogURL.'/login/openid/guest?requestURI='.
-			urlencode( $_SERVER["REQUEST_URI"] ).
+	// 돌아올 주소는 OpenID::getReturnURI() — ajax 댓글 응답(POST)에서는 REQUEST_URI(댓글 처리 주소) 대신 글 주소(Referer)(v3.153).
+	// 로그인 링크는 OIDC 가 설정됐을 때만 — 설정 전에는 눌러도 오류만 난다(v3.153).
+	$tag_login = '';
+	if( $oidcEnabled ) {
+		$tag_login = '<a href="'.htmlspecialchars(OpenID::getGuestLoginURI(), ENT_QUOTES).
 			'"><span style="color:#ff6200">'._text('로그인').'</span></a>';
+	}
 
-	$tag_logoff = '<a href="'.$blogURL.'/login/openid?action=logout&requestURI='.
-			urlencode( $_SERVER["REQUEST_URI"] ).
+	$tag_logoff = '<a href="'.htmlspecialchars($blogURL.'/login/openid?action=logout&requestURI='.rawurlencode(OpenID::getReturnURI()), ENT_QUOTES).
 			'"><span style="">'._text('로그아웃').'</span></a>';
+	$tag_state = $openid_identity ? $tag_logoff : $tag_login;
 
 	$pannel = '<div class="commentOuterPannel">'.CRLF;
 	$openid_input = 'OPENID_TAG_NEEDED';
@@ -1612,7 +1679,8 @@ function addOpenIDPannel( $comment, $prefix ) {
 	if( !empty( $_COOKIE['openid'] ) ) {
 		$cookie_openid = $_COOKIE['openid'];
 	}
-	if( $openidOnlySettingNotice || $openid_identity ) {
+	// 오픈아이디 전용 모드라도 소셜 신원은 이름/비밀번호 쪽(일반 댓글 경로)으로 쓴다 — 소셜 신원이면 그쪽을 기본 선택(v3.153).
+	if( ($openidOnlySettingNotice && !$socialIdentity) || $openid_identity ) {
 		$checked1 = 'checked="checked"'; $checked2 = '';
 		$disabled1 = ''; $disabled2 = 'disabled="disabled"';
 	} else {
@@ -1627,18 +1695,21 @@ function addOpenIDPannel( $comment, $prefix ) {
 					'background-repeat:no-repeat;background-position:0px center"';
 
 	if( $openid_identity ) {
-		$openid_input = '<span><a href="'.$openid_identity.'">'.OpenID::getDisplayName($openid_identity).'</a></span>'.CRLF;
-		$openid_input .= '<input type="hidden" name="openid_identifier" id="openid_identifier_[##_article_rep_id_##]" value="'.htmlentities($openid_identity).'" />';
+		// [보안] 식별자 원문을 href·value 에 넣지 않는다 — 표시 이름만 escape 해서 보여 준다(v3.153).
+		// hidden openid_identifier 는 라디오 onclick(this.form.openid_identifier)이 쓰므로 남기되 빈 값 — addopenid 는 세션 신원을 쓴다.
+		$openid_input = '<span>'.htmlspecialchars(OpenID::getDisplayName($openid_identity), ENT_QUOTES).'</span>'.CRLF;
+		$openid_input .= '<input type="hidden" name="openid_identifier" id="openid_identifier_[##_article_rep_id_##]" value="" />';
 		$openid_input = _text('현재 로그인한 오픈아이디').' '.$openid_input;
-		$_COOKIE['guestHomepage'] = $_SESSION['openid']['homepage'];
-		$_COOKIE['guestName'] = $_SESSION['openid']['nickname'];
+		// 원본의 $_COOKIE['guestHomepage'/'guestName'] 대입 제거 — 읽는 곳은 접두어 붙은 쿠키(service.cookie_prefix, preprocessor 389-391 에서 비어 있지 않게 설정)뿐이라 쓰이지 않음(동작 동일, v3.153).
 	} else {
 		if( preg_match( '/.*?(<input[^>]+_(?:guest|rp)_input_homepage_[^>]+>).*/sm', $comment, $match ) ) {
 			$openid_input = $match[1];
 			$openid_input = str_replace( 'homepage_[##', 'openid_identifier_[##', $openid_input );
 			$openid_input = str_replace( '[##_'.$prefix.'_input_homepage_##]', 'openid_identifier', $openid_input );
-			$openid_input = preg_replace( '/value=(?:"|\')?(?:[^"\']+)(?:"|\')?/', 'value="'.$cookie_openid.'"', $openid_input );
 			$openid_input = preg_replace( '/style=("|\')?([^"\']+)("|\')?/', '', $openid_input );
+			// style 제거를 값 삽입보다 먼저: 값 안의 'style=' 이 value 의 닫는 따옴표까지 지우지 않도록
+			$openid_value = 'value="'.htmlspecialchars($cookie_openid, ENT_QUOTES).'"';
+			$openid_input = preg_replace_callback( '/value=(?:"|\')?(?:[^"\']+)(?:"|\')?/', function ($m) use ($openid_value) { return $openid_value; }, $openid_input );
 			$openid_input = preg_replace( '/(value=(?:"|\'))/', $openid_input_style.' $1', $openid_input );
 		}
 	}
@@ -1662,7 +1733,7 @@ function addOpenIDPannel( $comment, $prefix ) {
 			'/> '.CRLF.
 		'<label for="comment_type_[##_article_rep_id_##]_openid" '.$label_style.'>'.
 		_text('오픈아이디로 글쓰기').
-		'</label> <span>['.($openid_identity ? $tag_logoff:$tag_login).']['.$whatisopenid.$lastcomment.']</span></div>'.CRLF;
+		'</label> <span>'.($tag_state !== '' ? '['.$tag_state.']' : '').'['.$whatisopenid.$lastcomment.']</span></div>'.CRLF;
 	/* Opera browser does not work with single 'this.form.openid_identifier.disabled=false;', is it a bug? */
 
 	$pannel .= '<div style="padding:5px 0 5px 0px;width:100%;">'.$openid_input.'</div>'.CRLF;

@@ -21,10 +21,10 @@ class Cache_Memcache extends Singleton {
 		$this->__qualifiers = array();
 		if($context->getProperty('service.memcached') == true):
 			$this->memcache = new Memcache;
-			$this->memcache->connect(
-				!is_null($context->getProperty('memcached.server')) ? $context->getProperty('memcached.server') : 'localhost',
-				!is_null($context->getProperty('memcached.port'))   ? (int) $context->getProperty('memcached.port')   : 11211
-			);
+			$server = !is_null($context->getProperty('memcached.server')) ? $context->getProperty('memcached.server') : 'localhost';
+			$port   = !is_null($context->getProperty('memcached.port'))   ? (int) $context->getProperty('memcached.port') : 11211;
+			if (strncmp((string)$server, 'unix://', 7) === 0) $port = 0;	// Textcube-NG: 유닉스 소켓(unix:///경로)은 포트 0(r3-20)
+			$this->memcache->connect($server, $port);
 		endif;
 	}
 	public function __destruct() {		
@@ -86,7 +86,11 @@ class Cache_Memcache extends Singleton {
 		return $this->get($this->getKeyFromQualifiers());
 	}
 	public function insert(){
-		return $this->set($this->getKeyFromQualifiers(),$this->__value);
+		// Textcube-NG: config.php $memcached['cache_ttl'](초, 0 = 만료 없음 = 원본 동작, 최대 2592000)을 캐시 항목에 준다(r3-20)
+		$ttl = (int) Model_Context::getInstance()->getProperty('memcached.cache_ttl', 0);
+		if ($ttl < 0) $ttl = 0;
+		if ($ttl > 2592000) $ttl = 2592000;
+		return $this->set($this->getKeyFromQualifiers(),$this->__value,$ttl);
 	}
 	public function delete(){
 		return $this->purge($this->getKeyFromQualifiers());

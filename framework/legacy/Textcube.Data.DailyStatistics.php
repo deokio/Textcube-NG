@@ -112,6 +112,9 @@ class DailyStatistics {
 	
 	/*@static@*/
 	static function validateDate($date) {
+		// Textcube-NG: PHP 8.0 부터 is_numeric() 이 끝 공백도 숫자로 받는다(Saner numeric strings) — 원본(PHP 5~7.4)처럼 끝 공백이 있으면 false(v3.182)
+		if (is_string($date) && rtrim($date, " \t\n\r\v\f") !== $date)
+			return false;
 		return (is_numeric($date) && checkdate(intval($date / 100) % 100, $date % 100, intval($date / 10000)));
 	}
 	

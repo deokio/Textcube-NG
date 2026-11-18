@@ -16,9 +16,9 @@
         </textcube>
     </requirements>
     <binding>
-        <listener event="BindKeyword" listener="KeywordUI_bindKeyword"/>
-        <listener event="setKeylogSkin" listener="KeywordUI_setSkin"/>
-        <listener event="ViewTagLists" listener="KeywordUI_bindTag"/>
+        <listener event="BindKeyword" handler="KeywordUI_bindKeyword"/>
+        <listener event="setKeylogSkin" handler="KeywordUI_setSkin"/>
+        <listener event="ViewTagLists" handler="KeywordUI_bindTag"/>
         <config xml:lang="ko" dataValHandler="KeywordUI_handleConfig">
             <window width="500" height="550"/>
             <fieldset legend="설명 설정">
@@ -30,6 +30,20 @@
                 <field title="카테고리 설명에 키워드 사용" type="checkbox" name="category">
                     <op name="useKeywordAsCategory" value="1" checked="checked"><![CDATA[카테고리 설명에 키워드를 사용합니다.]]></op>
                     <caption><![CDATA[카테고리를 볼 때 상단에 같은 이름의 키워드가 있는 경우 글로 보여집니다.]]></caption>
+                </field>
+            </fieldset>
+        </config>
+        <config xml:lang="en" dataValHandler="KeywordUI_handleConfig">
+            <window width="500" height="550"/>
+            <fieldset legend="Description settings">
+                <field title="Use keywords for tag descriptions" type="checkbox" name="tag">
+                    <op name="useKeywordAsTag" value="1" checked="checked"><![CDATA[Use keywords for tag descriptions.]]></op>
+                    <caption>
+                        <![CDATA[When viewing a tag, a keyword with the same name, if any, is shown as a post at the top. A link button is also added next to a post's tag when a keyword with the same name exists.]]></caption>
+                </field>
+                <field title="Use keywords for category descriptions" type="checkbox" name="category">
+                    <op name="useKeywordAsCategory" value="1" checked="checked"><![CDATA[Use keywords for category descriptions.]]></op>
+                    <caption><![CDATA[When viewing a category, a keyword with the same name, if any, is shown as a post at the top.]]></caption>
                 </field>
             </fieldset>
         </config>

@@ -15,7 +15,7 @@ $IV = array(
 );
 require ROOT . '/library/preprocessor.php';
 $suri['id'] = (int)$suri['id'];
-if(!Setting::getBlogSettingGlobal('acceptTrackbacks',0)) {
+if(!Setting::getBlogSettingGlobal('acceptTrackbacks',1)) {	// Textcube-NG: 설정 행이 없을 때의 기본값을 화면(library/view/view.php)·설치 값과 같은 1(허용)로 맞춘다(원본 0, r3-15)
 	Respond::PrintResult(array('error' => 1, 'message' => 'The entry does not accept trackback'));
 	exit;	
 }

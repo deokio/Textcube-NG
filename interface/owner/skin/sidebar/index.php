@@ -2,6 +2,14 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 require ROOT . '/library/preprocessor.php';
 $tabsClass['sidebar'] = true;
 requireLibrary('blog.skin');
@@ -30,7 +38,7 @@ function correctSidebarImage( $subject ) {
 } 
 
 function correctImagePath($match ) {
-	global $skinSetting, $serviceURL;
+	global $skinSetting, $serviceURL, $service;
 	$pathArr = explode( "/" , $match[1]);
 	if( false === $pathArr  ) 
 		return $match[0];
@@ -43,7 +51,8 @@ function correctImagePath($match ) {
 		return $match[0] ; // full url의 경우 스킵
 	if( $pathArr[0] != '.'  && $pathArr[0] != '..' ) 
 		return $match[0] ; //첫 디렉토리가 현재 디렉토리가 아닌경우 스킵
-	return str_replace( $match[1],  $serviceURL . "/skin/blog/{$skinSetting['skin']}/" . $match[1], $match[0]);
+	// Textcube-NG: 서버 설정 useServiceURLonSkin 이 꺼져 있으면 도메인 없는 서비스 경로($service['path'])를 쓴다(blog.skin.php v3.206 과 같음)(r3-5)
+	return str_replace( $match[1],  ($service['useServiceURLonSkin'] ? $serviceURL : $service['path']) . "/skin/blog/{$skinSetting['skin']}/" . $match[1], $match[0]);
 }
 
 if (false) correctImagePath('');
@@ -145,11 +154,13 @@ function pretty_dress($view)
 	list($view, $authorList) = Skin::cutSkinTag($view, 'author_rep');
 	dress('author_rep', getAuthorListView($pd_authorList, $authorList), $view);	
 	list($view, $recentEntry) = Skin::cutSkinTag($view, 'rctps_rep');	
-	dress('rctps_rep', revertTempTags(getRecentEntriesView($pd_recentEntry, $recentEntry)), $view);
+	/* Textcube-NG: getRecent*View($items, $view, $template) 는 인자 3개 — 원본은 2개로 불러 PHP 7.1+ ArgumentCountError(관리 화면 모듈 미리보기 빈칸·미리보기 500, pat.im 1201).
+	   coverpage/index.php·common/blog/end.php 와 같이 목록만 만들고($view = null) 아래 dress() 가 끼운다 */
+	dress('rctps_rep', revertTempTags(getRecentEntriesView($pd_recentEntry, null, $recentEntry)), $view);
 	list($view, $recentComments) = Skin::cutSkinTag($view, 'rctrp_rep');	
-	dress('rctrp_rep', revertTempTags(getRecentCommentsView($pd_recentComment, $recentComments)), $view);
+	dress('rctrp_rep', revertTempTags(getRecentCommentsView($pd_recentComment, null, $recentComments)), $view);
 	list($view, $recentTrackback) = Skin::cutSkinTag($view, 'rcttb_rep');	
-	dress('rcttb_rep', getRecentTrackbacksView($pd_recentTrackback, $recentTrackback), $view);
+	dress('rcttb_rep', getRecentTrackbacksView($pd_recentTrackback, null, $recentTrackback), $view);
 	list($view, $s_link_rep) = Skin::cutSkinTag($view, 'link_rep');	
 	dress('link_rep', getLinksView($pd_link, $s_link_rep), $view);
 	dress('rss_url', "$blogURL/rss", $view);
@@ -257,7 +268,8 @@ if (is_null($sidebarConfig)) {
 								<li<?php echo $defaultModeSelected ? ' class="selected"' : NULL;?>><a id="default-mode-button" class="button" href="<?php echo parseURL($blogURL.'/owner/skin/sidebar');?>" title="<?php echo _t('실제 출력되는 내용을 직접 볼 수 있는 기본 모드입니다.');?>"><?php echo _t('기본모드');?></a></li>
 								<li<?php echo $safeModeSelected ? ' class="selected"' : NULL;?>><a id="safe-mode-button" class="button" href="<?php echo parseURL($blogURL.'/owner/skin/sidebar?safe');?>" title="<?php echo _t('태그를 사용하지 않아 레이아웃이 깨질 위험이 없는 모드입니다.');?>"><?php echo _t('안전모드');?></a></li>
 								<li<?php echo $tagModeSelected ? ' class="selected"' : NULL;?>><a id="tag-mode-button" class="button" href="<?php echo parseURL($blogURL.'/owner/skin/sidebar?tag');?>" title="<?php echo _t('실제 블로그 사이드바에 사용되는 태그를 직접사용하는 모드입니다.');?>"><?php echo _t('태그모드');?></a></li>
-								<li<?php echo $initModeSelected ? ' class="selected"' : NULL;?>><a id="init-button" class="button" href="<?php echo parseURL('sidebar/initialize'.$viewMode2);?>" onclick="if (!confirm('<?php echo _t('정말 사이드바 기능을 초기화하시겠습니까?');?>')) return false;" title="<?php echo _t('사이드바의 기능을 스킨 설정 상태로 초기화합니다.');?>"><span class="text"><?php echo _t('초기화');?></span></a></li>
+								<?php /* Textcube-NG: 아래 onclick 의 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396) */ ?>
+								<li<?php echo $initModeSelected ? ' class="selected"' : NULL;?>><a id="init-button" class="button" href="<?php echo parseURL('sidebar/initialize'.$viewMode2);?>" onclick="var u = this.href; tcConfirm('<?php echo _t('정말 사이드바 기능을 초기화하시겠습니까?');?>', function () { postNavigate(u); }); return false;" title="<?php echo _t('사이드바의 기능을 스킨 설정 상태로 초기화합니다.');?>"><span class="text"><?php echo _t('초기화');?></span></a></li>
 							</ul>
 							
 							<div id="sidebar-box" class="data-inbox">
@@ -291,7 +303,7 @@ for ($i=0; $i<$sidebarCount; $i++) {
 <?php
 			} else {
 ?>
-														<a href="<?php echo parseURL($blogURL.'/owner/skin/sidebar/order/?sidebarNumber='.$i.'&amp;targetSidebarNumber='.$i.'&amp;modulePos='.$j.'&amp;targetPos='.($j - 1).$viewMode);?>" title="<?php echo _t('이 사이드바 모듈을 위로 이동합니다.');?>"><img src="<?php echo $service['path'].$adminSkinSetting['skin'];?>/image/img_moveup_module.jpg" border="0" alt="<?php echo _t('위로');?>" /></a>
+														<a onclick="return postNavigate(this.href);" href="<?php echo parseURL($blogURL.'/owner/skin/sidebar/order/?sidebarNumber='.$i.'&amp;targetSidebarNumber='.$i.'&amp;modulePos='.$j.'&amp;targetPos='.($j - 1).$viewMode);?>" title="<?php echo _t('이 사이드바 모듈을 위로 이동합니다.');?>"><img src="<?php echo $service['path'].$adminSkinSetting['skin'];?>/image/img_moveup_module.jpg" border="0" alt="<?php echo _t('위로');?>" /></a>
 <?php
 			}
 				
@@ -301,12 +313,12 @@ for ($i=0; $i<$sidebarCount; $i++) {
 <?php
 			} else {
 ?>
-														<a href="<?php echo parseURL($blogURL.'/owner/skin/sidebar/order/?sidebarNumber='.$i.'&amp;targetSidebarNumber='.$i.'&amp;modulePos='.$j.'&amp;targetPos='.($j + 2).$viewMode);?>" title="<?php echo _t('이 사이드바 모듈을 아래로 이동합니다.');?>"><img src="<?php echo $service['path'].$adminSkinSetting['skin'];?>/image/img_movedown_module.jpg" border="0" alt="<?php echo _t('아래로');?>" /></a>
+														<a onclick="return postNavigate(this.href);" href="<?php echo parseURL($blogURL.'/owner/skin/sidebar/order/?sidebarNumber='.$i.'&amp;targetSidebarNumber='.$i.'&amp;modulePos='.$j.'&amp;targetPos='.($j + 2).$viewMode);?>" title="<?php echo _t('이 사이드바 모듈을 아래로 이동합니다.');?>"><img src="<?php echo $service['path'].$adminSkinSetting['skin'];?>/image/img_movedown_module.jpg" border="0" alt="<?php echo _t('아래로');?>" /></a>
 <?php
 			}
 ?>
 												
-														<a href="<?php echo $blogURL; ?>/owner/skin/sidebar/delete/?sidebarNumber=<?php echo $i;?>&amp;modulePos=<?php echo $j;?><?php echo $viewMode;?>" title="<?php echo _t('이 사이드바 모듈을 삭제합니다.');?>"><img src="<?php echo $service['path'].$adminSkinSetting['skin'];?>/image/img_delete_module.gif" border="0" alt="<?php echo _t('삭제');?>" /></a>
+														<a onclick="return postNavigate(this.href);" href="<?php echo $blogURL; ?>/owner/skin/sidebar/delete/?sidebarNumber=<?php echo $i;?>&amp;modulePos=<?php echo $j;?><?php echo $viewMode;?>" title="<?php echo _t('이 사이드바 모듈을 삭제합니다.');?>"><img src="<?php echo $service['path'].$adminSkinSetting['skin'];?>/image/img_delete_module.gif" border="0" alt="<?php echo _t('삭제');?>" /></a>
 													</div>
 													<div class="module-content"><?php try { echo pretty_dress($skin->sidebarBasicModules[$skini][$skinj]['body']); } catch (\Throwable $e) {} ?></div>
 												</li>
@@ -352,7 +364,7 @@ for ($i=0; $i<$sidebarCount; $i++) {
 <?php
 				} else {
 ?>
-														<a href="<?php echo parseURL($blogURL.'/owner/skin/sidebar/order/?sidebarNumber='.$i.'&amp;targetSidebarNumber='.$i.'&amp;modulePos='.$j.'&amp;targetPos='.($j - 1).$viewMode);?>" title="<?php echo _t('이 사이드바 모듈을 위로 이동합니다.');?>"><img src="<?php echo $service['path'].$adminSkinSetting['skin'];?>/image/img_moveup_module.jpg" border="0" alt="<?php echo _t('위로');?>" /></a>
+														<a onclick="return postNavigate(this.href);" href="<?php echo parseURL($blogURL.'/owner/skin/sidebar/order/?sidebarNumber='.$i.'&amp;targetSidebarNumber='.$i.'&amp;modulePos='.$j.'&amp;targetPos='.($j - 1).$viewMode);?>" title="<?php echo _t('이 사이드바 모듈을 위로 이동합니다.');?>"><img src="<?php echo $service['path'].$adminSkinSetting['skin'];?>/image/img_moveup_module.jpg" border="0" alt="<?php echo _t('위로');?>" /></a>
 <?php
 				}
 				
@@ -362,11 +374,11 @@ for ($i=0; $i<$sidebarCount; $i++) {
 <?php
 				} else {
 ?>
-														<a href="<?php echo parseURL($blogURL.'/owner/skin/sidebar/order/?sidebarNumber='.$i.'&amp;targetSidebarNumber='.$i.'&amp;modulePos='.$j.'&amp;targetPos='.($j + 2).$viewMode);?>" title="<?php echo _t('이 사이드바 모듈을 아래로 이동합니다.');?>"><img src="<?php echo $service['path'].$adminSkinSetting['skin'];?>/image/img_movedown_module.jpg" border="0" alt="<?php echo _t('아래로');?>" /></a>
+														<a onclick="return postNavigate(this.href);" href="<?php echo parseURL($blogURL.'/owner/skin/sidebar/order/?sidebarNumber='.$i.'&amp;targetSidebarNumber='.$i.'&amp;modulePos='.$j.'&amp;targetPos='.($j + 2).$viewMode);?>" title="<?php echo _t('이 사이드바 모듈을 아래로 이동합니다.');?>"><img src="<?php echo $service['path'].$adminSkinSetting['skin'];?>/image/img_movedown_module.jpg" border="0" alt="<?php echo _t('아래로');?>" /></a>
 <?php
 				}
 ?>
-														<a href="<?php echo parseURL($blogURL.'/owner/skin/sidebar/delete/?sidebarNumber='.$i.'&amp;modulePos='.$j.$viewMode);?>" title="<?php echo _t('이 사이드바 모듈을 삭제합니다.');?>"><img src="<?php echo $service['path'].$adminSkinSetting['skin'];?>/image/img_delete_module.gif" border="0" alt="<?php echo _t('삭제');?>" /></a>
+														<a onclick="return postNavigate(this.href);" href="<?php echo parseURL($blogURL.'/owner/skin/sidebar/delete/?sidebarNumber='.$i.'&amp;modulePos='.$j.$viewMode);?>" title="<?php echo _t('이 사이드바 모듈을 삭제합니다.');?>"><img src="<?php echo $service['path'].$adminSkinSetting['skin'];?>/image/img_delete_module.gif" border="0" alt="<?php echo _t('삭제');?>" /></a>
 														<!-- TODO : sidebar plugin settting -->									
 													</div>
 <?php 
@@ -501,8 +513,8 @@ foreach ($sidebarPluginArray as $nowKey) {
 							</p>
 						</form>
 						
-						<script src="<?php echo $service['path'];?>/resources/script/dojo/dojo.js" type="text/javascript"></script>
-						<script src="<?php echo $service['path'];?>/resources/script/sidebar.js" type="text/javascript"></script>
+						<script src="<?php echo $service['path'];?>/resources/script/jquery/jquery.ui.essentials-<?php echo JQUERY_UI_VERSION;?>.js" type="text/javascript"></script>
+						<script src="<?php echo $service['path'];?>/resources/script/sidebar.js?v=<?php echo filemtime(ROOT . '/resources/script/sidebar.js');?>" type="text/javascript"></script>
 						<script type="text/javascript">
 							//<![CDATA[
 								var decorateDragPanelString_deleteTitle = "<?php echo _t('이 사이드바 모듈을 삭제합니다.');?>";
@@ -561,7 +573,7 @@ foreach ($sidebarPluginArray as $nowKey) {
 								function initPages()
 								{
 									try {
-										dlg = dojo.widget.createWidget("popupWindow", {}, document.getElementById('body-skin').firstChild, 'after');
+										dlg = new PopupWindow(); // Textcube-NG: Dojo popupWindow 위젯 대신 <dialog> 대화상자(sidebar.js PopupWindow)
 										dlg.domNode.className = 'ajax-popup-window';
 									} catch(e) { dlg = null; }
 									var inputs = document.getElementsByTagName("input");
@@ -616,7 +628,7 @@ foreach ($sidebarPluginArray as $nowKey) {
 ?>
 									reordering();
 								}
-								dojo.addOnLoad(initPages);
+								jQuery(window).on('load', initPages);
 							//]]>							
 						</script>						
 <?php

@@ -2,7 +2,16 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 require ROOT . '/library/preprocessor.php';
+requirePostMethod();	// Textcube-NG: 상태 변경은 POST 만 받는다(그 밖은 405) — 링크·<img> 로 실행되던 GET CSRF 차단(v3.148)
 requireStrictRoute();
 ?>
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
@@ -106,6 +115,7 @@ setProgress($item++ / $items * 100, _t('태그와 태그 관계 정보를 다시
 $post->correctTagsAll();
 
 if ($result = POD::query("SELECT id, name, parent, homepage, comment, entry, isfiltered FROM {$database['prefix']}Comments WHERE blogid = $blogid and isfiltered = 0")) {
+	$trashedEntries = array();	// Textcube-NG: 고아 댓글을 모두 옮긴 뒤 글마다 한 번 비운다(r3-9, 503-16)
 	while ($comment = POD::fetch($result)) {
 		setProgress($item++ / $items * 100, _t('댓글과 방명록 데이터를 교정하고 있습니다.'));
 		$correction = '';
@@ -122,11 +132,15 @@ if ($result = POD::query("SELECT id, name, parent, homepage, comment, entry, isf
 		if (!is_null($comment['parent']) && ($comment['isfiltered'] == 0)) {
 			$r2 = POD::queryCount("SELECT id FROM {$database['prefix']}Comments WHERE blogid = $blogid AND id = {$comment['parent']} AND isfiltered = 0");
 			if ($r2 <= 0) {
-				trashCommentInOwner($blogid, $comment['id']);
+				trashCommentInOwner($blogid, $comment['id'], $trashedEntries);
 			}
 		}
 	}
 	POD::free($result);
+	/* Textcube-NG: 원본은 고아 댓글마다 같은 글의 캐시를 비우고 댓글 수를 다시 셌다(r3-9, 503-16).
+	   모두 옮긴 뒤 옮긴 댓글이 있는 글마다 한 번씩 한다(비우는 캐시·댓글 수는 같다).
+	   이 파일은 blog.comment 모델을 직접 불러오지 않으므로, 원본과 같이 옮긴 댓글이 있을 때만 이 모델 함수를 부른다. */
+	if (!empty($trashedEntries)) flushTrashedCommentsInOwner($blogid, $trashedEntries);
 }
 
 if ($result = POD::query("SELECT id, url, site, subject, excerpt FROM {$database['prefix']}RemoteResponses WHERE blogid = $blogid")) {

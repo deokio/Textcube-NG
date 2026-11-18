@@ -50,7 +50,7 @@ $setting = getReaderSetting($blogid);
 					var s_loadingOPML = "<?php echo _t('OPML 파일을 가져오고 있습니다.');?>";
 				//]]>
 			</script>
-			<script type="text/javascript" src="<?php echo $service['path'];?>/resources/script/reader.js"></script>
+			<script type="text/javascript" src="<?php echo $service['path'];?>/resources/script/reader.js?v=<?php echo filemtime(ROOT . '/resources/script/reader.js');?>"></script>
 			<script type="text/javascript">
 				//<![CDATA[
 					var Reader = new TTReader();
@@ -114,7 +114,7 @@ if(defined('__TEXTCUBE_READER_SUBMENU__'))
 									<div id="group-section" class="section">
 										<h3><?php echo _t('피드 그룹');?></h3>
 										
-										<div id="groupBox" class="container" style="height: <?php echo Setting::getBlogSettingGlobal('readerPannelHeight', 150);?>px;">
+										<div id="groupBox" class="container" style="height: <?php echo (int)Setting::getBlogSettingGlobal('readerPannelHeight', 150);?>px;">
 <?php
 printFeedGroups($blogid);
 ?>
@@ -126,7 +126,7 @@ printFeedGroups($blogid);
 									<div id="feed-section" class="section">
 										<h3><?php echo _t('현재 그룹 내의 피드 목록');?></h3>
 									
-										<div id="feedBox" class="section" style="height: <?php echo Setting::getBlogSettingGlobal('readerPannelHeight', 150);?>px;">
+										<div id="feedBox" class="section" style="height: <?php echo (int)Setting::getBlogSettingGlobal('readerPannelHeight', 150);?>px;">
 <?php
 printFeeds($blogid);
 ?>

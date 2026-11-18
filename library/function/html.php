@@ -2,6 +2,14 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 
 function stripHTML($text, $allowTags = array()) {
 	$text = preg_replace('/<(script|style)[^>]*>.*?<\/\1>/si', '', $text);
@@ -158,5 +166,173 @@ function link_cut($url, $checkURL = 35)
 	$rightURL	= -8;
 	$link = (strlen($url) > $checkURL) ? substr($url, 0 , $leftURL).' &hellip; '.substr($url, $rightURL) : $url;
 	return $link;
+}
+
+/// Whitelist HTML sanitizer for untrusted markup (e.g. feed entries in the reader).
+/// Parses with DOMDocument and rebuilds the markup from allowed elements, attributes,
+/// URL schemes and CSS properties only. Text and attribute values are re-encoded.
+function sanitizeHTML($html) {
+	if (!is_string($html) || $html === '' || strpos($html, '<') === false)
+		return $html;
+	if (!class_exists('DOMDocument'))
+		return htmlspecialchars(html_entity_decode(strip_tags($html), ENT_QUOTES, 'UTF-8'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+	// Pass non-ASCII characters as numeric character references so that charset declarations
+	// inside the markup cannot change how libxml decodes the input.
+	$ascii = preg_replace_callback('/[\x{80}-\x{10FFFF}]/u', function ($m) {
+		$c = $m[0];
+		switch (strlen($c)) {
+			case 2: $code = ((ord($c[0]) & 0x1F) << 6) | (ord($c[1]) & 0x3F); break;
+			case 3: $code = ((ord($c[0]) & 0x0F) << 12) | ((ord($c[1]) & 0x3F) << 6) | (ord($c[2]) & 0x3F); break;
+			default: $code = ((ord($c[0]) & 0x07) << 18) | ((ord($c[1]) & 0x3F) << 12) | ((ord($c[2]) & 0x3F) << 6) | (ord($c[3]) & 0x3F);
+		}
+		return '&#' . $code . ';';
+	}, $html);
+	if ($ascii === null) // invalid UTF-8
+		return htmlspecialchars(html_entity_decode(strip_tags($html), ENT_QUOTES, 'UTF-8'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+	$doc = new DOMDocument();
+	$internalErrors = libxml_use_internal_errors(true);
+	$loaded = $doc->loadHTML('<html><body>' . $ascii . '</body></html>', LIBXML_NONET);
+	libxml_clear_errors();
+	libxml_use_internal_errors($internalErrors);
+	if (!$loaded)
+		return htmlspecialchars(html_entity_decode(strip_tags($html), ENT_QUOTES, 'UTF-8'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+	$body = $doc->getElementsByTagName('body')->item(0);
+	return ($body === null) ? '' : sanitizeHTMLChildren($body);
+}
+
+function sanitizeHTMLChildren($parent) {
+	static $allowed = array(
+		'a' => array('href', 'target'),
+		'abbr' => array(), 'acronym' => array(), 'address' => array(), 'b' => array(), 'bdo' => array(),
+		'big' => array(), 'br' => array(), 'cite' => array(), 'code' => array(), 'dd' => array(),
+		'dfn' => array(), 'dl' => array(), 'dt' => array(), 'em' => array(), 'figcaption' => array(),
+		'figure' => array(), 'i' => array(), 'kbd' => array(), 'mark' => array(), 'pre' => array(),
+		's' => array(), 'samp' => array(), 'small' => array(), 'span' => array(), 'strike' => array(),
+		'strong' => array(), 'sub' => array(), 'sup' => array(), 'tbody' => array(), 'tfoot' => array(),
+		'thead' => array(), 'tt' => array(), 'u' => array(), 'var' => array(), 'wbr' => array(),
+		'blockquote' => array('cite'), 'q' => array('cite'),
+		'del' => array('cite', 'datetime'), 'ins' => array('cite', 'datetime'),
+		'p' => array('align'), 'div' => array('align'), 'center' => array(), 'caption' => array('align'),
+		'h1' => array('align'), 'h2' => array('align'), 'h3' => array('align'),
+		'h4' => array('align'), 'h5' => array('align'), 'h6' => array('align'),
+		'hr' => array('align', 'size', 'width', 'noshade'),
+		'font' => array('color', 'face', 'size'),
+		'img' => array('src', 'alt', 'width', 'height', 'border', 'align', 'hspace', 'vspace'),
+		'ul' => array('type'), 'ol' => array('type', 'start'), 'li' => array('type', 'value'),
+		'table' => array('border', 'cellpadding', 'cellspacing', 'width', 'align', 'summary', 'bgcolor'),
+		'tr' => array('align', 'valign', 'bgcolor'),
+		'td' => array('colspan', 'rowspan', 'align', 'valign', 'width', 'height', 'bgcolor', 'nowrap', 'scope', 'abbr'),
+		'th' => array('colspan', 'rowspan', 'align', 'valign', 'width', 'height', 'bgcolor', 'nowrap', 'scope', 'abbr'),
+		'col' => array('span', 'width', 'align', 'valign'), 'colgroup' => array('span', 'width', 'align', 'valign'),
+		'audio' => array('src', 'controls'), 'video' => array('src', 'controls', 'width', 'height', 'poster'),
+		'source' => array('src', 'type'),
+	);
+	// 1: removed together with their content. 2: void elements, removed without their children
+	// (libxml's HTML 4 parser may attach the following siblings to them, e.g. an unclosed <embed>).
+	// Other unknown elements are unwrapped (content kept).
+	static $dropped = array('script' => 1, 'style' => 1, 'iframe' => 1, 'frame' => 2, 'frameset' => 1,
+		'object' => 1, 'embed' => 2, 'applet' => 1, 'param' => 2, 'noscript' => 1, 'noembed' => 1,
+		'noframes' => 1, 'template' => 1, 'textarea' => 1, 'select' => 1, 'option' => 1, 'optgroup' => 1,
+		'input' => 2, 'title' => 1, 'head' => 1, 'meta' => 2, 'link' => 2, 'base' => 2, 'svg' => 1,
+		'math' => 1, 'xmp' => 1, 'plaintext' => 1, 'listing' => 1, 'canvas' => 1, 'map' => 1, 'area' => 2);
+	static $void = array('br' => 1, 'hr' => 1, 'img' => 1, 'wbr' => 1, 'col' => 1, 'source' => 1);
+	$out = '';
+	foreach ($parent->childNodes as $node) {
+		switch ($node->nodeType) {
+			case XML_TEXT_NODE:
+			case XML_CDATA_SECTION_NODE:
+				$out .= htmlspecialchars($node->nodeValue, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+				break;
+			case XML_ELEMENT_NODE:
+				$tag = strtolower($node->nodeName);
+				if (isset($dropped[$tag])) {
+					if ($dropped[$tag] == 2)
+						$out .= sanitizeHTMLChildren($node);
+					break;
+				}
+				if (!isset($allowed[$tag])) {
+					$out .= sanitizeHTMLChildren($node);
+					break;
+				}
+				$out .= '<' . $tag . sanitizeHTMLAttributes($node, $allowed[$tag]);
+				if (isset($void[$tag]))
+					$out .= ' />' . sanitizeHTMLChildren($node);
+				else
+					$out .= '>' . sanitizeHTMLChildren($node) . '</' . $tag . '>';
+				break;
+			// Comments, processing instructions and other node types are removed.
+		}
+	}
+	return $out;
+}
+
+function sanitizeHTMLAttributes($node, $allowedAttributes) {
+	static $global = array('title' => 1, 'lang' => 1, 'dir' => 1, 'style' => 1);
+	$out = '';
+	$newWindow = false;
+	foreach ($node->attributes as $attribute) {
+		$name = strtolower($attribute->nodeName);
+		$value = $attribute->value;
+		if (!isset($global[$name]) && !in_array($name, $allowedAttributes, true))
+			continue;
+		switch ($name) {
+			case 'href':
+				if (!sanitizeHTMLURL($value, array('http', 'https', 'mailto', 'ftp')))
+					continue 2;
+				break;
+			case 'src':
+			case 'cite':
+			case 'poster':
+				if (!sanitizeHTMLURL($value, array('http', 'https')))
+					continue 2;
+				break;
+			case 'style':
+				$value = sanitizeHTMLStyle($value);
+				if ($value === '')
+					continue 2;
+				break;
+			case 'target':
+				if (strtolower(trim($value)) !== '_blank')
+					continue 2;
+				$value = '_blank';
+				$newWindow = true;
+				break;
+		}
+		$out .= ' ' . $name . '="' . htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '"';
+	}
+	if ($newWindow)
+		$out .= ' rel="noopener noreferrer"';
+	return $out;
+}
+
+function sanitizeHTMLURL($url, $schemes) {
+	// Browsers ignore control characters and spaces around/inside the scheme part.
+	$url = preg_replace('/[\x00-\x20\x7F]+/', '', $url);
+	if (preg_match('/^([^\/?#]*?):/', $url, $match))
+		return in_array(strtolower($match[1]), $schemes, true);
+	return true; // relative URL
+}
+
+function sanitizeHTMLStyle($style) {
+	static $properties = array('text-align' => 1, 'color' => 1, 'background-color' => 1, 'font-weight' => 1,
+		'font-style' => 1, 'font-size' => 1, 'font-family' => 1, 'text-decoration' => 1, 'float' => 1,
+		'clear' => 1, 'width' => 1, 'height' => 1, 'max-width' => 1, 'vertical-align' => 1,
+		'line-height' => 1, 'list-style-type' => 1, 'white-space' => 1, 'border' => 1,
+		'border-width' => 1, 'border-style' => 1, 'border-color' => 1);
+	$out = array();
+	foreach (explode(';', $style) as $declaration) {
+		$pos = strpos($declaration, ':');
+		if ($pos === false)
+			continue;
+		$property = strtolower(trim(substr($declaration, 0, $pos)));
+		$value = trim(substr($declaration, $pos + 1));
+		if (!isset($properties[$property]) || $value === '')
+			continue;
+		// Keywords, numbers, units, colors and rgb()/rgba() only: no url(), quotes, escapes or comments.
+		if (!preg_match('/^(?:[a-zA-Z0-9#.,%! \t\-]|rgba?\([0-9.,% \t]*\))+$/', $value))
+			continue;
+		$out[] = $property . ': ' . $value;
+	}
+	return implode('; ', $out);
 }
 ?>

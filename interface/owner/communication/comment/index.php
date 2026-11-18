@@ -2,6 +2,14 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 
 if (isset($_POST['page']))
 	$_GET['page'] = $_POST['page'];
@@ -47,11 +55,13 @@ if (isset($_POST['perPage']) && is_numeric($_POST['perPage'])) {
 }
 
 $tabsClass = array();
+/* [보안] postfix 는 탭 링크(interface/common/owner/communicationTab.php)의 href 에 그대로 출력된다.
+   원본은 검색어·이름 등 GET 값을 인코딩 없이 이어 붙였다 → 값마다 URL 인코딩 */
 $tabsClass['postfix'] = null;
-$tabsClass['postfix'] .= isset($_POST['category']) ? '&amp;category='.$_POST['category'] : '';
-$tabsClass['postfix'] .= isset($_POST['name']) ? '&amp;name='.$_POST['name'] : '';
-$tabsClass['postfix'] .= isset($_POST['ip']) ? '&amp;ip='.$_POST['ip'] : '';
-$tabsClass['postfix'] .= isset($_POST['search']) ? '&amp;search='.$_POST['search'] : '';
+$tabsClass['postfix'] .= isset($_POST['category']) ? '&amp;category='.rawurlencode($_POST['category']) : '';
+$tabsClass['postfix'] .= isset($_POST['name']) ? '&amp;name='.rawurlencode($_POST['name']) : '';
+$tabsClass['postfix'] .= isset($_POST['ip']) ? '&amp;ip='.rawurlencode($_POST['ip']) : '';
+$tabsClass['postfix'] .= isset($_POST['search']) ? '&amp;search='.rawurlencode($_POST['search']) : '';
 if(!empty($tabsClass['postfix'])) $tabsClass['postfix'] = ltrim($tabsClass['postfix'],'/');
 
 if (isset($_POST['status'])) {
@@ -94,9 +104,8 @@ require ROOT . '/interface/common/owner/header.php';
 							//<![CDATA[
 							(function($) {
 								deleteCommentNow = function(id) {
-									if (!confirm("<?php echo (isset($tabsClass['guestbook']) ? _t('선택된 방명록 글을 삭제합니다. 계속 하시겠습니까?') : _t('선택된 댓글을 삭제합니다. 계속 하시겠습니까?'));?>"))
-										return false;
-									var request = new HTTPRequest("GET", "<?php echo $blogURL;?>/owner/communication/comment/delete/" + id);
+									tcConfirm("<?php echo (isset($tabsClass['guestbook']) ? _t('선택된 방명록 글을 삭제합니다. 계속 하시겠습니까?') : _t('선택된 댓글을 삭제합니다. 계속 하시겠습니까?'));?>", function () {	// Textcube-NG: 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396)
+									var request = new HTTPRequest("POST", "<?php echo $blogURL;?>/owner/communication/comment/delete/" + id);
 									request.onSuccess = function () {
 										PM.removeRequest(this);
 										PM.showMessage("<?php echo (isset($tabsClass['guestbook']) ? _t('방명록이 삭제되었습니다.') : _t('댓글이 삭제되었습니다.'));?>", "center", "bottom");
@@ -108,11 +117,12 @@ require ROOT . '/interface/common/owner/header.php';
 									};
 									PM.addRequest(request, "<?php echo (isset($tabsClass['guestbook']) ? _t('방명록을 삭제하고 있습니다.') : _t('댓글을 삭제하고 있습니다.'));?>");
 									request.send();
+									});
+									return false;
 								};
 
 								deleteComments = function() {
-									if (!confirm("<?php echo (isset($tabsClass['guestbook']) ? _t('선택된 방명록을 삭제합니다. 계속 하시겠습니까?') : _t('선택된 댓글을 삭제합니다. 계속 하시겠습니까?'));?>"))
-										return false;
+									tcConfirm("<?php echo (isset($tabsClass['guestbook']) ? _t('선택된 방명록을 삭제합니다. 계속 하시겠습니까?') : _t('선택된 댓글을 삭제합니다. 계속 하시겠습니까?'));?>", function () {	// Textcube-NG: 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396)
 
 									var oElement;
 									var alsoDeleteWithSameIP = document.getElementById('deleteCommentsFromSameIP').checked;
@@ -138,6 +148,8 @@ require ROOT . '/interface/common/owner/header.php';
 										param = param + "&targetIPs=" +  targetIPs.join(",");
 									}
 									request.send(param);
+									});
+									return false;
 								};
 
 								changeState = function(caller, value, no, mode) {
@@ -148,15 +160,16 @@ require ROOT . '/interface/common/owner/header.php';
 											var command 	= 'block';
 										}
 										var name 		= caller.id.replace(/\-[0-9]+$/, '');
-										param  	=  '?value='	+ encodeURIComponent(value);
+										param  	=  'value='	+ encodeURIComponent(value);
 										param 	+= '&mode=' 	+ mode;
 										param 	+= '&command=' 	+ command;
 										param 	+= '&id=' 	+ no;
 
-										var request = new HTTPRequest("GET", "<?php echo $blogURL;?>/owner/communication/filter/change/" + param);
+										var request = new HTTPRequest("POST", "<?php echo $blogURL;?>/owner/communication/filter/change/");
 
 										request.onSuccess = function() {
-											if (mode == 'ip' && command == 'block' && confirm(value+" <?php echo (isset($tabsClass['guestbook']) ? _t('IP에서 작성한 모든 방명록을 삭제하시겠습니까?') : _t('IP에서 작성한 모든 댓글을 삭제하시겠습니까?'));?>")) {
+											if (mode == 'ip' && command == 'block') {
+												tcConfirm(value+" <?php echo (isset($tabsClass['guestbook']) ? _t('IP에서 작성한 모든 방명록을 삭제하시겠습니까?') : _t('IP에서 작성한 모든 댓글을 삭제하시겠습니까?'));?>", function () {	// Textcube-NG: 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396)
 												var wipe = new HTTPRequest("POST", "<?php echo $blogURL;?>/owner/communication/comment/delete/");
 
 												wipe.onSuccess = function() {
@@ -170,11 +183,14 @@ require ROOT . '/interface/common/owner/header.php';
 												}
 												PM.addRequest(wipe, "<?php echo (isset($tabsClass['guestbook']) ? _t('방명록을 삭제하고 있습니다.') : _t('댓글을 삭제하고 있습니다.'));?>");
 												wipe.send("ip="+ value);
+												}, function () {
+													changeStateItems(value, mode, command, name);
+												});
 											} else {
 												changeStateItems(value, mode, command, name);
 											}
 										}
-										request.send();
+										request.send(param);
 									} catch(e) {
 										alert(e.message);
 									}
@@ -280,7 +296,7 @@ require ROOT . '/interface/common/owner/communicationTab.php';
 ?>
 							<form id="category-form" class="category-box" method="post" action="<?php echo $blogURL;?>/owner/communication/comment">
 								<div class="section">
-									<input type="hidden" name="page" value="<?php echo $suri['page'];?>" />
+									<input type="hidden" name="page" value="<?php echo htmlspecialchars((string)$suri['page'], ENT_QUOTES);?>" />
 									<select id="category" name="category" onchange="document.getElementById('category-form').page.value=1; document.getElementById('category-form').submit()">
 										<option value="0"><?php echo _t('전체');?></option>
 <?php
@@ -488,7 +504,7 @@ echo "									</tbody>";
 	   							<hr class="hidden" />
 
 								<div class="data-subbox">
-									<input type="hidden" name="page" value="<?php echo $suri['page'];?>" />
+									<input type="hidden" name="page" value="<?php echo htmlspecialchars((string)$suri['page'], ENT_QUOTES);?>" />
 									<input type="hidden" name="name" value="" />
 									<input type="hidden" name="ip" value="" />
 									<input type="hidden" name="deleteItemsFromSameIP" value="<?php echo ($deleteCommentsFromSameIP ? "1" : "0");?>" />
@@ -556,7 +572,7 @@ for ($i = 10; $i <= 30; $i += 5) {
 									<label for="search"><?php echo _t('제목');?>, <?php echo _t('내용');?></label>
 									<input type="text" id="search" class="input-text" name="search" value="<?php echo htmlspecialchars($search);?>" onkeydown="if (event.keyCode == '13') { document.getElementById('search-form').withSearch.value = 'on'; document.getElementById('search-form').submit(); }" />
 									<input type="hidden" name="withSearch" value="" />
-									<input type="hidden" name="status" value="<?php echo htmlspecialchars($_POST['status'], ENT_QUOTES);?>" />
+									<input type="hidden" name="status" value="<?php echo htmlspecialchars($_POST['status'] ?? '', ENT_QUOTES);?>" />
 									<input type="submit" class="search-button input-button" value="<?php echo _t('검색');?>" onclick="document.getElementById('search-form').withSearch.value = 'on'; document.getElementById('search-form').submit();" />
 								</div>
 							</form>

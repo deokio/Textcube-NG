@@ -14,6 +14,8 @@
 	image : i (*!)
 */
 
+// Textcube-NG: 이 파일은 rewrite.php 를 거치지 않고 preprocessor 를 직접 부르므로, rewrite.php 첫 줄과 같이 입력 개수 경고를 먼저 받아 둔다(r3-20)
+$__tcStartupError = error_get_last();
 define('ROOT', '../../..');
 require ROOT . '/library/preprocessor.php';
 

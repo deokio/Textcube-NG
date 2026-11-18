@@ -9,7 +9,7 @@ $entryId = (int)$suri['id'];
 $IV = array(
 	'POST' => array(
 		'key' => array('string', 32, 32),
-		"comment_type" => array(array('idpwd', ''), 'default' => '', 'mandatory' => false),
+		"comment_type" => array(array('idpwd', 'social', ''), 'default' => '', 'mandatory' => false),	// Textcube-NG: 'social' = CL_SocialLogin 소셜 계정으로 글쓰기(r3-41)
 		"name" => array('string', 'default' => ''),
 		"password" => array('string', 'default' => ''),
 		"secret" => array(array('1', 'on'), 'mandatory' => false),
@@ -23,7 +23,7 @@ if(!Validator::isValid())
 	Respond::PrintResult(array('error' => 1, 'description' => 'Illegal parameters'));
 requireStrictRoute();
 header('Content-Type: text/xml; charset=utf-8');
-if (!isset($_POST['key']) || ($_POST['key'] != md5(filemtime(ROOT . '/config.php'))) || !Setting::getBlogSettingGlobal('acceptComments',0)) {
+if (!isset($_POST['key']) || ($_POST['key'] != md5(filemtime(ROOT . '/config.php'))) || !Setting::getBlogSettingGlobal('acceptComments',1)) {	// Textcube-NG: 설정 행이 없을 때의 기본값을 화면(library/view/view.php)·설치 값과 같은 1(허용)로 맞춘다(원본 0, r3-15)
 	Respond::PrintResult(array('error' => 0, 'commentBlock' => '', 'recentCommentBlock' => ''));
 	exit;
 }
@@ -32,6 +32,18 @@ $userPassword = isset($_POST["password"]) ? $_POST["password"] : '';
 $userSecret = isset($_POST["secret"]) ? 1 : 0;
 $userHomepage = isset($_POST["homepage"]) ? trim($_POST["homepage"]) : '';
 $userComment = isset($_POST["comment"]) ? trim($_POST["comment"]) : '';
+// Textcube-NG: 소셜 계정으로 글쓰기(comment_type=social, CL_SocialLogin 댓글·방명록 폼) — 서버가 세션의 소셜 신원을 확인한다.
+// 글쓴이 이름은 세션 표시 이름(없으면 공급자 이름), 비밀번호는 빈 값으로 정하고 보낸 name·password 는 쓰지 않는다. 소셜 신원이 없으면 받지 않는다(r3-41)
+if (isset($_POST['comment_type']) && $_POST['comment_type'] === 'social' && !doesHaveMembership() && !doesHaveOwnership()) {
+	$socialIdentity = Acl::getIdentity('openid');
+	if (OpenID::identityKind($socialIdentity) !== 'social') {
+		Respond::PrintResult(array('error' => 2, 'description' => _text('소셜 계정으로 로그인해 주십시오.')));
+		exit;
+	}
+	$socialName = (isset($_SESSION['openid']['nickname']) && is_string($_SESSION['openid']['nickname'])) ? trim($_SESSION['openid']['nickname']) : '';
+	$userName = ($socialName !== '') ? $socialName : OpenID::getDisplayName($socialIdentity);
+	$userPassword = '';
+}
 if (!doesHaveMembership() && !doesHaveOwnership() && $userName == '') {
 	Respond::PrintResult(array('error' => 2, 'description' => _text('이름을 입력해 주십시오.')));
 	exit;

@@ -29,6 +29,13 @@ function getMIMEType($ext, $filename = null) {
 				return 'image/tiff';
 			case 'bmp':
 				return 'image/bmp';
+			// Textcube-NG: webp·avif·svg(r3-20)
+			case 'webp':
+				return 'image/webp';
+			case 'avif':
+				return 'image/avif';
+			case 'svg':
+				return 'image/svg+xml';
 			// Sound
 			case 'wav':
 				return 'audio/x-wav';
@@ -149,7 +156,8 @@ function dumpWithEtag($path) {
 	if( strpos( $path, "/.." ) !== false || 
 		strpos( $path, "\\.." ) !== false ||
 		strcasecmp( substr( $path, -3 ), "php" ) == 0 ||
-		!file_exists( $path ) ) {
+		!file_exists( $path ) ||
+		is_dir( $path ) ) {	// Textcube-NG: 디렉터리는 404(fopen·fread 가 실패해 200 + 빈 본문이 되던 것)(v3.195)
 		header("HTTP/1.0 404 Not found");
 		exit;
 	}
@@ -161,7 +169,23 @@ function dumpWithEtag($path) {
 	$length = $fs['size'];
 
 	if( !headerEtag($etag,$length,$lastmodified) ) {
-		header('Content-type: '.getMIMEType(null,$path)); 
+		// Textcube-NG: attach 아래 파일만 nosniff, MIME 을 모르면 application/octet-stream. 그 밖 경로(resources·plugins·skin·썸네일·기본 favicon)는
+		// 원본처럼 getMIMEType 결과 그대로(.js 처럼 MIME 표에 없는 파일이 nosniff 로 막히지 않게). svg 는 경로와 상관없이 CSP sandbox.
+		// attach 판정: 호출처는 Dispatcher 직접 전달 분기(현재 폴더 기준 상대 경로 'attach/…')와 interface/favicon.ico.php(__TEXTCUBE_ATTACH_DIR__ 절대 경로)이므로
+		// realpath 로 바꿔 attach 폴더 realpath 의 하위인지 본다(decisions D11·헤더 범위, 사용자 11-12 "attach 경로에만 적용")(r3-20)
+		$mime = getMIMEType(null, $path);
+		$attachDir = defined('__TEXTCUBE_ATTACH_DIR__') ? __TEXTCUBE_ATTACH_DIR__ : (defined('ROOT') ? ROOT . '/attach' : '');
+		$realFile = realpath($path);
+		$realAttach = ($attachDir !== '') ? realpath($attachDir) : false;
+		if ($realFile !== false && $realAttach !== false && strncmp($realFile, $realAttach . DIRECTORY_SEPARATOR, strlen($realAttach) + 1) === 0) {
+			header('Content-type: ' . ($mime !== '' ? $mime : 'application/octet-stream'));
+			header('X-Content-Type-Options: nosniff');
+			// Textcube-NG: r3-27 R-434 — attach 아래 .html·.htm·.xhtml 은 문서로 열리지 않고 내려받게 한다(.htaccess·nginx 설정과 같은 규칙. PHP 로 전달되는 경로용)
+			if (preg_match('/\.x?html?$/i', $path) === 1) header('Content-Disposition: attachment');
+		} else {
+			header('Content-type: ' . $mime);
+		}
+		if ($mime === 'image/svg+xml') header("Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; img-src data:; sandbox");
 		$f =  fopen($path,"r");
 		if( !$f ) {
 			header("HTTP/1.0 404 Not found");

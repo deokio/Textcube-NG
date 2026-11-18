@@ -36,10 +36,15 @@ class Moblog
 		$this->pop3->setSizeFilter( array(&$this,'checkSize') );
 		$this->pop3->setRetrCallback( array(&$this,'retrieveCallback') );
 
-		$this->uidl_file = ROOT.DS."cache".DS."pop3uidl.txt";
+		// Textcube-NG: 확인 기록(uid)은 블로그별 cache/moblog/{blogid}.uidl.txt. 없으면 기존 공용 cache/pop3uidl.txt 내용으로 한 번 채운다
+		// (비워 두면 서버에 남은 메일이 모두 다시 게시된다). 채운 내용은 다음 saveUidl() 때 블로그별 파일에 저장된다(v3.204)
+		$this->uidl_file = Moblog::dataFile(".uidl", true);
+		$legacy_uidl_file = ROOT.DS."cache".DS."pop3uidl.txt";
 
 		if( file_exists( $this->uidl_file ) ) {
 			$this->stored_uidl = file_get_contents( $this->uidl_file );
+		} else if( file_exists( $legacy_uidl_file ) ) {
+			$this->stored_uidl = file_get_contents( $legacy_uidl_file );
 		} else {
 			$this->stored_uidl = '';
 		}
@@ -51,7 +56,7 @@ class Moblog
 		}
 	}
 
-	function decorate_log($s)
+	static function decorate_log($s)
 	{
 		global $blogURL;
 		$s = htmlspecialchars($s);
@@ -59,9 +64,37 @@ class Moblog
 		return $s;
 	}
 
+	// Textcube-NG: 로그·확인 기록을 서비스 공용 파일 하나에 써서 다른 블로그 관리자가 메일 계정·발신자·제목·상대 서버 응답을 읽을 수 있었고
+	// 확인 기록(uid)이 블로그 사이에 섞였다. cache/moblog/{blogid}.txt·{blogid}.uidl.txt 로 나눈다(v3.204)
+	static function dataFile($suffix, $create = false)
+	{
+		$dir = ROOT.DS."cache".DS."moblog";
+		if( $create ) {
+			if( !is_dir($dir) ) @mkdir($dir);
+			// Textcube-NG: 이미 있던 폴더(예전 0755)도 0700 으로 맞춘다. 원본 흐름은 새로 만들 때만 chmod 했다(r3-5)
+			// PHP port(Textcube-NG): r3-10 R-308 실제 경로(realpath)가 cache 폴더 아래일 때만 권한을 바꾼다 — cache/moblog 가 심볼릭 링크 등으로 cache 밖을 가리키면
+			// chmod 하지 않음. realpath 가 실패하면 건너뛰고, Windows 는 구분자(\ → /)·대소문자를 맞춰 비교한다
+			if( is_dir($dir) ) {
+				$realDir = @realpath($dir);
+				$realCache = @realpath(ROOT.DS."cache");
+				if( $realDir !== false && $realCache !== false ) {
+					$realDir = rtrim(str_replace('\\', '/', $realDir), '/');
+					$realCache = rtrim(str_replace('\\', '/', $realCache), '/');
+					if( DIRECTORY_SEPARATOR === '\\' ) {
+						$realDir = strtolower($realDir);
+						$realCache = strtolower($realCache);
+					}
+					if( $realDir !== $realCache && strpos($realDir.'/', $realCache.'/') === 0 && (@fileperms($dir) & 0777) !== 0700 ) @chmod($dir, 0700);	// 웹 서버 사용자만(백업 폴더 관례)
+				}
+			}
+		}
+		return $dir.DS.(int)getBlogId().$suffix.".txt";
+	}
+
 	function log($msg)
 	{
-		$f = fopen( ROOT.DS."cache".DS."moblog.txt", "a" );
+		// Textcube-NG: 블로그별 로그 파일(v3.204)
+		$f = fopen( Moblog::dataFile("", true), "a" );
 		fwrite( $f, date('Y-m-d H:i:s')." $msg\r\n" );
 		fclose($f);
 		if( $msg[0] == '*' ) {
@@ -78,9 +111,22 @@ class Moblog
 		return true;
 	}
 
+	// Textcube-NG: 메일 서버 주소·포트는 블로그 관리자가 정하는 값이라 서버 안쪽의 임의 포트(DB·캐시 등)로 연결해 POP3/IMAP 명령을 보내고
+	// 상대 응답(배너·오류)을 로그로 볼 수 있었다. 포트는 POP3·IMAP 표준(110/995/143/993)만, 호스트는 이름·IPv4 표기 문자만(v3.204)
+	static function isAllowedServer($host, $port)
+	{
+		return is_string($host) && preg_match('/^[A-Za-z0-9.-]{1,253}\z/', $host)
+			&& (string)(int)$port === (string)$port && in_array((int)$port, array(110, 995, 143, 993), true);
+	}
+
 	function check()
 	{
 		$sslLabel = ['none' => '', 'ssl' => '(SSL/TLS)', 'starttls' => '(STARTTLS)'][$this->ssl] ?? '';
+		// Textcube-NG: 허용하지 않는 서버는 연결하지 않는다. 로그 값은 허용 문자 밖을 ? 로 바꿔 로그 줄 위조(CR/LF)를 막는다(v3.204)
+		if( !Moblog::isAllowedServer( $this->host, $this->port ) ) {
+			$this->log( "* "._t("접속 실패")." : ".preg_replace('/[^A-Za-z0-9.:-]/', '?', $this->host.":".$this->port).$sslLabel );
+			return false;
+		}
 		if( !$this->pop3->connect( $this->host, $this->port, $this->ssl ) ) {
 			$err = $this->pop3->getLastError();
 			$this->log( "* "._t("접속 실패")." : ".$this->host.":".$this->port.$sslLabel.($err ? " [$err]" : "") );
@@ -131,10 +177,12 @@ class Moblog
 
 	function isAllowed( & $mail )
 	{
+		$mail['unverified'] = false;
 		// 실제 발신 주소($mail['from'])만 허용 목록과 대조 — 표시 이름($mail['sender'])은 발신자가 임의로 설정 가능하므로 검사 제외
+		/* [보안] 원본은 부분 문자열 비교(strstr)라 허용 항목을 포함한 다른 주소도 통과했다 → 정확히 일치할 때만 허용(matchAllow) */
 		if( isset( $mail['from'] ) && !empty($this->allow) ) {
 			foreach( $this->allow as $a ) {
-				if( strstr( $mail['from'], $a ) !== false ) return true;
+				if( Moblog::matchAllow( $mail['from'], $a ) ) return true;
 			}
 		}
 		if( $this->allowonly ) {
@@ -142,14 +190,46 @@ class Moblog
 			return false;
 		}
 
+		/* [보안] X-MMS-*·Return-Path 헤더는 발신자가 임의로 넣을 수 있어 발신자 확인 근거가 되지 못한다 →
+		   허용 목록으로 확인되지 않은 메일로 표시하고 비공개 별도 글로만 저장(retrieveCallback) */
 		if( !empty($mail['mms']) ) {
+			$mail['unverified'] = true;
 			return true;
 		}
 		if( isset($mail['return_path']) && strstr( $mail['return_path'], 'mms' ) ) {
 			/* KTF: ktfmms, SKT: vmms */
+			$mail['unverified'] = true;
 			return true;
 		}
 		return false;
+	}
+
+	/* 허용 목록 항목과 발신 주소 비교(대소문자 무시, 정확히 일치):
+	   '@' 로 시작하는 항목은 도메인, '@' 가 들어간 항목은 주소 전체, 그 외(전화번호 등)는 주소의 '@' 앞부분 */
+	static function matchAllow( $from, $allow )
+	{
+		$from = strtolower( trim( (string)$from ) );
+		$allow = strtolower( trim( (string)$allow ) );
+		if( $from === '' || $allow === '' ) return false;
+		$at = strrpos( $from, '@' );
+		if( $allow[0] == '@' ) {
+			return $at !== false && substr( $from, $at ) === $allow;
+		}
+		if( strpos( $allow, '@' ) !== false ) {
+			return $from === $allow;
+		}
+		return ( $at === false ? $from : substr( $from, 0, $at ) ) === $allow;
+	}
+
+	/* 첨부 내용이 허용 형식 이미지이면 그 형식의 확장자('.jpg' 등), 아니면 false */
+	static function imageExtension( $data )
+	{
+		if( !is_string($data) || $data === '' ) return false;
+		$info = @getimagesizefromstring( $data );
+		if( $info === false ) return false;
+		$types = array( IMAGETYPE_GIF => '.gif', IMAGETYPE_JPEG => '.jpg', IMAGETYPE_PNG => '.png',
+			IMAGETYPE_BMP => '.bmp', IMAGETYPE_WEBP => '.webp' );
+		return isset( $types[$info[2]] ) ? $types[$info[2]] : false;
 	}
 
 	function _getDecoratedContent( & $mail, $docid ) {
@@ -162,10 +242,17 @@ class Moblog
 		//$text .= empty($mail['subject']) ? '' : ("<p>".$mail['subject']."</p>\r\n");
 		if( !empty($mail['text']) ) {
 			$content = $mail['text'];
+			/* [보안] 메일 본문은 외부(발신자) 입력이다. 원본은 본문을 그대로 글에 넣어 스크립트가 공개 글에 저장될 수 있었다 →
+			   text/plain 은 HTML 인코딩 후 줄바꿈 변환, 그 외(HTML)는 허용 목록 sanitizer(sanitizeHTML)로 정리 */
 			if($mail['content_type'] == 'text/plain') {
+				$content = htmlspecialchars($content, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 				$newLineFrom = array("￦n","\\n");
 				$newLineTo = "<br />\r\n";
 				$content = str_replace($newLineFrom, $newLineTo, $content); 
+			} else {
+				if (!function_exists('sanitizeHTML'))
+					requireLibrary('function/html');
+				$content = sanitizeHTML($content);
 			}
 			$text .= "<div class=\"moblog-body\">".$content."</div>\r\n";
 		}
@@ -235,9 +322,18 @@ class Moblog
 		$moblog_begin = "\n<div class=\"moblog-entry\">";
 		$moblog_end = "\n</div>\n";
 
-		if( $post->open( "slogan = '$slogan'" ) ) {
+		/* [보안] 허용 목록으로 확인되지 않은 메일(MMS 헤더만으로 통과)은 원본처럼 공개 글로 게시·같은 날짜 글에 추가하지 않고
+		   별도 슬로건의 비공개 글로 저장 — 관리자가 확인 후 공개. 슬로건을 나눠 이후 확인된 메일이 이 글에 합쳐져 공개되지 않게 한다 */
+		$visibility = $this->visibility;
+		if( !empty($mail['unverified']) ) {
+			$slogan .= '-' . str_replace( ':', '', $docid );
+			$visibility = 'private';
+			$this->log( "* ". _t("허용 목록에 없는 발신자 — 비공개 글로 저장합니다.") );
+		}
+
+		if( empty($mail['unverified']) && $post->open( "slogan = '$slogan'" ) ) {
 			$post->loadTags();
-			$this->log( "* 기존 글을 엽니다. (SLOGAN:$slogan)" );
+			$this->log( "* ". _t("기존 글을 엽니다.")." (SLOGAN:$slogan)" );
 			if( empty($post->tags) ) {
 				$post->tags = array();
 			}
@@ -247,7 +343,7 @@ class Moblog
 			$post->modified = $mail['date'];
 			$post->visibility = $this->visibility;
 		} else {
-			$this->log( "* 새 글을 작성합니다. (SLOGAN:$slogan)" );
+			$this->log( "* ". _t("새 글을 작성합니다.")." (SLOGAN:$slogan)" );
 			if( isset( $mail['date_year'] ) ) {
 				$post->title = str_replace( array('%Y','%M','%D'), 
 					array( $mail['date_year'], $mail['date_month'], $mail['date_day'] ), $this->subject );
@@ -264,7 +360,7 @@ class Moblog
 			$post->created = time();
 			$post->acceptcomment = true;
 			$post->accepttrackback = true;
-			$post->visibility = $this->visibility;
+			$post->visibility = $visibility;
 			$post->published = time();
 			$post->modified = $mail['date'];
 			$post->slogan = $slogan;
@@ -283,7 +379,18 @@ class Moblog
 			requireModel( "blog.api" );
 			$post->content .= "<div class=\"moblog-attachments\">\n";
 			foreach( $mail['attachments'] as $mail_att ) {
+				$mail_att['filename'] = isset( $mail_att['filename'] ) ? (string)$mail_att['filename'] : '';
 				$this->log( "* ". _t("첨부")." : {$mail_att['filename']}" );
+				/* [보안] 첨부 파일명·내용은 발신자 입력 — 원본은 MIME 이름의 확장자(.phtml·.html·.svg 등)를 그대로 attach/ 에 저장했다 →
+				   내용이 허용 형식 이미지인 것만 받고, 이미지 확장자가 아니면 확인된 형식의 확장자를 붙인다 */
+				$imageExt = Moblog::imageExtension( isset( $mail_att['decoded_content'] ) ? $mail_att['decoded_content'] : '' );
+				if( $imageExt === false ) {
+					$this->log( "* ". _t("첨부 제외(허용된 이미지 형식 아님)")." : {$mail_att['filename']}" );
+					continue;
+				}
+				if( !in_array( Path::getExtension( $mail_att['filename'] ), array( '.gif', '.jpg', '.jpeg', '.png', '.bmp', '.webp' ), true ) ) {
+					$mail_att['filename'] .= $imageExt;
+				}
 				$att = api_addAttachment( getBlogId(), $post->id, 
 							array( 
 									'name' => $mail_att['filename'], 
@@ -321,9 +428,16 @@ function moblog_check()
 {
 	if( isset($_GET['check']) && $_GET['check'] == 1 ) {
 		echo "<html><body style=\"font-size:0.9em\">";
+		/* [보안] 로그(메일함 계정·서버·발신자·제목)는 관리자만 열람 — 원본은 권한 검사 없이 누구에게나 출력(로그삭제와 같은 검사) */
+		if( !Acl::check('group.administrators') ) {
+			echo "<p style=\"color:red;\">" . _t('권한이 없습니다.') . "</p>";
+			echo "</body></html>";
+			exit;
+		}
 		echo "<style>.emplog{color:red}.oklog{color:blue}</style>";
 		echo "<ul>";
-		$logFile = ROOT.DS."cache".DS."moblog.txt";
+		// Textcube-NG: 블로그별 로그 파일. 읽기는 폴더를 만들지 않는다(v3.204)
+		$logFile = Moblog::dataFile("");
 		$logContent = file_exists($logFile) ? file_get_contents($logFile) : '';
 		echo join( "",
 			array_map(
@@ -342,9 +456,13 @@ function moblog_check()
 
 	if( isset($_GET['clearlog']) && $_GET['clearlog'] == 1 ) {
 		echo "<html><body style=\"font-size:0.9em\">";
-		if( Acl::check('group.administrators') ) {
-			$logFile = ROOT.DS."cache".DS."moblog.txt";
-			file_put_contents($logFile, '');
+		// Textcube-NG: r3-27 R-423 — 로그 삭제는 관리자 GET 한 번으로 되던 것을 POST + CSRF 토큰(getCSRFToken·__isCSRFTokenValid, preprocessor 가 POST csrfToken 을 보관)으로 바꾼다
+		if( Acl::check('group.administrators') && !(isset($_SERVER['REQUEST_METHOD']) && strtoupper((string) $_SERVER['REQUEST_METHOD']) === 'POST' && __isCSRFTokenValid()) ) {
+			echo "<p style=\"color:red;\">" . _t('요청이 올바르지 않습니다.') . "</p>";
+		} else if( Acl::check('group.administrators') ) {
+			// Textcube-NG: 블로그별 로그 파일. 비우기는 폴더를 만들지 않고 파일이 있을 때만 비운다(v3.204)
+			$logFile = Moblog::dataFile("");
+			if( file_exists($logFile) ) file_put_contents($logFile, '');
 			echo "<p style=\"color:green;\">&#10003; " . _t('로그가 삭제되었습니다.') . "</p>";
 		} else {
 			echo "<p style=\"color:red;\">" . _t('권한이 없습니다.') . "</p>";
@@ -388,8 +506,11 @@ function moblog_check()
 function moblog_logrotate()
 {
 	requireLibrary( "function/logrotate" );
-	cutlog( ROOT.DS."cache".DS."moblog.txt", 1024*1024 );
-	cutlog( ROOT.DS."cache".DS."pop3uidl.txt", 1024*1024 );
+	// Textcube-NG: 블로그별 파일(cache/moblog/*.txt). 기존 공용 파일은 옮기거나 지우지 않고 더 쓰지 않는다(v3.204)
+	$files = glob( ROOT.DS."cache".DS."moblog".DS."*.txt" );
+	if( is_array($files) ) {
+		foreach( $files as $file ) cutlog( $file, 1024*1024 );
+	}
 }
 
 function moblog_manage()
@@ -399,7 +520,12 @@ function moblog_manage()
 		Setting::setBlogSettingGlobal( 'MmsPop3Email', $_POST['pop3email'] ?? '' );
 		Setting::setBlogSettingGlobal( 'MmsPop3Host', $_POST['pop3host'] ?? '' );
 		$pop3portVal = (int)($_POST['pop3port'] ?? 110);
-		if ($pop3portVal < 1 || $pop3portVal > 65535) $pop3portVal = 110;
+		// Textcube-NG: 포트는 POP3·IMAP 표준(110/995/143/993)만 저장한다. 그 밖의 값은 프로토콜·SSL 에 맞는 기본값(v3.204)
+		if (!in_array($pop3portVal, array(110, 995, 143, 993), true)) {
+			$isImap = (isset($_POST['pop3protocol']) && $_POST['pop3protocol'] === 'imap');
+			$isSsl = (isset($_POST['pop3ssl']) && $_POST['pop3ssl'] === 'ssl');
+			$pop3portVal = $isImap ? ($isSsl ? 993 : 143) : ($isSsl ? 995 : 110);
+		}
 		Setting::setBlogSettingGlobal( 'MmsPop3Port', $pop3portVal );
 		$sslVal = in_array($_POST['pop3ssl'] ?? '', ['ssl', 'starttls'], true) ? $_POST['pop3ssl'] : 'none';
 		Setting::setBlogSettingGlobal( 'MmsPop3Ssl', $sslVal );
@@ -645,13 +771,13 @@ function moblog_manage()
 											</dd>
 											<dd>
 												<input type="radio" id="pop3allowlist" name="pop3allowonly" value="0" <?php echo $pop3mmsallowonly ? '':'checked="checked"' ?> />
-												<label for="pop3allowlist"><?php echo _t('아래 목록의 송신자에게서 온 메일을 MMS로 추가 처리합니다 (MMS 헤더가 있는 메일은 목록과 무관하게 항상 처리됩니다)'); ?></label>
+												<label for="pop3allowlist"><?php echo _t('아래 목록의 송신자에게서 온 메일을 MMS로 처리합니다 (목록에 없는 송신자의 MMS 메일은 비공개 글로 저장되며, 확인 후 공개할 수 있습니다)'); ?></label>
 											</dd>
 											<dd>
 												<input type="text" maxlength="512" name="pop3allow" value="<?php echo htmlspecialchars($pop3mmsallow, ENT_QUOTES, 'UTF-8');?>" style="width:90%" />
 											</dd>
 											<dd>
-												<?php echo _t('전화번호 또는 이메일 주소를 쉼표(,)나 공백으로 구분하여 입력합니다. 예: 01012345678, user@example.com') ?>
+												<?php echo _t('전화번호 또는 이메일 주소를 쉼표(,)나 공백으로 구분하여 입력합니다. 정확히 일치해야 하며, 전화번호는 메일 주소의 @ 앞부분, @도메인은 도메인 전체와 비교합니다. 예: 01012345678, user@example.com, @example.com') ?>
 											</dd>
 										</dl>
 									<div class="button-box">
@@ -670,11 +796,15 @@ function moblog_manage()
 												onclick="document.getElementById('pop3_debug').src='<?php echo $blogURL?>/plugin/moblog/check?rnd='+((new Date()).getTime())" />
 											<input type="button" class="input-button wide-button" value="<?php echo _t('로그삭제');?>"
 												style="background:#c0392b;color:#fff;border-color:#922b21;"
-												onclick="if(!confirm('<?php echo htmlspecialchars(_t('로그를 삭제하시겠습니까?'), ENT_QUOTES, 'UTF-8');?>'))return;var f=document.getElementById('pop3_debug');f.src='<?php echo $blogURL?>/plugin/moblog/check?clearlog=1&amp;rnd='+((new Date()).getTime());" />
+												<?php /* Textcube-NG: 아래 onclick 의 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396) */ ?>
+												onclick="tcConfirm('<?php echo htmlspecialchars(_t('로그를 삭제하시겠습니까?'), ENT_QUOTES, 'UTF-8');?>', function () {document.getElementById('moblog_clearlog_form').submit();});" />
 										</dd>
 									</dl>
 								</div>
-								<iframe src="about:blank" class="debug_message" id="pop3_debug" style="width:100%; height:400px">
+								<?php /* Textcube-NG: r3-27 R-423 — 로그삭제 버튼은 GET 주소 대신 이 숨은 POST 폼(CSRF 토큰 포함)을 iframe 으로 보낸다 */ ?>
+								<form id="moblog_clearlog_form" method="post" action="<?php echo $blogURL?>/plugin/moblog/check?clearlog=1" target="pop3_debug" style="display:none"><input type="hidden" name="csrfToken" value="<?php echo htmlspecialchars(getCSRFToken(), ENT_QUOTES, 'UTF-8');?>" /></form>
+								<?php /* Textcube-NG: r3-27 보충 — 위 로그삭제 폼(target="pop3_debug")이 이 iframe 을 찾도록 name 을 더함(target 은 id 가 아니라 name 으로 찾음) */ ?>
+								<iframe src="about:blank" class="debug_message" id="pop3_debug" name="pop3_debug" style="width:100%; height:400px">
 								</iframe>
 <?php endif ?>
 						</div>

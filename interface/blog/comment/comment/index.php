@@ -22,7 +22,7 @@ if(!Validator::isValid())
 requireStrictRoute();
 $suri['id'] = (int)$suri['id'];
 
-if (!Setting::getBlogSettingGlobal('acceptComments',0) && !doesHaveOwnership()) {
+if (!Setting::getBlogSettingGlobal('acceptComments',1) && !doesHaveOwnership()) {	// Textcube-NG: 설정 행이 없을 때의 기본값을 화면(library/view/view.php)·설치 값과 같은 1(허용)로 맞춘다(원본 0, r3-15)
 	Respond::PrintResult(array('error' => 0, 'commentBlock' => '', 'recentCommentBlock' => ''));
 	exit;
 }

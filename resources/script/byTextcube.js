@@ -153,14 +153,18 @@ function onclick_insert_guest(form, mode, num, page, sort) {
 	if (isNull(form.guest_input_name, '이름을 입력해 주십시오.')) return false;
 	if (isNull(form.guest_textarea_body, '본문을 입력해 주십시오')) return false;
 	if (form.guest_input_password.value == '') {
-		if (!confirm('비밀번호를 입력하지 않으면 나중에 수정하실 수 없습니다.\t\n\n계속 진행하시겠습니까?')) return false;
+		tcConfirm('비밀번호를 입력하지 않으면 나중에 수정하실 수 없습니다.\t\n\n계속 진행하시겠습니까?', tcInsertGuestGo);	// Textcube-NG: 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396)
+		return false;
 	}
+	tcInsertGuestGo();	// Textcube-NG: 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396)
+	function tcInsertGuestGo() {
 	form.md.value = 'guest_db';
 	form.act.value = mode;
 	form.num.value = num;
 	form.page.value = page;
 	form.sort.value = sort;
 	form.submit();
+	}
 }
 
 function onclick_edit_guest(form, pnum, num, page, sort) {
@@ -184,7 +188,7 @@ function onclick_insert_comment(form, num){
 	// if (isNull(eval('form.c_password_'+num), '패스워드를 입력해 주십시오')) return false;
 	if (isNull(eval('form.c_body_'+num), '답글을 입력해 주십시오')) return false;
 
-	if (!confirm('답글을 올리시겠습니까?\t')) return false;
+	tcConfirm('답글을 올리시겠습니까?\t', function () {	// Textcube-NG: 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396)
 
 	form.target = 'exe_frame';
 	form.action = 'add_exe.php';
@@ -202,6 +206,8 @@ function onclick_insert_comment(form, num){
 	form.action = 'index.php';
 	form.md.value = '';
 	form.num.value = '';
+	});
+	return false;
 }
 
 function onclick_addexe(num, d_target, obj1, obj2, mode) {
@@ -378,8 +384,9 @@ function check_cb_set(obj) {
 
 function set_preview_image(obj1, obj2, path1, path2) {
 	temp = obj1.options[obj1.selectedIndex].value.split("|");
-	var ext = temp[2].substring(temp[2].length-3).toLowerCase();
-	if (!(ext == 'jpg' || ext == 'gif' || ext == 'bmp' || ext == 'png')) set_preview_no_image(obj2);
+	// Textcube-NG: 확장자는 마지막 '.' 뒤 전부(jpeg·webp·avif·svg 도 미리보기)(r3-20)
+	var ext = temp[2].substring(temp[2].lastIndexOf('.') + 1).toLowerCase();
+	if (!(ext == 'jpg' || ext == 'jpeg' || ext == 'gif' || ext == 'bmp' || ext == 'png' || ext == 'webp' || ext == 'avif' || ext == 'svg')) set_preview_no_image(obj2);
 	else obj2.src = servicePath + '/attach/' + path1 + path2 + temp[2];
 	return true;
 }

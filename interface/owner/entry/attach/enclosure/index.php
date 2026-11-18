@@ -2,6 +2,14 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 $IV = array(
 	'POST' => array(
 		'fileName' => array('string', 1, 255),
@@ -51,6 +59,17 @@ requireStrictRoute();
 		Respond::PrintResult(array('error' => 1)); exit;
 	}
 })();
+
+/* [보안] 원본은 이름만으로 찾아 다른 사람의 글·임시 첨부의 대표 첨부(enclosure)를 바꿀 수 있었다
+   → 그 첨부의 parent 를 다룰 수 있을 때만(blog.attachment.php canEditAttachmentParent(), setEnclosure() 와 같은 blogid·name 조건) */
+$pool = DBModel::getInstance();
+$pool->reset('Attachments');
+$pool->setQualifier('blogid', 'eq', getBlogId());
+$pool->setQualifier('name', 'eq', $_POST['fileName'], true);
+$enclosureParent = $pool->getCell('parent');
+if (!is_null($enclosureParent) && !canEditAttachmentParent(getBlogId(), $enclosureParent)) {
+	Respond::PrintResult(array('error' => 1)); exit;
+}
 
 $result = setEnclosure($_POST['fileName'], $_POST['order']);
 // setEnclosure returns: true (set ok), false (update failed), 0 (cleared ok), 3 (not found).

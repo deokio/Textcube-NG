@@ -2,6 +2,14 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 $IV = array(
 	'POST' => array(
 		'page' => array ('int','min'=>1),
@@ -26,6 +34,8 @@ $isOwner = doesHaveOwnership();
 $line = Model_Line::getInstance();
 if ($isOwner && !isset($conditions['category'])) {
 	$conditions['blogid'] = getBlogId();
+} else if (!$isOwner) {
+	$conditions['category'] = 'public';	// Textcube-NG: 방문자는 공개 라인만(/line 과 같은 규칙) — category=private POST 로 비공개 라인이 보이던 결함(v3.163)
 }
 $stream = $line->getWithConditions($conditions);
 

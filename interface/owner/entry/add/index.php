@@ -45,21 +45,17 @@ $entry['content'] = $_POST['content'];
 $entry['contentformatter'] = $_POST['contentformatter'];
 $entry['contenteditor'] = $_POST['contenteditor'];
 $entry['location'] = empty($_POST['location']) ? '/' : $_POST['location'];
-$entry['latitude'] = empty($_POST['latitude']) ? null : $_POST['latitude'];
-$entry['longitude'] = empty($_POST['longitude']) ? null : $_POST['longitude'];
+$entry['latitude'] = (empty($_POST['latitude']) || $_POST['latitude'] === 'null' || $_POST['latitude'] === 'undefined') ? null : $_POST['latitude'];
+$entry['longitude'] = (empty($_POST['longitude']) || $_POST['longitude'] === 'null' || $_POST['longitude'] === 'undefined') ? null : $_POST['longitude'];
 $entry['tag'] = empty($_POST['tag']) ? '' : $_POST['tag'];
 $entry['acceptcomment'] = empty($_POST['acceptcomment']) ? 0 : 1;
 $entry['accepttrackback'] = empty($_POST['accepttrackback']) ? 0 : 1;
 $entry['published'] = empty($_POST['published']) ? 1 : $_POST['published'];
 $entry['draft'] = empty($_POST['draft']) ? 0 : $_POST['draft'];
 if ($id = addEntry($blogid, $entry)) {
-	// 새 글 저장 전 업로드된 parent=0 임시 첨부파일을 새 entryId로 이전
-	$pool = DBModel::getInstance();
-	$pool->reset('Attachments');
-	$pool->setAttribute('parent', $id);
-	$pool->setQualifier('blogid', 'equals', $blogid);
-	$pool->setQualifier('parent', 'equals', 0);
-	$pool->update();
+	// 새 글 저장 전 업로드된 임시 첨부파일을 새 entryId로 이전
+	// [보안] 현재 사용자의 임시 첨부(parent = -(userid+1))만 — 원본(포트)은 이 블로그의 parent=0 전부(다른 구성원의 임시 첨부 포함)
+	moveTemporaryAttachments($blogid, getUserId(), $id);
 	fireEvent('AddPost', $id, $entry);
 	Setting::setBlogSettingGlobal('LatestEditedEntry_user'.getUserId(),$id);
 }

@@ -2,6 +2,14 @@
 /// Copyright (c) 2006-2009, Needlworks / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 
 #[AllowDynamicProperties]
 class Pop3 {
@@ -34,21 +42,29 @@ class Pop3 {
 		if ($encryption === true  || $encryption === 1)  $encryption = 'ssl';
 		elseif ($encryption === false || $encryption === 0 || $encryption === null) $encryption = 'none';
 
-		// verify_peer: 인증서 체인 유효성 검사 (유지)
-		// verify_peer_name: CN/호스트명 일치 검사 — 메일 서버는 공유 인증서로 CN이
-		// 접속 주소와 다른 경우가 흔하므로 비활성화
+		// verify_peer: 인증서 체인 유효성 검사
+		// verify_peer_name: 인증서 이름(subjectAltName/CN)과 접속 호스트 일치 검사
+		/* [보안] 이름 검사를 끄면 공인 CA 가 발급한 다른 도메인 인증서도 통과해, 경로 중간에서 접속을 가로챈 쪽이
+		   메일함 계정·비밀번호를 받는다 → 켜고 peer_name 에 접속 호스트를 명시(PHP 기본 검사와 같음).
+		   공유 인증서를 쓰는 서버는 인증서에 적힌 호스트 이름으로 서버 주소를 설정해야 한다. */
 		$sslCtx = stream_context_create(['ssl' => [
 			'verify_peer'      => true,
-			'verify_peer_name' => false,
+			'verify_peer_name' => true,
+			'peer_name'        => $server,
 			'SNI_enabled'      => true,
 		]]);
 		$addr = ($encryption === 'ssl') ? "ssl://$server:$port" : "tcp://$server:$port";
-		$this->ctx = @stream_socket_client($addr, $errno, $errstr, 30, STREAM_CLIENT_CONNECT, $sslCtx);
+		// 접속 중 경고를 모두 모아 오류 설명에 쓴다 — error_get_last() 는 마지막 경고("Unable to connect")만 남아
+		// 인증서 이름 불일치·검증 실패 같은 실제 원인이 빠지기 때문(경고는 출력하지 않음, 기존 @ 와 같음)
+		$warns = array();
+		set_error_handler(function ($no, $str) use (&$warns) {
+			$warns[] = trim(preg_replace('/\s+/', ' ', preg_replace('/^.*stream_socket_client\(\):\s*/i', '', $str)));
+			return true;
+		});
+		$this->ctx = stream_socket_client($addr, $errno, $errstr, 30, STREAM_CLIENT_CONNECT, $sslCtx);
+		restore_error_handler();
 		if (!$this->ctx) {
-			$last = error_get_last();
-			$detail = ($last && stripos($last['message'], 'stream_socket_client') !== false)
-				? preg_replace('/^.*stream_socket_client\(\):\s*/i', '', $last['message'])
-				: ($errstr ?: 'connection failed');
+			$detail = $warns ? implode(' / ', array_unique($warns)) : ($errstr ?: 'connection failed');
 			$this->error = "$detail ($errno)";
 			return false;
 		}
@@ -74,7 +90,8 @@ class Pop3 {
 	function authorize( $username, $password )
 	{
 		$this->clearStatus();
-		$this->log( "Send: USER $username" );
+		// [보안] 메일함 계정 ID 는 로그(cache/moblog.txt)에 남기지 않음 — PASS 와 같은 표기
+		$this->log( "Send: USER [......]" );
 		if( !fputs($this->ctx, "USER $username\r\n") ) {
 			return false;
 		}

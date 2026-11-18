@@ -5,8 +5,9 @@
 	<title>[##_title_##] <s_page_title> :: [##_page_post_title_##]</s_page_title></title>
 
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<link href="//netdna.bootstrapcdn.com/bootstrap/3.1.1/css/bootstrap.min.css" rel="stylesheet">
-	<link href="//netdna.bootstrapcdn.com/font-awesome/4.3.0/css/font-awesome.min.css" rel="stylesheet">
+	<!-- Textcube-NG: CDN 자산 https + SRI(integrity 는 파일 해시 — 주소·버전을 바꾸면 함께 바꿀 것) -->
+	<link href="https://cdn.jsdelivr.net/npm/bootstrap@3.4.1/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-HSMxcRTRxnN+Bdg0JdbxYKrThecOKuH5zCYotlSAcp1+c8xmyTe9GYg1l9a69psu" crossorigin="anonymous">
+	<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.3.0/css/font-awesome.min.css" rel="stylesheet" integrity="sha384-yNuQMX46Gcak2eQsUzmBYgJ3eBeWYNKhnjyiBqLd1vvtE9kuMtgw6bjwN8J0JauQ" crossorigin="anonymous">
 
 	<meta http-equiv="Keywords" content="[##_meta_http_equiv_keywords_##]" />
 	<link rel="shortcut icon" href="[##_blog_link_##]favicon.ico" />
@@ -621,8 +622,8 @@
 	</footer>
 
 	</div><!-- end of content -->
-	<script src="//code.jquery.com/jquery.js"></script>
-	<script src="//netdna.bootstrapcdn.com/bootstrap/3.1.1/js/bootstrap.min.js"></script>
+	<!-- jQuery 는 텍스트큐브가 head 영역에 이미 로드함 — 다시 로드하면 jQuery·$ 와 플러그인(bPopup 등)이 덮어써짐 -->
+	<script src="https://cdn.jsdelivr.net/npm/bootstrap@3.4.1/dist/js/bootstrap.min.js" integrity="sha384-aJ21OjlMXNL5UyIl/XNwTMqvzeRMZH2w8c5cRVpzpU8Y5bApTppSuUkhZXN0VxHd" crossorigin="anonymous"></script>
 	<!-- Sidebar caller -->
 	<script>
 	//<![CDATA[

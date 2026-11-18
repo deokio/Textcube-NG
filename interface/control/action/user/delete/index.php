@@ -10,17 +10,18 @@
 /// per the official PHP upgrade documentation.
 /// No additional copyright is asserted over these modifications.
 /// See CHANGELOG.md and SECURITY.md for full modification history.
-require ROOT . '/library/preprocessor.php';
-
+// [보안] Textcube-NG: $IV 는 preprocessor 보다 먼저 정해야 검사된다 — 원본은 require 뒤에 정해 입력값을 검사하지 않았다(r3-7, 459b)
 $IV = array(
-	'GET' => array(
+	'POST' => array(
 		'userid' => array('id')
 	) 
 );
+require ROOT . '/library/preprocessor.php';
+requirePostMethod();	// Textcube-NG: 상태 변경은 POST 만 받는다(그 밖은 405) — 링크·<img> 로 실행되던 GET CSRF 차단(v3.148)
 requireStrictRoute();
 requirePrivilege('group.creators');
 
-$result = User::remove($_GET['userid']);
+$result = User::remove($_POST['userid']);
 if ($result===true) {
 	Respond::PrintResult(array('error' => 0));
 }

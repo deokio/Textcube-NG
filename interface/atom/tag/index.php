@@ -14,7 +14,7 @@ requireStrictBlogURL();
 $blogid = getBlogId();
 $children = array();
 $cache = pageCache::getInstance();
-if(!empty($suri['id'])) {
+if(!empty($suri['id']) && Setting::getBlogSettingGlobal('useSloganOnTag',1) != 1) { // Textcube-NG: 태그를 이름으로 쓰는 설정이면 값 전체가 숫자(또는 & 앞이 숫자)인 이름을 번호로 보지 않음(blog/tag.php 와 같은 판정)(r3-8)
 	$tagId = $suri['id'];
 	$tagTitle = getTagById($blogid, $tagId);
 } else if (!empty($suri['value'])) {

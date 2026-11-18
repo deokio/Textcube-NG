@@ -86,7 +86,29 @@ function api_login( $id, $password )
 			return new XMLRPCFault( 1, "Authentication failed: $id($canon_id)" );
 		}
 	}
+	/* [보안] 원본은 인증 성공만 확인해, 이 블로그의 구성원이 아닌 계정으로도 글 작성·수정·삭제가 가능했다.
+	   현재 블로그의 관리자·작성자 권한(doesHaveOwnership)을 요구한다. */
+	if( !doesHaveOwnership() )
+	{
+		return new XMLRPCFault( 1, "Permission denied" );
+	}
 	return false;
+}
+
+/* [보안] 글 수정·삭제 권한: 관리 화면(owner/entry)과 동일하게 편집자(group.editors)가 아니면 본인 글만 허용.
+   원본 BlogAPI 는 같은 블로그의 다른 작성자 글도 수정·삭제할 수 있었다. 허용 시 false, 거부 시 XMLRPCFault. */
+function api_check_entry_permission( $id )
+{
+	if( Acl::check('group.editors') )
+	{
+		return false;
+	}
+	requireModel('blog.entry');
+	if( getUserIdOfEntry( getBlogId(), intval($id) ) == getUserId() )
+	{
+		return false;
+	}
+	return new XMLRPCFault( 1, "Permission denied" );
 }
 
 function api_utf8_substr($str,$start) 
@@ -118,24 +140,83 @@ function api_escape_content( $content )
 	return htmlspecialchars($content);
 }
 
+// Textcube-NG: PHP 8.5 부터 int 로 나타낼 수 없는 float(범위 밖·NAN·INF)를 (int) 로 바꾸면 경고가 난다. PHP 7.0~8.4 의 (int) 와 같은 값(2^64 로 나눈 나머지를 부호 있는 정수로, NAN·INF 는 0)을 경고 없이 돌려준다. int(hexdec() 이 범위 안에서 돌려준 값)는 그대로 둔다(v3.222)
+function api_floatToLong( $value )
+{
+	if( is_int( $value ) )
+		return $value;
+	if( !is_finite( $value ) )
+		return 0;
+	if( $value < -9223372036854775808.0 || $value >= 9223372036854775808.0 ) {
+		$value = fmod( $value, 18446744073709551616.0 );
+		if( $value < 0 )
+			$value += 18446744073709551616.0;
+		if( $value >= 9223372036854775808.0 )
+			$value -= 18446744073709551616.0;
+	}
+	return (int)$value;
+}
+
+/* Textcube-NG: PHP 5 의 정수 인자 변환(zpp 'l')과 같은 정수를 돌려준다. 바꿀 수 없으면 false — 원본(PHP 5)에서는 이때 경고 뒤
+   mktime()·gmmktime()·gmstrftime() 이 false 를 돌려줬다. PHP 7.0 부터 '0x..' 는 숫자 문자열이 아니고, PHP 8.0 부터 비숫자·앞부분만 숫자인 문자열은 TypeError. 정수 범위를 넘는 정수 문자열은 PHP 5(is_numeric_string: 앞 0 을 뺀 자릿수를 PHP_INT_MIN 의 자릿수와 비교하고, 같으면 그 첫 자리부터 NUL 앞까지 strcmp — 숫자 뒤가 [eE][+-] 면 한 칸 밀린 자리부터)처럼 double 을 거쳐 바꾼다(v3.181) */
+function api_toLong( $value )
+{
+	if( is_int( $value ) )
+		return $value;
+	if( is_null( $value ) || is_bool( $value ) )
+		return (int)$value;
+	// Textcube-NG: float·double 을 거치는 변환은 api_floatToLong() 으로 PHP 8.5 경고 없이 바꾼다(v3.222)
+	if( is_float( $value ) )
+		return api_floatToLong( $value );
+	if( !is_string( $value ) )
+		return false;
+	$body = ltrim( $value, " \t\n\r\x0B\f" );
+	if( strlen( $body ) > 2 && $body[0] === '0' && ( $body[1] === 'x' || $body[1] === 'X' ) )
+		return api_floatToLong( hexdec( substr( $body, 2, strspn( $body, '0123456789abcdefABCDEF', 2 ) ) ) );
+	if( preg_match( '/^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?/', $body, $m ) ) {
+		if( strpbrk( $m[0], '.eE' ) !== false )
+			return api_floatToLong( (float)$m[0] );
+		$digits = ltrim( $m[0], '+-0' );
+		$limit = substr( (string)PHP_INT_MIN, 1 );
+		$cmp = strlen( $digits ) - strlen( $limit );
+		if( $cmp == 0 ) {
+			$tail = substr( $body, strlen( $m[0] ) - strlen( $digits ) + preg_match( '/^[eE][+-]/', substr( $body, strlen( $m[0] ) ) ) );
+			$cmp = strcmp( substr( $tail, 0, strcspn( $tail, "\0" ) ), $limit );
+		}
+		return ( $cmp < 0 || ( $cmp == 0 && $m[0][0] === '-' ) ) ? (int)$m[0] : api_floatToLong( (float)$m[0] );
+	}
+	return false;
+}
+
 function api_timestamp( $date8601 )
 {
-	if( substr( $date8601, 8,1 ) != "T" )
+	// Textcube-NG: 문자열이 아니면 원본처럼 그대로 돌려준다 — 원본은 substr() 결과가 "T" 가 아니어서 그대로 반환했다(배열은 경고 뒤 반환).
+	// PHP 8.0 배열 TypeError·PHP 8.1 substr(null) 지원 중단 경고를 피한다(v3.181)
+	if( !is_string( $date8601 ) || substr( $date8601, 8,1 ) != "T" )
 	{
 		return $date8601;
 	}
+	// Textcube-NG: 원본(PHP 5)은 시작 위치가 길이 이상인 조각을 substr() 이 false 로 돌려 mktime() 이 0 으로 받았고, 정수로 바꿀 수 없는 조각이면
+	// mktime() 이 경고 뒤 false 를 돌려 결과가 getOffset() + false(= 오프셋)였다. PHP 7.0 부터 시작 위치 = 길이는 '', PHP 8.0 부터 '' 는 TypeError(v3.181)
+	$args = array();
+	foreach( array( array( 9, 2 ), array( 12, 2 ), array( 15, 2 ), array( 4, 2 ), array( 6, 2 ), array( 0, 4 ) ) as $piece )
+	{
+		$value = ( $piece[0] >= strlen( $date8601 ) ) ? 0 : api_toLong( substr( $date8601, $piece[0], $piece[1] ) );
+		if( $value === false )
+			return Timezone::getOffset();
+		$args[] = $value;
+	}
 	return Timezone::getOffset() + 
-		mktime( 
-			substr( $date8601, 9, 2 ),
-			substr( $date8601, 12, 2 ),
-			substr( $date8601, 15, 2 ),
-			substr( $date8601, 4, 2 ),
-			substr( $date8601, 6, 2 ),
-			substr( $date8601, 0, 4 ) );
+		mktime( $args[0], $args[1], $args[2], $args[3], $args[4], $args[5] );
 }
 
 function api_dateiso8601( $timestamp )
 {
+	// Textcube-NG: 원본 gmstrftime()(PHP 8.1 지원 중단 → v1.91 에서 gmdate())은 PHP 5 에서 null 을 0 으로, 정수로 바꿀 수 없는 값은 경고 뒤 false 로 처리했다.
+	// gmdate() 는 null 이면 현재 시각이고 PHP 8.0 부터 비숫자 문자열은 TypeError, 8.1 부터 소수부가 있는 float 는 지원 중단 경고라 같은 정수로 바꿔 넘긴다(v3.181)
+	$timestamp = api_toLong( $timestamp );
+	if( $timestamp === false )
+		return false;
 	return gmdate('Ymd\TH:i:s', $timestamp);
 }
 
@@ -233,8 +314,9 @@ function api_fix_content( $content )
 		$new_content = $content;
 	}
 	// Fix attachment URL into TTML-spcific address.
-	
-	$new_content = str_replace($ctx->getProperty('uri.host').$ctx->getProperty('service.path')."/attach/".$blogid, '[##_ATTACH_PATH_##]',$new_content);
+	/* Textcube-NG: 원본은 이 함수에 없는 $blogid 를 써서(PHP 8 Warning) '…/attach/' 까지만 바꿨다(newMediaObject 주소도 같은 이유로
+	   '…/attach//이름' 이라 우연히 맞았음) → 두 곳 모두 getBlogId(). [##_ATTACH_PATH_##] 는 '…/attach/블로그id' 로 바뀜(common.module.php) */
+	$new_content = str_replace($ctx->getProperty('uri.host').$ctx->getProperty('service.path')."/attach/".getBlogId(), '[##_ATTACH_PATH_##]',$new_content);
 	return $new_content;
 }
 
@@ -346,6 +428,10 @@ function api_addAttachment($blogid,$parent,$file) {
 			$extension='.xxx';
 			break;
 	}
+	/* [보안] 위 목록은 .phtml·.phar·.php5 등 서버가 실행할 수 있는 확장자를 놓친다 → Attachment::isExecutableName 기준으로 .xxx
+	   (Moblog 메일 첨부·BlogAPI newMediaObject 경로) */
+	if (Attachment::isExecutableName($extension))
+		$extension = '.xxx';
 	
 	/* Create directory for owner */
 	$path = __TEXTCUBE_ATTACH_DIR__."/$blogid";
@@ -358,6 +444,11 @@ function api_addAttachment($blogid,$parent,$file) {
 	
 	$oldFile = POD::queryCell("SELECT name FROM {$database['prefix']}Attachments WHERE blogid=$blogid AND parent=$parent AND label = '$label'");
 	
+	// Textcube-NG: r3-27 R-453 — 같은 label 의 기존 이름($oldFile)이 서버가 실행할 수 있는 확장자(.php 등)이면 deleteAttachment() 로 옛 행·파일을 지우고 $oldFile = null 로 새 이름(위 $extension 이 .xxx 로 바꾼 값)을 만든다(label 중복·옛 실행 파일 잔존 방지)
+	if ($oldFile !== null && Attachment::isExecutableName((string) $oldFile)) {
+		deleteAttachment($blogid, $parent, $oldFile);
+		$oldFile = null;
+	}
 	if ($oldFile !== null) {
 		$attachment['name'] = $oldFile;
 	} else {
@@ -370,7 +461,9 @@ function api_addAttachment($blogid,$parent,$file) {
 	
 	$attachment['path'] = "$path/{$attachment['name']}";
 	
-	deleteAttachment($blogid,-1,$attachment['name']);
+	/* [보안] deleteAttachment() 가 parent 를 함께 확인하므로 위에서 찾은 같은 이름의 기존 첨부($oldFile, parent=$parent)의 parent 로 지운다
+	   (원본의 -1 은 이름만으로 지우던 때의 값 — 그대로 두면 기존 행이 남아 INSERT 가 기본 키 중복으로 실패) */
+	deleteAttachment($blogid,$attachment['parent'],$attachment['name']);
 	
 	if( $file['content'] )
 	{
@@ -384,6 +477,32 @@ function api_addAttachment($blogid,$parent,$file) {
 		$file['tmp_name'] = $attachment['path'];
 	}
 	
+	// Textcube-NG: 그림 검사(r3-20) — addAttachment() 와 같은 기준(Attachment::classifyUpload). 거부되면 이 함수가 쓴 파일을 지우고 실패.
+	// svg 정화에 실패하면 확장자를 .xxx 로 바꾼 새 이름으로 옮긴다(같은 label 의 기존 이름 $oldFile 을 다시 쓰면 .svg 일 수 있음). API 라 알림은 없다
+	$imageCheck = array('ok' => true, 'error' => '', 'kind' => 'other', 'type' => '', 'width' => 0, 'height' => 0, 'svgExternal' => 0);
+	if (isset($file['tmp_name']) && is_string($file['tmp_name']) && is_file($file['tmp_name']))
+		$imageCheck = Attachment::classifyUpload($file['tmp_name'], $attachment['label'], $attachment['size'], false);
+	if (!$imageCheck['ok']) {
+		if ($file['tmp_name'] === $attachment['path'])
+			@unlink($attachment['path']);
+		return false;
+	}
+	if (($imageCheck['kind'] === 'svg') && ($imageCheck['error'] === 'svgInvalid')) {
+		$extension = '.xxx';
+		do {
+			$newName = random_int(1000000000, 9999999999) . $extension;
+		} while (Attachment::doesExist($newName) || file_exists("$path/$newName"));
+		if ($file['tmp_name'] === $attachment['path']) {
+			if (!@rename($attachment['path'], "$path/$newName")) {
+				@unlink($attachment['path']);
+				return false;
+			}
+			$file['tmp_name'] = "$path/$newName";
+		}
+		$attachment['name'] = $newName;
+		$attachment['path'] = "$path/$newName";
+	}
+	
 	if($imageAttributes=@getimagesize($file['tmp_name'])) {
 		$attachment['mime']=$imageAttributes['mime'];
 		$attachment['width']=$imageAttributes[0];
@@ -392,6 +511,29 @@ function api_addAttachment($blogid,$parent,$file) {
 		$attachment['mime']=Misc::getMIMEType($extension);
 		$attachment['width']=0;
 		$attachment['height']=0;
+	}
+	// Textcube-NG: 그림 검사 결과 반영(r3-20) — addAttachment() 와 같다(svg mime·가로세로, 재인코딩 옵트인, 크기 다시 재기, svg PNG 변환본 옵트인)
+	$refreshSize = false;
+	if ($imageCheck['kind'] === 'svg') {
+		if ($imageCheck['error'] === 'svgInvalid') {
+			$attachment['mime'] = 'application/octet-stream';
+			$attachment['width'] = 0;
+			$attachment['height'] = 0;
+		} else {
+			$attachment['mime'] = 'image/svg+xml';
+			$attachment['width'] = (int)$imageCheck['width'];
+			$attachment['height'] = (int)$imageCheck['height'];
+			makeAttachmentSVGRaster($blogid, $file['tmp_name'], $attachment['name']);
+		}
+		$refreshSize = true;
+	} else if (($imageCheck['kind'] === 'raster') && Attachment::reencodeImage($file['tmp_name'], $imageCheck['type'])) {
+		$refreshSize = true;
+	}
+	if ($refreshSize) {
+		clearstatcache(true, $file['tmp_name']);
+		$fileSize = @filesize($file['tmp_name']);
+		if ($fileSize !== false)
+			$attachment['size'] = $fileSize;
 	}
 	
 	$attachment['mime']=UTF8::lessenAsEncoding($attachment['mime'], 32);
@@ -435,16 +577,21 @@ function api_get_attaches( $content)
 function api_update_attaches( $parent, $attaches = null)
 {
 	global $database;
+	/* [보안] 원본은 API 사용자와 관계없이 이 블로그의 새 글 임시 첨부(parent=0)를 모두 옮겼다
+	   → API 로 로그인한 사용자의 임시 첨부(parent = -(userid+1), newMediaObject)만 옮긴다 */
+	$temporary = getTemporaryAttachmentParent(getUserId());
+	if ($temporary === false)
+		return;
 	if (is_null($attaches)) {
-		POD::query( "update {$database['prefix']}Attachments set parent=$parent where blogid=".getBlogId()." and parent=0");
+		POD::query( "update {$database['prefix']}Attachments set parent=$parent where blogid=".getBlogId()." and parent=$temporary");
 	} else {
 		// Prepared statement — name comes from content-parsed filenames (SQL Injection 대응)
 		$blogid = getBlogId();
 		foreach( $attaches as $att )
 		{
-			$stmt = POD::prepare("UPDATE {$database['prefix']}Attachments SET parent=? WHERE blogid=? AND parent=0 AND name=?");
+			$stmt = POD::prepare("UPDATE {$database['prefix']}Attachments SET parent=? WHERE blogid=? AND parent=? AND name=?");
 			if ($stmt) {
-				POD::bindAndExecute($stmt, 'iis', (int)$parent, (int)$blogid, (string)$att);
+				POD::bindAndExecute($stmt, 'iiis', (int)$parent, (int)$blogid, (int)$temporary, (string)$att);
 				$stmt->close();
 			}
 		}
@@ -459,7 +606,9 @@ function api_update_attaches_with_replace($entryId)
 {
 	global $database;
 
-	$newFiles = POD::queryAll("SELECT name, label FROM {$database['prefix']}Attachments WHERE blogid=".getBlogId()." AND parent=0");
+	/* [보안] 새 글 임시 첨부는 API 로 로그인한 사용자의 것만(parent = -(userid+1)) — api_update_attaches() 와 같은 기준 */
+	$temporary = getTemporaryAttachmentParent(getUserId());
+	$newFiles = ($temporary === false) ? null : POD::queryAll("SELECT name, label FROM {$database['prefix']}Attachments WHERE blogid=".getBlogId()." AND parent=$temporary");
 	if( $newFiles ) {
 		foreach($newFiles as $newfile) {
 			$newfile['label'] = POD::escapeString(UTF8::lessenAsEncoding($newfile['label'], 64));
@@ -613,6 +762,12 @@ function blogger_editPost()
 		return $result;
 	}
 
+	$result = api_check_entry_permission( $params[1] );	// [보안] 본인 글 또는 편집자만
+	if( $result )
+	{
+		return $result;
+	}
+
 	$post = new Post();
 	$post->title = htmlspecialchars(api_get_title( $params[4] ));
 	$post->id = intval($params[1]);
@@ -642,6 +797,12 @@ function blogger_deletePost()
 {
 	$params = func_get_args();
 	$result = api_login( $params[2], $params[3] );
+	if( $result )
+	{
+		return $result;
+	}
+
+	$result = api_check_entry_permission( $params[1] );	// [보안] 본인 글 또는 편집자만
 	if( $result )
 	{
 		return $result;
@@ -885,8 +1046,14 @@ function mt_setPostCategories()
 		return $result;
 	}
 
+	$result = api_check_entry_permission( $params[0] );	// [보안] 본인 글 또는 편집자만
+	if( $result )
+	{
+		return $result;
+	}
+
 	$post = new Post();
-	if( !$post->open( $params[0] ) )
+	if( !$post->open( intval( $params[0] ) ) )	// [보안] intval: Post::open 은 숫자가 아닌 값을 SQL 조건으로 그대로 사용
 	{
 		return new XMLRPCFault( 1, "Posting error" );
 	}
@@ -942,12 +1109,20 @@ function metaWeblog_editPost()
 		return $result;
 	}
 
-	$post = api_make_post( $params[3], $params[4], $params[0] );
-	$post->created = null;
+	$result = api_check_entry_permission( $params[0] );	// [보안] 본인 글 또는 편집자만
+	if( $result )
+	{
+		return $result;
+	}
+
+	// [보안] intval: Post::open 은 숫자가 아닌 값을 SQL 조건으로 그대로 사용.
+	//        실패(false) 확인을 속성 대입보다 먼저 수행(원본은 false 에 속성 대입)
+	$post = api_make_post( $params[3], $params[4], intval( $params[0] ) );
 	if( !$post )
 	{
 		return new XMLRPCFault( 1, "Textcube editing error" );
 	}
+	$post->created = null;
 
 	$ret = $post->update();
 
@@ -973,19 +1148,27 @@ function metaWeblog_newMediaObject()
 		return $result;
 	}
 
+	/* Textcube-NG: bits 는 XML-RPC base64 를 푼 문자열 — count() 는 PHP 7.2 부터 경고와 함께 1, PHP 8.0 부터 TypeError → strlen() */
 	$file = array( 
 		'name' => $params[3]['name'],
 		'content' => $params[3]['bits'],
-		'size' => count($params[3]['bits']) 
+		'size' => strlen($params[3]['bits']) 
 		);
 		
-	$attachment = api_addAttachment( getBlogId(), 0, $file );
+	/* [보안] 원본은 새 글 임시 첨부를 parent=0(블로그 공용)에 넣었다 → API 로 로그인한 사용자의 임시 첨부(parent = -(userid+1)) */
+	$temporary = getTemporaryAttachmentParent(getUserId());
+	if( $temporary === false )
+	{
+		return new XMLRPCFault( 1, "Can't create file" );
+	}
+	$attachment = api_addAttachment( getBlogId(), $temporary, $file );
 	if( !$attachment )
 	{
 		return new XMLRPCFault( 1, "Can't create file" );
 	}
 	
-	$attachurl = array ( 'url' => $ctx->getProperty('uri.host').$ctx->getProperty('service.path')."/attach/".$blogid."/".$attachment['name']);
+	/* Textcube-NG: 원본은 이 함수에 없는 $blogid 를 써서(PHP 8 Warning) '…/attach//이름' 이 됐다 → getBlogId()(api_fix_content() 와 함께) */
+	$attachurl = array ( 'url' => $ctx->getProperty('uri.host').$ctx->getProperty('service.path')."/attach/".getBlogId()."/".$attachment['name']);
 	return $attachurl;
 }
 

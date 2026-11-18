@@ -11,6 +11,7 @@
 /// No additional copyright is asserted over these modifications.
 /// See CHANGELOG.md and SECURITY.md for full modification history.
 
+#[AllowDynamicProperties]
 class pageCache {
 /*	var $name;
 	var $realName;
@@ -182,6 +183,7 @@ class pageCache {
 
 }
 
+#[AllowDynamicProperties]
 class queryCache {
 /*	var $query;
 	var $queryHash;
@@ -265,6 +267,7 @@ class queryCache {
 // globalCacheStorage caches essential but 'relatively static' information, like
 // blogSettings, ServiceSettings, activePlugins, etc..
 // Textcube will use it as global object.
+#[AllowDynamicProperties]
 class globalCacheStorage extends pageCache {
 	function __construct($blogid = null) {
 		$this->_isChanged = false;
@@ -311,13 +314,16 @@ class CacheControl {
 		if(empty($blogid)) $blogid = getBlogId();
 		
 		$dir = __TEXTCUBE_CACHE_DIR__.'/pageCache/'.$blogid;
-		if( !file_exists($dir) ) return true;
-		if(!($dirHandle = @opendir($dir))) return true;
-		while(($object = readdir($dirHandle))) {
-			if($object == '.' || $object == '..') continue;
-			if(!@unlink($dir.'/'.$object)) return false;
+		// Textcube-NG: 디렉터리가 없거나 열리지 않아도 PageCacheLog 삭제는 건너뛰지 않는다 — 원본은 여기서 return true 해 DB 행이 남았다.
+		//   파일 삭제만 건너뛰고, unlink 실패 시 false 는 그대로 둔다(r3-24, R-450)
+		if (file_exists($dir) && ($dirHandle = @opendir($dir))) {
+			while(($object = readdir($dirHandle))) {
+				if($object == '.' || $object == '..') continue;
+				if(!@unlink($dir.'/'.$object)) { closedir($dirHandle); return false; }
+			}
+			closedir($dirHandle);
+			@rmdir($dir);
 		}
-		@rmdir($dir);
 		POD::query("DELETE FROM {$database['prefix']}PageCacheLog WHERE blogid = ".$blogid);
 		return true;
 	}
@@ -572,6 +578,7 @@ class MMCache{
 	}
 }
 
+#[AllowDynamicProperties]
 class CodeCache {
 	function __construct() {
 		$this->reset();

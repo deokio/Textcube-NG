@@ -45,7 +45,7 @@ function ctlUserSuggestFunction_showSuggestion()
 			if(STD.isSafari)
 				arguments[i] = decodeURIComponent(arguments[i]);
 			htmlText.append("<li onmouseover=\"this.className='hover'\" onmouseout=\"this.className=''\" onmousedown=\"this.parentNode.instance.suggestionMouseClick(this)\">");
-			htmlText.append(arguments[i].replace(new RegExp("(" + instance.input.value + ")", "gi"), "<em>$1</em>"));
+			htmlText.append(arguments[i].replace(new RegExp("(" + instance.input.value.replace(new RegExp("(\\W)", "g"), "\\$1") + ")", "gi"), "<em>$1</em>"));
 			htmlText.append("</li>");
 		}
 	}
@@ -327,12 +327,12 @@ if(!String.prototype.trim) {
 
 if(!String.prototype.htmlspecialchars) {
 	String.prototype.htmlspecialchars = function()
-	{ return this.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll("<", "&gt;"); };
+	{ return this.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;"); };	// Textcube-NG: 세 번째는 ">"(원본 "<" 오타, r3-15)
 }
 
 if(!String.prototype.unhtmlspecialchars) {
 	String.prototype.unhtmlspecialchars = function()
-	{ return this.replaceAll("&amp;", "&").replaceAll("&lt;", "<").replaceAll("&gt;", ">"); };
+	{ return this.replaceAll("&lt;", "<").replaceAll("&gt;", ">").replaceAll("&amp;", "&"); };	// Textcube-NG: &amp; 를 마지막에 풀어 이름의 '&lt;' 가 '<' 로 바뀌지 않게(generaltag.js 와 같게, r3-15)
 }
 
 var x=0;
@@ -342,7 +342,7 @@ function debug(s){try{document.getElementById("debug").innerHTML=++x+")"+s+"<br 
 // 여기까지 Suggestion용 Function
 
 function sendUserAddInfo(name,email) {
-	var request = new HTTPRequest(blogURL + "/control/action/user/add/?name=" + name + "&email=" + email);
+	var request = new HTTPRequest("POST", blogURL + "/control/action/user/add/");
 	request.onSuccess = function() {
 		PM.showMessage(_t('새로운 사용자가 추가되었습니다.'), "right", "top");
 		ctlRefresh();
@@ -351,11 +351,11 @@ function sendUserAddInfo(name,email) {
 		msg = this.getText("/response/result");
 		alert(_t('사용자를 추가하지 못했습니다.') + "\r\nError : " + msg);
 	};
-	request.send();
+	request.send("name=" + name + "&email=" + email);
 }
 
 function sendBlogAddInfo(owner,identify) {
-	var request = new HTTPRequest(blogURL + "/control/action/blog/add/?owner="+owner+"&identify="+identify);
+	var request = new HTTPRequest("POST", blogURL + "/control/action/blog/add/");
 	request.onSuccess = function() {
 		PM.showMessage(_t('새로운 블로그가 추가되었습니다.'), "right", "top");
 		ctlRefresh();
@@ -364,12 +364,12 @@ function sendBlogAddInfo(owner,identify) {
 		msg = this.getText("/response/result");
 		alert(_t('블로그를 추가하지 못했습니다.') + "\r\nError : " + msg);
 	};
-	request.send();
+	request.send("owner="+owner+"&identify="+identify);
 }
 
 function cleanUser(uid) {
-	if (!confirm(_t('모든 글과 블로그가 관리자의 소유로 옮겨집니다.') + '\t\n\n' + _t('되돌릴 수 없습니다.') + '\t\n\n' + _t('계속 진행하시겠습니까?'))) return false;
-	var request = new HTTPRequest(blogURL + "/control/action/user/delete/?userid="+uid);
+	tcConfirm(_t('모든 글과 블로그가 관리자의 소유로 옮겨집니다.') + '\t\n\n' + _t('되돌릴 수 없습니다.') + '\t\n\n' + _t('계속 진행하시겠습니까?'), function () {	// Textcube-NG: 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396)
+	var request = new HTTPRequest("POST", blogURL + "/control/action/user/delete/");
 	request.onSuccess = function() {
 		PM.removeRequest(this);
 		window.location.href = '../';
@@ -380,7 +380,9 @@ function cleanUser(uid) {
 		alert(_t('사용자 삭제에 실패하였습니다.') + "\r\nError : " + msg);
 	};
 	PM.addRequest(request, _t("사용자 삭제중"));
-	request.send();
+	request.send("userid="+uid);
+	});
+	return false;
 }
 
 function ctlRefresh() {

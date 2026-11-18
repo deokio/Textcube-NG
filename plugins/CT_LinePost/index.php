@@ -20,15 +20,35 @@
  * (at your option) any later version.
 */
 
+function linePost_generateTranslationJavascript($messages) {
+	// The language setting follows in which context this function is called.
+	$table = array();
+	foreach ($messages as $text) {
+		$table[$text] = _t($text);
+	}
+	$json = json_encode($table, JSON_FORCE_OBJECT | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+	if ($json === false) {
+		$json = '{}';
+	}
+	return "<script type=\"text/javascript\">\n(function(t){var own=function(o,k){return Object.prototype.hasOwnProperty.call(o,k);};var d=window.__text||(window.__text={});for(var k in t){if(own(t,k)&&!own(d,k))d[k]=t[k];}if(typeof window._t!=='function'){window._t=function(m){var x=window.__text;return(x&&own(x,m)&&x[m])||m;};}})(" . $json . ");\n</script>\n";
+}
+
 /// Posting widget for center.
 function linePost_widget($target) {
 	global $pluginURL, $blogURL, $configVal;
-	$public = _t('공개');
-	$private = _t('비공개');
-	$write = _t('쓰기');
+	// Textcube-NG: 위젯 문구는 HTML escape 해서 넣는다(v3.193)
+	$public = htmlspecialchars(_t('공개'), ENT_QUOTES, 'UTF-8');
+	$private = htmlspecialchars(_t('비공개'), ENT_QUOTES, 'UTF-8');
+	$write = htmlspecialchars(_t('쓰기'), ENT_QUOTES, 'UTF-8');
+	$translation = linePost_generateTranslationJavascript(array(
+		'저장되었습니다',
+		'저장하지 못했습니다',
+		'저장하고 있습니다',
+	));
 	$view  = <<<EOS
 	<script type="text/javascript" src="{$blogURL}/plugin/linePostWidget.js"></script> 
 	<link rel="stylesheet" type="text/css" media="screen" href="{$pluginURL}/widget.css" />
+	{$translation}
 	<div id="linePost_widget">
 		<input type="radio" id="linePost_public" class="radio" name="category" value="public" checked="checked" />
 		<label for="linePost_public">{$public}</label>

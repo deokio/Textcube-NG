@@ -451,8 +451,7 @@ TTReader.prototype.editGroupExecute = function()
 
 TTReader.prototype.deleteGroup = function()
 {
-	if(!confirm(s_confirmDelete))
-		return;
+	tcConfirm(s_confirmDelete, function () {	// Textcube-NG: 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396)
 	var request = new HTTPRequest("POST", this.blogURL + "/owner/reader/action/group/delete/");
 	request.onSuccess = function () {
 		Reader.selectedGroup = 0;
@@ -474,6 +473,7 @@ TTReader.prototype.deleteGroup = function()
 	};
 	PM.addRequest(request, s_removingGroup);
 	request.send("id=" + this.editingGroupId + "&current=" + this.selectedGroup);
+	}.bind(this));
 };
 
 TTReader.prototype.addFeed = function(url)
@@ -557,8 +557,7 @@ TTReader.prototype.editFeedExecute = function()
 
 TTReader.prototype.deleteFeed = function()
 {
-	if(!confirm(s_confirmDelete))
-		return;
+	tcConfirm(s_confirmDelete, function () {	// Textcube-NG: 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396)
 	var request = new HTTPRequest("POST", this.blogURL + "/owner/reader/action/feed/delete/");
 	request.onSuccess = function () {
 		Reader.selectedFeed = 0;
@@ -579,6 +578,7 @@ TTReader.prototype.deleteFeed = function()
 	};
 	PM.addRequest(request, s_removingFeed);
 	request.send("id=" + this.editingFeedId + "&group=" + this.selectedGroup);
+	}.bind(this));
 };
 
 TTReader.prototype.saveSetting = function()
@@ -753,7 +753,7 @@ TTReader.prototype.updateFeed = function(id, message)
 {
 	getObject("iconFeedStatus" + id).className = "updating-button button";
 	getObject("iconFeedStatus" + id).innerHTML = '<span>' + this.feedUpdating + '<\/span>';
-	var request = new HTTPRequest("GET", this.blogURL + "/owner/reader/update/" + id);
+	var request = new HTTPRequest("POST", this.blogURL + "/owner/reader/update/" + id);
 	request.onSuccess = function () {
 		getObject("iconFeedStatus" + id).className = "update-button button";
 		getObject("iconFeedStatus" + id).innerHTML = '<span>' + this.feedUpdate + '<\/span>';
@@ -784,8 +784,8 @@ TTReader.prototype.updateFeed = function(id, message)
 
 TTReader.prototype.updateAllFeeds = function()
 {
-	var frame = getObject("hiddenFrame");
-	frame.src = this.blogURL + "/owner/reader/update/?__T__=" + (new Date().getTime());
+	// Textcube-NG: 전체 갱신은 상태 변경이라 hiddenFrame 으로 POST 한다(v3.148)
+	postNavigate(this.blogURL + "/owner/reader/update/", {}, "hiddenFrame");
 };
 
 TTReader.prototype.importOPMLUpload = function()

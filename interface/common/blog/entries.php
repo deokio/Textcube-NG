@@ -35,6 +35,9 @@ if (isset($cache->contents)) {
 	dress('SKIN_head_end', $foafDiscovery.$entryRsses."[##_SKIN_head_end_##]", $view);
 	dress('foaf_url', "$defaultURL/foaf", $view);
 	
+	// Textcube-NG: [##_article_rep_url_##] — 글 주소(article_rep_link)의 절대 주소. 출처(스킴·호스트·포트)는 config 로 만든 $defaultURL 에서 뗀다(r3-20)
+	$__defaultParts = parse_url($defaultURL);
+	$__entryOrigin = (isset($__defaultParts['scheme'], $__defaultParts['host']) ? $__defaultParts['scheme'] . '://' . $__defaultParts['host'] . (isset($__defaultParts['port']) ? ':' . $__defaultParts['port'] : '') : '');
 	foreach ($entries as $entry) {
 		if ($suri['directive'] == '/notice')
 			$permalink = "$blogURL/notice/" . ($blog['useSloganOnPost'] ? URL::encode($entry['slogan'], $service['useEncodedURL']) : $entry['id']);
@@ -71,7 +74,7 @@ if (isset($cache->contents)) {
 			dress('notice_rep_author_link', $blogURL."/author/".rawurlencode(User::getName($entry['userid'])), $entryView);
 			$entriesView .= $entryView;
 
-		} else if (doesHaveOwnership() || ($entry['visibility'] >= 2) || (isset($_COOKIE[$context->getProperty('service.cookie_prefix').'GUEST_PASSWORD']) && (trim($_COOKIE[$context->getProperty('service.cookie_prefix').'GUEST_PASSWORD']) == trim($entry['password'])))) {	// This is post
+		} else if (doesHaveOwnership() || ($entry['visibility'] >= 2) || checkGuestPasswordCookie($entry['password'])) {	// This is post	// PHP port(Textcube-NG): r3-10 R-283 보호글 비밀번호 쿠키 비교를 library/auth.php checkGuestPasswordCookie() 로(문자열만, hash_equals)
 			$entryView = $skin->entry;
 			$entryView = '<a id="entry_'.$entry['id'].'"></a>'.CRLF.$entryView;
 
@@ -126,6 +129,7 @@ if (isset($cache->contents)) {
 			dress('article_rep_author_link', $blogURL."/author/".rawurlencode($author), $entryView);
 			dress('article_rep_id', $entry['id'], $entryView);
 			dress('article_rep_link', $permalink, $entryView);
+			dress('article_rep_url', $__entryOrigin . $permalink, $entryView);
 			dress('article_rep_rp_rssurl', $defaultURL.'/rss/comment/'.$entry['id'], $entryView);
 			dress('article_rep_tb_rssurl', $defaultURL.'/rss/trackback/'.$entry['id'], $entryView);
 			dress('article_rep_response_rssurl', $defaultURL.'/rss/response/'.$entry['id'], $entryView);
@@ -137,7 +141,7 @@ if (isset($cache->contents)) {
 			// 사용자가 작성한 본문은 interface/common/blog/end.php의 removeAllTags() 다음에 처리하기 위한 조치.
 			$contentContainer["article_{$entry['id']}"] = getEntryContentView($blogid, $entry['id'], $entry['content'], $entry['contentformatter'], getKeywordNames($blogid));
 			dress('article_rep_desc', setTempTag("article_{$entry['id']}"), $entryView);
-			dress('article_rep_category', htmlspecialchars(empty($entry['category']) ? _text('분류없음') : $entry['categoryLabel'], $entry['id']), $entryView);
+			dress('article_rep_category', htmlspecialchars(empty($entry['category']) ? _text('분류없음') : $entry['categoryLabel'], ENT_QUOTES | ENT_SUBSTITUTE), $entryView);	// Textcube-NG: flags 자리에 글 id 가 들어가 글마다 escape 가 달랐다(원본 버그 — id 에 따라 " 가 그대로 나감). ENT_QUOTES | ENT_SUBSTITUTE 로 고정(v3.221)
 			dress('article_rep_category_link', "$blogURL/category/".(empty($entry['category']) ? "" : ($blog['useSloganOnCategory'] ? URL::encode($entry['categoryLabel'],$service['useEncodedURL']) : $entry['category'])),$entryView);
 			dress('article_rep_category_rssurl', "$defaultURL/rss/category/".(empty($entry['category']) ? "" : ($blog['useSloganOnCategory'] ? URL::encode($entry['categoryLabel'],$service['useEncodedURL']) : $entry['category'])),$entryView);
 			dress('article_rep_category_atomurl', "$defaultURL/atom/category/".(empty($entry['category']) ? "" : ($blog['useSloganOnCategory'] ? URL::encode($entry['categoryLabel'],$service['useEncodedURL']) : $entry['category'])),$entryView);
@@ -171,6 +175,7 @@ if (isset($cache->contents)) {
 			dress('article_rep_author_link', $blogURL."/author/".rawurlencode($author), $protectedEntryView);
 			dress('article_rep_id', $entry['id'], $protectedEntryView);
 			dress('article_rep_link', $permalink, $protectedEntryView);
+			dress('article_rep_url', $__entryOrigin . $permalink, $protectedEntryView);
 			dress('article_rep_title', htmlspecialchars(fireEvent('ViewPostTitle', $entry['title'], $entry['id'])), $protectedEntryView);
 			dress('article_rep_date', fireEvent('ViewPostDate', Timestamp::format5($entry['published'])), $protectedEntryView);
 			dress('article_password', "entry{$entry['id']}password", $protectedEntryView);

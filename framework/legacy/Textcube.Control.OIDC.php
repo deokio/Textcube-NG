@@ -61,6 +61,12 @@ class OIDCClient {
 		if (!is_array($d) || empty($d['authorization_endpoint']) || empty($d['token_endpoint']) || empty($d['jwks_uri'])) {
 			return ($cache = false);
 		}
+		// Textcube-NG: 서버가 요청할 token_endpoint·jwks_uri 는 safeTarget() 을 통과해야 하고(콜백 때 httpGet/httpPost 가 다시 검사),
+		// 브라우저로만 보내는 authorization_endpoint 는 https 문자열인지만 본다(v3.157)
+		if (!is_string($d['authorization_endpoint']) || strtolower((string)parse_url($d['authorization_endpoint'], PHP_URL_SCHEME)) !== 'https'
+			|| !self::safeTarget($d['token_endpoint']) || !self::safeTarget($d['jwks_uri'])) {
+			return ($cache = false);
+		}
 		return ($cache = $d);
 	}
 
@@ -109,6 +115,13 @@ class OIDCClient {
 		return self::verifyIdToken($tok['id_token'], $d, isset($_SESSION['oidc_nonce']) ? $_SESSION['oidc_nonce'] : null);
 	}
 
+	/// 공급자 사용자 식별자(OIDC sub·소셜 id) 형식(v3.153): 문자열(정수는 문자열로 봄), 출력 가능한 ASCII(0x20-0x7E) 1~255자.
+	/// 식별자가 세션·DB·화면으로 그대로 가므로 제어 문자·비ASCII·배열 등은 받지 않는다.
+	static function isValidSubject($sub) {
+		if (is_int($sub)) $sub = (string)$sub;
+		return is_string($sub) && preg_match('/\A[\x20-\x7E]{1,255}\z/', $sub) === 1;
+	}
+
 	/// Verify an id_token JWT (RS256 only). $expectedNonce: session nonce. Returns claims or false.
 	static function verifyIdToken($jwt, $disco, $expectedNonce) {
 		$parts = explode('.', (string)$jwt);
@@ -135,8 +148,11 @@ class OIDCClient {
 			if (!isset($payload['nonce']) || !hash_equals((string)$expectedNonce, (string)$payload['nonce'])) return self::fail('nonce');
 		}
 
+		// [보안] sub 형식 검증(v3.153) — sub 는 식별자(oidc:{iss}#{sub})로 세션·DB·화면에 그대로 간다.
+		if (!isset($payload['sub']) || !self::isValidSubject($payload['sub'])) return self::fail('no_subject');
+
 		return array(
-			'sub'   => isset($payload['sub']) ? $payload['sub'] : '',
+			'sub'   => (string)$payload['sub'],
 			'email' => isset($payload['email']) ? $payload['email'] : '',
 			'name'  => isset($payload['name']) ? $payload['name'] : (isset($payload['preferred_username']) ? $payload['preferred_username'] : ''),
 		);
@@ -150,18 +166,35 @@ class OIDCClient {
 	/// 식별자 = OIDC subject 'oidc:{iss}#{sub}' (provider별 불투명·안정·고유). 표시명은 name/email.
 	/// 사용자 계정 매핑(관리자 로그인)은 단계 4에서 이 메서드를 확장한다.
 	static function establishGuestIdentity($claims) {
-		if (!is_array($claims) || empty($claims['sub'])) return self::fail('no_subject');
+		if (!is_array($claims) || !isset($claims['sub']) || !self::isValidSubject($claims['sub'])) return self::fail('no_subject');
 		$identifier = self::subjectId($claims);
+		// 이름이 없으면 이메일·식별자 대신 공급자 이름으로 표시한다(establishGuestIdentityWith, v3.153) — 공개 댓글 이름에 이메일이 나가지 않게.
+		$name = isset($claims['name']) ? $claims['name'] : '';
+		return self::establishGuestIdentityWith($identifier, $name);
+	}
+
+	/// 임의 식별자/표시명으로 게스트 신원 설정 — 소셜 로그인 등 OIDC 외 provider 가 동일 인프라를 재사용한다.
+	/// 식별자는 호출자가 보증(provider 검증된 안정 ID). Acl 'openid' 단일 슬롯이라 댓글/연결 흐름이 그대로 동작.
+	static function establishGuestIdentityWith($identifier, $name) {
+		if (empty($identifier)) return self::fail('no_subject');
 		Acl::authorize('openid', $identifier);
-		$name = !empty($claims['name']) ? $claims['name'] : (!empty($claims['email']) ? $claims['email'] : $identifier);
+		if (!is_string($name) || $name === '') $name = OpenID::getDisplayName($identifier);
 		// 표시명을 세션에 직접 기록(legacy setUserInfo 와 동일 구조). OpenIDConsumer 의 인스턴스 메서드를
 		// 정적 호출하지 않는다 — PHP 8 에서 non-static 메서드의 정적 호출은 치명적 오류이기 때문.
 		if (!isset($_SESSION['openid']) || !is_array($_SESSION['openid'])) $_SESSION['openid'] = array();
 		$_SESSION['openid']['nickname'] = $name;
 		$_SESSION['openid']['homepage'] = '';
+		// 인증 시각 — 계정 연결(owner/setting/account/openid)이 재인증 표지 뒤에 새로 인증한 신원인지 확인한다(v3.153).
+		$_SESSION['openid']['authenticated'] = Timestamp::getUNIXtime();
 		if (class_exists('Session') && method_exists('Session', 'authorize') && defined('SESSION_OPENID_USERID')) {
 			$ctx = Model_Context::getInstance();
-			Session::authorize(intval($ctx->getProperty('blog.id')), SESSION_OPENID_USERID);
+			if (!Session::authorize(intval($ctx->getProperty('blog.id')), SESSION_OPENID_USERID)) {
+				// [보안] 새 세션 ID 를 받지 못하면 신원을 되돌린다 — 그대로 두면 로그인 전 세션(같은 IP 가 함께 쓰는 익명 세션일 수
+				// 있음)에 신원이 저장된다(v3.153).
+				Acl::authorize('openid', null);
+				unset($_SESSION['openid']);
+				return self::fail('session');
+			}
 		}
 		return $identifier;
 	}
@@ -178,8 +211,18 @@ class OIDCClient {
 	/// 해당 계정으로 로그인된다. 자동 계정생성은 하지 않는다(계정탈취 방지).
 	/// 식별자는 sub 기반(iss#sub)이라 email 공유/변경·provider 사칭으로는 매핑을 가로챌 수 없다.
 	static function establishIdentity($claims) {
-		$identifier = self::establishGuestIdentity($claims);   // Acl 'openid' + 표시명 + 게스트 세션
-		if ($identifier === false) return false;
+		if (!is_array($claims) || !isset($claims['sub']) || !self::isValidSubject($claims['sub'])) return self::fail('no_subject');
+		$identifier = self::subjectId($claims);
+		// 이름이 없으면 이메일·식별자 대신 공급자 이름으로 표시한다(establishGuestIdentityWith, v3.153) — 공개 댓글 이름에 이메일이 나가지 않게.
+		$name = isset($claims['name']) ? $claims['name'] : '';
+		return self::establishIdentityWith($identifier, $name);
+	}
+
+	/// 임의 식별자/표시명으로 게스트 신원 + 연결계정 승격 — 소셜 로그인 등 OIDC 외 provider 가 재사용.
+	/// 연결(UserSettings openid.* 정확 일치)된 계정이 있고 writers 권한일 때만 사용자 세션 승격. 자동 계정생성 없음.
+	static function establishIdentityWith($identifier, $name) {
+		$id = self::establishGuestIdentityWith($identifier, $name);   // Acl 'openid' + 표시명 + 게스트 세션
+		if ($id === false) return false;
 		$userid = self::mapToUser($identifier);
 		if ($userid === null) return $identifier;              // 연결된 계정 없음 → 게스트 유지
 		Acl::authorize('textcube', $userid);
@@ -187,7 +230,12 @@ class OIDCClient {
 		$blogid = intval($ctx->getProperty('blog.id'));
 		// writers 권한이 있는 계정에 한해 실제 사용자 세션으로 승격(legacy setAcl 과 동일 판정).
 		if (method_exists('Acl', 'getCurrentPrivilege') && in_array('group.writers', Acl::getCurrentPrivilege())) {
-			Session::authorize($blogid, $userid);
+			if (!Session::authorize($blogid, $userid)) {
+				// [보안] 사용자 세션을 만들지 못하면 신원·권한을 모두 되돌린다(v3.153).
+				Acl::clearAcl();
+				unset($_SESSION['userid'], $_SESSION['openid']);
+				return self::fail('session');
+			}
 		}
 		return $identifier;
 	}
@@ -255,38 +303,77 @@ class OIDCClient {
 		return rtrim(strtr(base64_encode(random_bytes(16)), '+/', '-_'), '=');
 	}
 
+	// Textcube-NG: issuer 는 블로그 관리자가 정하고(CL_OpenID 블로그별 설정) token_endpoint·jwks_uri 는 그 서버의 discovery 문서가 정한다.
+	// 이 주소들을 검사 없이 curl(file://·gopher:// 등 기본 프로토콜, 환경 변수 프록시)·file_get_contents(리다이렉트를 따라감, phar:// 등 래퍼)로
+	// 열어 비로그인 방문자의 /login/openid 로 서버 안쪽 주소에 요청할 수 있었다. https·443·공인 IPv4 만 받고, 확인한 IP 로 고정해 연결하며
+	// 리다이렉트는 따르지 않는다. 통과하면 array(host, ip, path, url), 아니면 false(v3.157)
+	static function safeTarget($url) {
+		$u = (is_string($url) && !preg_match('/[\x00-\x20\x7f]/', $url)) ? @parse_url($url) : false;	// Textcube-NG: 제어 문자·공백은 parse_url 전에 거부(parse_url 이 '_' 로 바꿔 아래 경로 검사를 지나감)(v3.157 보완)
+		if (!is_array($u) || !isset($u['scheme'], $u['host']) || strtolower($u['scheme']) !== 'https') return false;
+		if (isset($u['user']) || isset($u['pass'])) return false;
+		if (isset($u['port']) && (int)$u['port'] !== 443) return false;
+		$host = strtolower($u['host']);
+		if (!preg_match('/^[a-z0-9-]+(\.[a-z0-9-]+)*\z/', $host) || strlen($host) > 253) return false;	// 끝 점·빈 조각·[IPv6] 거부
+		$path = (isset($u['path']) && $u['path'] !== '') ? $u['path'] : '/';
+		if (isset($u['query'])) $path .= '?' . $u['query'];
+		if (preg_match('/[\x00-\x20\x7f]/', $path)) return false;
+		if (($ip = HTTPRequest::getPublicAddress($host)) === false) return false;
+		return array('host' => $host, 'ip' => $ip, 'path' => $path, 'url' => 'https://' . $host . $path);
+	}
+
+	// Textcube-NG: config.php 의 $service['useLoginProxy'] 가 true(불리언)일 때만 curl 이 환경 변수 프록시(https_proxy 등)를 쓴다(기본 false).
+	// 켜도 safeTarget() 주소 검사는 그대로이고, 프록시를 거치면 IP 고정은 프록시가 맡는다(v3.157 보완)
+	static function useProxy() {
+		global $service;
+		return isset($service['useLoginProxy']) && $service['useLoginProxy'] === true;
+	}
+
+	// Textcube-NG: https 만, 리다이렉트 안 따름, 확인한 IP 로만 연결, 환경 변수 프록시(https_proxy 등) 무시(v3.157) — useProxy() 면 프록시 사용(v3.157 보완)
+	static function curlOptions($t) {
+		$o = array(
+			CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 10,
+			CURLOPT_SSL_VERIFYPEER => true, CURLOPT_SSL_VERIFYHOST => 2,
+			CURLOPT_FOLLOWLOCATION => false,
+			CURLOPT_PROTOCOLS => CURLPROTO_HTTPS, CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTPS,
+			CURLOPT_RESOLVE => array($t['host'] . ':443:' . $t['ip']),
+		);
+		if (!self::useProxy()) $o[CURLOPT_PROXY] = '';
+		return $o;
+	}
+
+	// Textcube-NG: curl 이 없을 때 — 확인한 IP 주소로 열고 Host 헤더·SNI·인증서 이름 확인은 원래 호스트로, 리다이렉트 안 따름, 10초(v3.157)
+	static function streamRequest($t, $method, $header, $body) {
+		$http = array('method' => $method, 'header' => "Host: {$t['host']}\r\n" . $header,
+			'timeout' => 10, 'follow_location' => 0);
+		if ($body !== null) $http['content'] = $body;
+		$ctx = stream_context_create(array('http' => $http,
+			'ssl' => array('peer_name' => $t['host'], 'SNI_enabled' => true, 'verify_peer' => true, 'verify_peer_name' => true)));
+		return @file_get_contents('https://' . $t['ip'] . $t['path'], false, $ctx);
+	}
+
 	static function httpGet($url) {
+		if (!($t = self::safeTarget($url))) return false;	// Textcube-NG: 주소 검사(v3.157)
 		if (function_exists('curl_init')) {
-			$ch = curl_init($url);
-			curl_setopt_array($ch, array(
-				CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 10,
-				CURLOPT_SSL_VERIFYPEER => true, CURLOPT_SSL_VERIFYHOST => 2,
-				CURLOPT_FOLLOWLOCATION => false,
-			));
-			$r = curl_exec($ch); curl_close($ch);
-			return $r;
+			$ch = curl_init($t['url']);
+			curl_setopt_array($ch, self::curlOptions($t));
+			$r = curl_exec($ch); $ip = curl_getinfo($ch, CURLINFO_PRIMARY_IP);
+			return ($ip === $t['ip'] || self::useProxy()) ? $r : false;	// Textcube-NG: 확인한 IP 가 아닌 곳의 응답은 쓰지 않음(v3.157) — 프록시를 쓰면 연결 주소가 프록시라 보지 않음(v3.157 보완)
 		}
-		return @file_get_contents($url);
+		return self::streamRequest($t, 'GET', '', null);
 	}
 	static function httpPost($url, $params) {
 		$body = http_build_query($params);
+		if (!($t = self::safeTarget($url))) return false;	// Textcube-NG: 주소 검사(v3.157)
 		if (function_exists('curl_init')) {
-			$ch = curl_init($url);
-			curl_setopt_array($ch, array(
-				CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 10,
-				CURLOPT_SSL_VERIFYPEER => true, CURLOPT_SSL_VERIFYHOST => 2,
+			$ch = curl_init($t['url']);
+			curl_setopt_array($ch, self::curlOptions($t) + array(
 				CURLOPT_POST => true, CURLOPT_POSTFIELDS => $body,
 				CURLOPT_HTTPHEADER => array('Accept: application/json', 'Content-Type: application/x-www-form-urlencoded'),
 			));
-			$r = curl_exec($ch); curl_close($ch);
-			return $r;
+			$r = curl_exec($ch); $ip = curl_getinfo($ch, CURLINFO_PRIMARY_IP);
+			return ($ip === $t['ip'] || self::useProxy()) ? $r : false;	// Textcube-NG: 확인한 IP 가 아닌 곳의 응답은 쓰지 않음(v3.157) — 프록시를 쓰면 연결 주소가 프록시라 보지 않음(v3.157 보완)
 		}
-		$opts = array('http' => array(
-			'method'  => 'POST',
-			'header'  => "Content-Type: application/x-www-form-urlencoded\r\nAccept: application/json\r\n",
-			'content' => $body, 'timeout' => 10,
-		));
-		return @file_get_contents($url, false, stream_context_create($opts));
+		return self::streamRequest($t, 'POST', "Content-Type: application/x-www-form-urlencoded\r\nAccept: application/json\r\n", $body);
 	}
 
 	static function fail($code) { self::$error = $code; return false; }

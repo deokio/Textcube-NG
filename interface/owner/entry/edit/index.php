@@ -2,6 +2,14 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 $IV = array(
 	'GET' => array(
 		'draft'       => array('any', 'mandatory' => false),
@@ -58,6 +66,13 @@ if(Acl::check('group.editors')===false && !empty($suri['id'])) {
 		exit;
 	}
 }
+/* [보안] 첨부 목록·용량·대표 첨부(enclosure)는 첨부 parent 로 조회한다. 새 글(id 0)은 현재 사용자의 임시 첨부(parent = -(userid+1)) —
+   원본은 parent=0(블로그 공용)이라 다른 구성원의 임시 첨부가 보였다(blog.attachment.php getAttachmentParentForEdit()) */
+$attachmentParent = getAttachmentParentForEdit(getBlogId(), $entry['id']);
+if($attachmentParent === false) {
+	@header("location:".$context->getProperty('uri.blog') ."/owner/entry");
+	exit;
+}
 // Read editor configuration
 $editors = getAllEditors();
 if (isset($_GET['editor']) && in_array($_GET['editor'],array_keys($editors))) {
@@ -100,7 +115,7 @@ if (defined('__TEXTCUBE_POST__')) {
 						<script type="text/javascript" src="<?php echo $service['path'];?>/resources/script/locationtag.js"></script>
 						<script type="text/javascript">
 							//<![CDATA[
-								var enclosured = "<?php echo getEnclosure($entry['id']);?>";
+								var enclosured = "<?php echo getEnclosure($attachmentParent);?>";
 								var originalPermalink = "<?php echo htmlspecialchars($entry['slogan']);?>";
 
 								window.onerror = function(errType, errURL,errLineNum) {
@@ -111,12 +126,12 @@ if (defined('__TEXTCUBE_POST__')) {
 									var filename = value.substring(0, value.indexOf("|"));
 
 									if(document.getElementById("TCfilelist").selectedIndex == -1) {
-										alert("<?php echo _t('파일을 선택하십시오.');?>");
+										PM.showErrorMessage("<?php echo _t('파일을 선택하십시오.');?>", "center", "bottom");
 										return false;
 									}
 
 									if(!(new RegExp("\.mp3$", "i").test(filename))) {
-										alert("<?php echo _t('MP3만 사용할 수 있습니다.');?>");
+										PM.showErrorMessage("<?php echo _t('MP3만 사용할 수 있습니다.');?>", "center", "bottom");
 										return false;
 									}
 
@@ -148,7 +163,7 @@ if (defined('__TEXTCUBE_POST__')) {
 
 									request.onError= function () {
 										PM.removeRequest(this);
-										alert("<?php echo _t('변경하지 못했습니다.');?>");
+										PM.showErrorMessage("<?php echo _t('변경하지 못했습니다.');?>", "center", "bottom");
 									}
 									PM.addRequest(request, "<?php echo _t('변경하고 있습니다.');?>");
 									request.send("fileName=" + encodeURIComponent(filename) + "&order=" + order);
@@ -193,7 +208,9 @@ if (defined('__TEXTCUBE_POST__')) {
 									self.pageHolder = new PageHolder(false, "<?php echo _t('아직 저장되지 않았습니다.');?>");
 
 									self.pageHolder.isHolding = function () {
-										return (self.savedData != self.getData(true));
+										// Textcube-NG: 떠날 때(beforeunload) 하는 비교라 입력 검사(getData(true))를 하지 않는다. 원본은 제목이 비면 떠나는 중에
+										// '제목을 입력해 주십시오' 알림 창이 떠 화면이 멈췄다(새 글 화면을 그냥 떠나도 발생)(v3.137)
+										return (self.savedData != self.getData());
 									}
 <?php
 if (isset($_GET['returnURL'])) {
@@ -220,7 +237,7 @@ if (isset($_GET['returnURL'])) {
 												permalink = "TCDraftPost";
 												oForm.permalink.value = permalink;
 											} else {
-												alert("<?php echo _t('제목을 입력해 주십시오.');?>");
+												PM.showErrorMessage("<?php echo _t('제목을 입력해 주십시오.');?>", "center", "bottom");	// Textcube-NG: 알림 창(alert) 대신 화면 메시지(v3.137)
 												oForm.title.focus();
 												return null;
 											}
@@ -261,7 +278,7 @@ if (isset($_GET['returnURL'])) {
 											} else if(self.autoSave == true) {
 												return null;
 											} else {
-												alert("<?php echo _t('본문을 입력해 주십시오.');?>");
+												PM.showErrorMessage("<?php echo _t('본문을 입력해 주십시오.');?>", "center", "bottom");	// Textcube-NG: 알림 창(alert) 대신 화면 메시지(v3.137)
 												return null;
 											}
 										}
@@ -278,14 +295,14 @@ if (isset($_GET['returnURL'])) {
 											latitudeValue = jQuery('input[name=latitude]').val()
 										} catch(e) {}
 										if(latitudeValue == undefined) {
-											latitudeValue = null;
+											latitudeValue = "";
 										}
 										var longitudeValue = "";
 										try {
 											longitudeValue = jQuery('input[name=longitude]').val()
 										} catch(e) {}
 										if(longitudeValue == undefined) {
-											longitudeValue = null;
+											longitudeValue = "";
 										}
 										var tagValue = "";
 										try {
@@ -305,7 +322,7 @@ if (isset($_GET['returnURL'])) {
 											published = Date.parse(oForm.appointed.value);
 											if (isNaN(published)) {
 												if (check)
-													alert("<?php echo _t('등록 예약 시간이 올바르지 않습니다.');?>");
+													PM.showErrorMessage("<?php echo _t('등록 예약 시간이 올바르지 않습니다.');?>", "center", "bottom");	// Textcube-NG: 알림 창(alert) 대신 화면 메시지(v3.137)
 												return null;
 											}
 											published = Math.floor(published / 1000);
@@ -333,13 +350,14 @@ if (isset($_GET['returnURL'])) {
 									self.setEnclosure = function(fileName) {
 
 									}
-									self.loadTemplate = function (templateId,title) {
+									self.loadTemplate = function (templateId,title,confirmed) { // Textcube-NG: confirmed — 확인 상자에서 확인한 뒤 다시 부를 때 true(r3-8)
 										editor.syncTextarea();
 										var oForm = document.forms[0];
 										var content = trim(oForm.content.value);
-										if (content.length != 0) {
-											if(confirm("<?php echo _t('본문에 내용이 있습니다. 서식이 현재 본문 내용을 덮어쓰게 됩니다. 계속하시겠습니까?');?>")!=1)
-												return null;
+										if (content.length != 0 && confirmed !== true) {
+											// Textcube-NG: confirm 대신 tcConfirmDialog(ownerView.php) — 확인하면 confirmed=true 로 다시 불러 서식을 반영(r3-8)
+											tcConfirmDialog("<?php echo _t('본문에 내용이 있습니다. 서식이 현재 본문 내용을 덮어쓰게 됩니다. 계속하시겠습니까?');?>", function() { self.loadTemplate(templateId, title, true); });
+											return null;
 										}
 
 										var request = new HTTPRequest("POST", "<?php echo $blogURL;?>/owner/entry/loadTemplate/");
@@ -364,7 +382,7 @@ if (isset($_GET['returnURL'])) {
 										}
 										request.onError = function() {
 											PM.removeRequest(this);
-											alert("<?php echo _t('불러오지 못했습니다');?>");
+											PM.showErrorMessage("<?php echo _t('불러오지 못했습니다');?>", "center", "bottom");	// Textcube-NG: 알림 창(alert) 대신 화면 메시지(v3.137)
 										}
 										PM.addRequest(request, "<?php echo _t('불러오고 있습니다');?>");
 										request.send("templateId="+templateId
@@ -378,10 +396,13 @@ if (isset($_GET['returnURL'])) {
 										var data = self.getData(true);
 										if (data == null) {
 											self.nowsaving = false;
+											// Textcube-NG: r3-18 R-399 편집기 전환 중(changeEditor) 저장을 건너뛰거나 실패해도, 이미 finalize 된 편집기를 다시 불러온다.
+											if (self.changeEditor == true) { self.changeEditor = false; reloadEditor(); }
 											return false;
 										}
 										if (data == self.savedData) {
 											self.nowsaving = false;
+											if (self.changeEditor == true) { self.changeEditor = false; reloadEditor(); }
 											return false;
 										}
 										if(self.isSaved == true) {
@@ -414,7 +435,7 @@ if (isset($_GET['returnURL'])) {
 											}
 
 											self.savedData = data;
-											if (self.savedData == self.getData(true)) {
+											if (self.savedData == self.getData()) {	// Textcube-NG: 비교만 하므로 입력 검사 없이(v3.137)
 												self.pageHolder.release();
 											}
 											self.nowsaving = false;
@@ -430,6 +451,8 @@ if (isset($_GET['returnURL'])) {
 											PM.removeRequest(this);
 											PM.showErrorMessage("<?php echo _t('저장하지 못했습니다');?>", "center", "bottom");
 											self.nowsaving = false;
+											self.autoSave = false;	// Textcube-NG: 자동 저장이 실패해도 표시를 되돌린다(v3.137)
+											if (self.changeEditor == true) { self.changeEditor = false; reloadEditor(); }
 										}
 										if(self.autoSave != true) {
 											PM.addRequest(request, "<?php echo _t('저장하고 있습니다.');?>");
@@ -498,7 +521,7 @@ if (isset($_GET['popupEditor'])) {
 										}
 										request.onError = function () {
 											PM.removeRequest(this);
-											alert("<?php echo _t('저장하지 못했습니다');?>");
+											PM.showErrorMessage("<?php echo _t('저장하지 못했습니다');?>", "center", "bottom");	// Textcube-NG: 알림 창(alert) 대신 화면 메시지(v3.137)
 											self.nowsaving = false;
 											document.getElementById("saveAndReturnButton").value = "<?php echo _t('저장 후 돌아가기');?>";
 
@@ -536,7 +559,10 @@ if (isset($_GET['popupEditor'])) {
 											self.timer = null;
 											return;
 										}
-										self.saveEntry();
+										// Textcube-NG: 저장 요청을 보내지 않으면(내용이 같거나 본문이 비었으면) 자동 저장 표시를 되돌린다.
+										// 원본은 그대로 두어 다음 수동 저장이 자동 저장으로 처리됐다(제목이 비면 '[자동 저장 문서]'로 채우고 알림 없음)(v3.137)
+										if (!self.saveEntry())
+											self.autoSave = false;
 										self.timer = null;
 										return;
 									}
@@ -548,6 +574,37 @@ if (isset($_GET['popupEditor'])) {
 											self.isPreview = false;
 										}
 										return;
+									}
+									// Textcube-NG: 편집기(TinyMCE)는 이 객체가 만들어진 뒤에 초기화되며 본문을 다시 직렬화한다(문단 사이 줄바꿈 등).
+									// 그래서 고치지 않아도 savedData 와 달라져 자동 저장을 되풀이하고, 떠날 때 '아직 저장되지 않았습니다'가 떴다(pat.im 1249).
+									// 편집기 초기화 때(ownerView.php editorInitialized) 본문이 아직 savedData 그대로면 savedData 의 본문 항목만 편집기 값으로 다시 잡는다(v3.137)
+									self.resetSavedContent = function () {
+										if (self.savedData == null || self.nowsaving == true)
+											return;
+										var oForm = document.getElementById('editor-form');
+										var saved = self.savedData.split("&");
+										var index = -1;
+										for (var i = 0; i < saved.length; i++) {
+											if (saved[i].indexOf("content=") == 0) {
+												index = i;
+												break;
+											}
+										}
+										if (index < 0 || saved[index] != "content=" + encodeURIComponent(trim(oForm.content.value)))
+											return;
+										self.nowsaving = true;	// saveEntry() 와 같은 조건으로 직렬화(마크다운이면 syncTextarea() 가 <br /> 를 줄바꿈으로 되돌림)
+										var data = self.getData();
+										self.nowsaving = false;
+										if (data == null)
+											return;
+										var current = data.split("&");
+										for (var i = 0; i < current.length; i++) {
+											if (current[i].indexOf("content=") == 0) {
+												saved[index] = current[i];
+												self.savedData = saved.join("&");
+												break;
+											}
+										}
 									}
 									self.savedData = self.getData();
 								}
@@ -737,7 +794,7 @@ if (defined('__TEXTCUBE_POST__')) {
 													<dt><?php echo _t('서식 목록');?></dt>
 <?php
 $templateLists = getTemplates(getBlogId(),'id,title');
-if (count($templateLists) == 0) {
+if (empty($templateLists)) { // Textcube-NG: 배열이 아닐 때 count() TypeError 방지(r3-8)
 	echo '												<dd class="noItem">' . _t('등록된 서식이 없습니다.') . '</dd>' . CRLF;
 } else {
 	foreach($templateLists as $templateList) {
@@ -774,7 +831,7 @@ $param = array(
 		'labelingPath'=>     $context->getProperty('uri.blog')."/owner/entry/attachmulti/list/",
 		'refreshPath'=>      $context->getProperty('uri.blog')."/owner/entry/attachmulti/refresh/",
 		'fileSizePath'=>     $context->getProperty('uri.blog')."/owner/entry/size?parent=");
-printEntryFileList(getAttachments($blogid, $entry['id'], 'label'), $param);
+printEntryFileList(getAttachments($blogid, $attachmentParent, 'label'), $param);
 ?>
 											</div>
 
@@ -791,7 +848,7 @@ printEntryFileList(getAttachments($blogid, $entry['id'], 'label'), $param);
 												<a class="image-podcast" href="#void" onclick="setEnclosure(document.getElementById('TCfilelist').value);return false;" title="<?php echo _t('팟캐스트로 지정합니다.');?>"><span class="text"><?php echo _t('팟캐스트 지정');?></span></a>
 											</div>
 <?php
-printEntryFileUploadButton($entry['id']);
+printEntryFileUploadButton($attachmentParent);
 ?>
 										</div>
 									</div>
@@ -812,14 +869,23 @@ printEntryFileUploadButton($entry['id']);
 												<dd id="location"></dd>
 											</dl>
 
+<?php
+	/* Textcube-NG: 태그·지역 값을 <script> 안의 JS 문자열로 출력할 때 addslashes 대신 json_encode(JSON_HEX_*)(v3.135).
+	   addslashes 는 '</script>' 를 막지 못해, 필자가 저장한 태그·지역 값으로 편집 화면에 스크립트를 넣을 수 있었다.
+	   <, >, &, ', " 를 \uXXXX 로 바꾼다(plugins/GoogleMap _GMap_jsString 과 같은 규칙, PHP 7.2+) */
+	$tcJsString = function ($value) {
+		$s = json_encode((string)$value, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+		return ($s === false) ? '""' : $s;
+	};
+?>
 											<script type="text/javascript">
 												//<![CDATA[
 													try {
 														var oLocationTag = new LocationTag(document.getElementById("location"), "<?php echo $blog['language'];?>", true);
 														oLocationTag.setInputClassName("input-text");
-														oLocationTag.setValue("<?php echo addslashes($entry['location']);?>");
+														oLocationTag.setValue(<?php echo $tcJsString($entry['location']);?>);
 													} catch (e) {
-														document.getElementById("location").innerHTML = '<input type="text" class="input-text" name="location" value="<?php echo addslashes($entry['location']);?>" /><br /><?php echo _t('지역태그 스크립트를 사용할 수 없습니다. 슬래시(/)로 구분된 지역을 직접 입력해 주십시오.(예: /대한민국/서울/강남역)');?>';
+														document.getElementById("location").innerHTML = '<input type="text" class="input-text" name="location" value="' + <?php echo $tcJsString(htmlspecialchars((string)$entry['location'], ENT_QUOTES));?> + '" /><br /><?php echo _t('지역태그 스크립트를 사용할 수 없습니다. 슬래시(/)로 구분된 지역을 직접 입력해 주십시오.(예: /대한민국/서울/강남역)');?>';
 														// TODO : 이부분(스크립트를 실행할 수 없는 환경일 때)은 직접 입력보다는 0.96 스타일의 팝업이 좋을 듯
 													}
 
@@ -831,12 +897,12 @@ printEntryFileUploadButton($entry['id']);
 		if (!defined('__TEXTCUBE_POST__')) {
 			foreach (getTags($entry['blogid'], $entry['id']) as $tag) {
 				array_push($tags, $tag['name']);
-				echo 'oTag.setValue("' . addslashes($tag['name']) . '");';
+				echo 'oTag.setValue(' . $tcJsString($tag['name']) . ');';
 			}
 		}
 ?>
 													} catch(e) {
-														document.getElementById("tag").innerHTML = '<input type="text" class="input-text" name="tag" value="<?php echo addslashes(str_replace('"', '&quot;', implode(', ', $tags)));?>" /><br /><?php echo _t('태그 입력 스크립트를 사용할 수 없습니다. 콤마(,)로 구분된 태그를 직접 입력해 주십시오.(예: 텍스트큐브, BLOG, 테스트)');?>';
+														document.getElementById("tag").innerHTML = '<input type="text" class="input-text" name="tag" value="' + <?php echo $tcJsString(htmlspecialchars(implode(', ', $tags), ENT_QUOTES));?> + '" /><br /><?php echo _t('태그 입력 스크립트를 사용할 수 없습니다. 콤마(,)로 구분된 태그를 직접 입력해 주십시오.(예: 텍스트큐브, BLOG, 테스트)');?>';
 													}
 												//]]>
 											</script>
@@ -906,7 +972,7 @@ if (isset($_GET['popupEditor'])) {
 										<div class="button-box two-button-box">
 											<input type="button" value="<?php echo _t('미리보기');?>" class="preview-button input-button" onclick="entryManager.preview();return false;" />
 											<span class="hidden">|</span>
-											<input type="submit" id="saveButton" value="<?php echo _t('중간 저장');?>" class="save-button input-button" onclick="entryManager.save();return false;" />
+											<input type="submit" id="saveButton" value="<?php echo _t('중간 저장');?>" class="save-button input-button" onclick="entryManager.saveEntry();return false;" />
 											<span class="hidden">|</span>
 											<input type="submit" id="saveAndReturnButton" value="<?php echo _t('저장 후 돌아가기');?>" class="save-and-return-button input-button" onclick="entryManager.saveAndReturn();return false;" />
 										</div>
@@ -916,7 +982,7 @@ if (isset($_GET['popupEditor'])) {
 										<div class="button-box three-button-box">
 											<input type="button" value="<?php echo _t('미리보기');?>" class="preview-button input-button" onclick="entryManager.preview();return false;" />
 											<span class="hidden">|</span>
-							    	  	 		<input type="submit" id="saveButton" value="<?php echo _t('중간 저장');?>" class="save-button input-button" onclick="entryManager.save();return false;" />
+							    	  	 		<input type="submit" id="saveButton" value="<?php echo _t('중간 저장');?>" class="save-button input-button" onclick="entryManager.saveEntry();return false;" />
 											<span class="hidden">|</span>
 							       			<input type="submit" id="saveAndReturnButton" value="<?php echo _t('저장 후 돌아가기');?>" class="save-and-return-button input-button" onclick="entryManager.saveAndReturn();return false;" />
 											<span class="hidden">|</span>
@@ -932,7 +998,7 @@ if (isset($_GET['popupEditor'])) {
 								</div>
 
 								<input type="hidden" name="categoryAtHome" value="<?php echo (isset($_POST['category']) ? $_POST['category'] : '0');?>" />
-								<input type="hidden" name="page" value="<?php echo $suri['page'];?>" />
+								<input type="hidden" name="page" value="<?php echo htmlspecialchars((string)$suri['page'], ENT_QUOTES);?>" />
 								<input type="hidden" name="withSearch" value="<?php echo (empty($_POST['search']) ? '' : 'on');?>" />
 								<input type="hidden" name="search" value="<?php echo (isset($_POST['search']) ? htmlspecialchars($_POST['search']) : '');?>" />
 <?php

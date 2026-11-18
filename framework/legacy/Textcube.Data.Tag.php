@@ -145,6 +145,10 @@ class Tag {
 			}
 			//$tagRelationStr = implode(', ', $tagrelations);
 			//POD::execute("INSERT IGNORE INTO {$database['prefix']}TagRelations VALUES $tagRelationStr");
+			/* Textcube-NG: 새로 붙은 태그의 목록·피드 캐시와 태그 페이지(tagPage) 캐시를 비운다(v3.136). 원본은 떼어 낸 태그(step 4)만
+			   비워, 글에 태그를 더해도 /tag 캐시에 나타나지 않았다 */
+			if (!empty($tagIDs))
+				CacheControl::flushTag($tagIDs);
 		}
 		
 		// step 4. Delete Tag
@@ -176,7 +180,7 @@ class Tag {
 		
 		// step 6. Delete Tag
 			$nottargets = POD::queryColumn("SELECT DISTINCT tag FROM {$database['prefix']}TagRelations WHERE tag in ( $tagliststr )");
-			if (count($nottargets) > 0) {
+			if (!empty($nottargets)) {
 				$nottargetstr	= implode(', ', $nottargets);
 				POD::execute("DELETE FROM {$database['prefix']}Tags WHERE id IN ( $tagliststr ) AND id NOT IN ( $nottargetstr )");
 			} else {
@@ -200,7 +204,7 @@ class Tag {
 			POD::execute("DELETE FROM {$database['prefix']}TagRelations 
 				WHERE blogid = $blogid AND entry = $entry");
 			$nottargets = POD::queryColumn("SELECT DISTINCT tag FROM {$database['prefix']}TagRelations WHERE tag in ( $tagliststr )");
-			if (count($nottargets) > 0) {
+			if (!empty($nottargets)) {
 				$nottargetstr	= implode(', ', $nottargets);
 				POD::execute("DELETE FROM {$database['prefix']}Tags WHERE id IN ( $tagliststr ) AND id NOT IN ( $nottargetstr )");
 			} else {

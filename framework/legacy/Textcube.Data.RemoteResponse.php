@@ -2,6 +2,15 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
+#[AllowDynamicProperties]
 class Trackback {
 	function __construct() {
 		$this->reset();
@@ -113,23 +122,24 @@ class Trackback {
 	function _buildQuery() {
 		$query = DBModel::getInstance();
 		$query->reset('RemoteResponses');
-		$query->setQualifier('blogid', getBlogId());
-		$query->setQualifier('responsetype', 'trackback');
+		// Textcube-NG: setQualifier() 의 둘째 인자는 조건이다. 원본은 조건을 빼고 값만 넘겨 값이 조건 자리로 밀리고 열 값은 NULL(url 은 escape 인자 true 가 값 1 로)이 됐다. 아래 setQualifier 에 'equals' 를 넣는다(r3-29 R-479)
+		$query->setQualifier('blogid', 'equals', getBlogId());
+		$query->setQualifier('responsetype', 'equals', 'trackback');
 		if (isset($this->id)) {
 			if (!Validator::number($this->id, 1))
 				return $this->_error('id');
-			$query->setQualifier('id', $this->id);
+			$query->setQualifier('id', 'equals', $this->id);
 		}
 		if (isset($this->entry)) {
 			if (!Validator::number($this->entry, 1))
 				return $this->_error('entry');
-			$query->setQualifier('entry', $this->entry);
+			$query->setQualifier('entry', 'equals', $this->entry);
 		}
 		if (isset($this->url)) {
 			$this->url = UTF8::lessenAsEncoding(trim($this->url), 255);
 			if (empty($this->url))
 				return $this->_error('url');
-			$query->setQualifier('url', $this->url, true);
+			$query->setQualifier('url', 'equals', $this->url, true);
 		}
 		if (isset($this->site)) {
 			$this->site = UTF8::lessenAsEncoding(trim($this->site), 255);
@@ -170,6 +180,7 @@ class Trackback {
 	}
 }
 
+#[AllowDynamicProperties]
 class Pingback {
 	function __construct() {
 		$this->reset();
@@ -281,23 +292,24 @@ class Pingback {
 	function _buildQuery() {
 		$query = DBModel::getInstance();
 		$query->reset('RemoteResponses');
-		$query->setQualifier('blogid', getBlogId());
-		$query->setQualifier('responsetype', 'pingback');
+		// Textcube-NG: setQualifier() 의 둘째 인자는 조건이다. 원본은 조건을 빼고 값만 넘겨 값이 조건 자리로 밀리고 열 값은 NULL(url 은 escape 인자 true 가 값 1 로)이 됐다. 아래 setQualifier 에 'equals' 를 넣는다(r3-29 R-479)
+		$query->setQualifier('blogid', 'equals', getBlogId());
+		$query->setQualifier('responsetype', 'equals', 'pingback');
 		if (isset($this->id)) {
 			if (!Validator::number($this->id, 1))
 				return $this->_error('id');
-			$query->setQualifier('id', $this->id);
+			$query->setQualifier('id', 'equals', $this->id);
 		}
 		if (isset($this->entry)) {
 			if (!Validator::number($this->entry, 1))
 				return $this->_error('entry');
-			$query->setQualifier('entry', $this->entry);
+			$query->setQualifier('entry', 'equals', $this->entry);
 		}
 		if (isset($this->url)) {
 			$this->url = UTF8::lessenAsEncoding(trim($this->url), 255);
 			if (empty($this->url))
 				return $this->_error('url');
-			$query->setQualifier('url', $this->url, true);
+			$query->setQualifier('url', 'equals', $this->url, true);
 		}
 		if (isset($this->ip)) {
 			if (!Validator::ip($this->ip))

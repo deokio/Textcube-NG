@@ -56,6 +56,8 @@ class SkinSetting {
 	
 	function save() {
 		if (isset($this->skin)) {
+			if (!is_string($this->skin))	// [보안] Textcube-NG: 스킨 이름은 문자열이고 index.xml 이 있는 스킨 폴더만(r3-7, 결정 498)
+				return $this->_error('skin');
 			if (strncmp($this->skin, 'customize/', 10) == 0) {
 				if (strcmp($this->skin, "customize/".getBlogId()) != 0)
 					return $this->_error('skin');
@@ -63,7 +65,7 @@ class SkinSetting {
 				if (!Validator::filename($this->skin))
 					return $this->_error('skin');
 			}
-			if (!Validator::path($this->skin) || !file_exists(ROOT . '/skin/' . $this->skin))
+			if (!Validator::path($this->skin) || !file_exists(ROOT . '/skin/' . $this->skin . '/index.xml'))
 				return $this->_error('skin');
 			Setting::setSkinSetting('skin', $this->skin);
 		}

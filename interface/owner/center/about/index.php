@@ -9,7 +9,7 @@ require ROOT . '/interface/common/owner/header.php';
 						<div id="part-center-about" class="part">
 							<h2 class="caption"><span class="main-text"><?php echo _t('텍스트큐브 개발자');?></span></h2>
 						
-							<h3>Brand yourself! : <?php echo TEXTCUBE_NAME;?> <?php echo TEXTCUBE_VERSION;?></h3>
+							<h3>Brand yourself! : <?php echo TEXTCUBE_NAME;?> <?php echo TEXTCUBE_VERSION;?> (NG <?php echo TEXTCUBE_NG_VERSION;?>)</h3>
 							
 							<div class="main-explain-box">
 								<p class="explain">

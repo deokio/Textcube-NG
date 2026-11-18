@@ -11,16 +11,17 @@
 /// No additional copyright is asserted over these modifications.
 /// See CHANGELOG.md and SECURITY.md for full modification history.
 $IV = array(
-	'GET' => array(
+	'POST' => array(
 		'name' => array('string'),
 		'email' => array('email')
 	)
 );
 require ROOT . '/library/preprocessor.php';
+requirePostMethod();	// Textcube-NG: 상태 변경은 POST 만 받는다(그 밖은 405) — 링크·<img> 로 실행되던 GET CSRF 차단(v3.148)
 requireStrictRoute();
 requirePrivilege('group.creators');
 
-$result = User::add($_GET['email'], $_GET['name']);
+$result = User::add($_POST['email'], $_POST['name']);
 if ($result===true) {
 	Respond::PrintResult(array('error' => 0));
 }

@@ -54,7 +54,7 @@ class Category {
 	
 	function close() {
 		if (isset($this->_result)) {
-			POD::free($this->_result);
+			// Textcube-NG: _result 는 DBModel::getAll() 이 돌려준 배열(행 목록)이고, 결과 핸들은 POD::queryAll() 이 이미 닫았으므로 POD::free() 에 넘기지 않는다. 원본은 배열을 넘겨 PHP 5.6 에서는 경고 뒤 계속했지만 PHP 8 에서는 데이터 백업(owner/data/export)이 Error 로 멈췄다(v3.214)
 			unset($this->_result);
 		}
 		$this->_count = 0;

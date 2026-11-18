@@ -2,6 +2,14 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 if (isset($_POST['page']))
 	$_GET['page'] = $_POST['page'];
 if (isset($_GET['category'])) $_POST['category'] = $_GET['category'];
@@ -45,11 +53,13 @@ if (isset($_POST['perPage']) && is_numeric($_POST['perPage'])) {
 }
 
 $tabsClass = array();
+/* [보안] postfix 는 탭 링크(interface/common/owner/communicationTab.php)의 href 에 그대로 출력된다.
+   원본은 검색어·이름 등 GET 값을 인코딩 없이 이어 붙였다 → 값마다 URL 인코딩 */
 $tabsClass['postfix'] = null;
-$tabsClass['postfix'] .= isset($_POST['category']) ? '&amp;category='.$_POST['category'] : '';
-$tabsClass['postfix'] .= isset($_POST['name']) ? '&amp;name='.$_POST['name'] : '';
-$tabsClass['postfix'] .= isset($_POST['ip']) ? '&amp;ip='.$_POST['ip'] : '';
-$tabsClass['postfix'] .= isset($_POST['search']) ? '&amp;search='.$_POST['search'] : '';
+$tabsClass['postfix'] .= isset($_POST['category']) ? '&amp;category='.rawurlencode($_POST['category']) : '';
+$tabsClass['postfix'] .= isset($_POST['name']) ? '&amp;name='.rawurlencode($_POST['name']) : '';
+$tabsClass['postfix'] .= isset($_POST['ip']) ? '&amp;ip='.rawurlencode($_POST['ip']) : '';
+$tabsClass['postfix'] .= isset($_POST['search']) ? '&amp;search='.rawurlencode($_POST['search']) : '';
 if(!empty($tabsClass['postfix'])) $tabsClass['postfix'] = ltrim($tabsClass['postfix'],'/');
 
 $tabsClass['notify'] = true;
@@ -63,18 +73,17 @@ require ROOT . '/interface/common/owner/header.php';
 							//<![CDATA[
 							(function($) {
 								deleteComment = function(id) {
-									if (!confirm("<?php echo _t('선택된 댓글을 삭제합니다. 계속 하시겠습니까?');?>"))
-										return;
-									var request = new HTTPRequest("GET", "<?php echo $blogURL;?>/owner/communication/notify/delete/" + id);
+									tcConfirm("<?php echo _t('선택된 댓글을 삭제합니다. 계속 하시겠습니까?');?>", function () {	// Textcube-NG: 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396)
+									var request = new HTTPRequest("POST", "<?php echo $blogURL;?>/owner/communication/notify/delete/" + id);
 									request.onSuccess = function () {
 										document.getElementById('list-form').submit();
 									}
 									request.send();
+									});
 								}
 
 								deleteComments = function() {
-									if (!confirm("<?php echo _t('선택된 댓글을 삭제합니다. 계속 하시겠습니까?');?>"))
-										return false;
+									tcConfirm("<?php echo _t('선택된 댓글을 삭제합니다. 계속 하시겠습니까?');?>", function () {	// Textcube-NG: 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396)
 									var oElement;
 									var targets = new Array();
 									for (i = 0; document.getElementById('list-form').elements[i]; i ++) {
@@ -87,6 +96,8 @@ require ROOT . '/interface/common/owner/header.php';
 										document.getElementById('list-form').submit();
 									}
 									request.send("targets=" + targets.join(','));
+									});
+									return false;
 								}
 
 								changeState = function(caller, value, mode) {
@@ -97,11 +108,11 @@ require ROOT . '/interface/common/owner/header.php';
 											var command 	= 'block';
 										}
 										var name 		= caller.id.replace(/\-[0-9]+$/, '');
-										param  	=  '?value='	+ encodeURIComponent(value);
+										param  	=  'value='	+ encodeURIComponent(value);
 										param 	+= '&mode=' 	+ mode;
 										param 	+= '&command=' 	+ command;
 
-										var request = new HTTPRequest("GET", "<?php echo $blogURL;?>/owner/communication/filter/change/" + param);
+										var request = new HTTPRequest("POST", "<?php echo $blogURL;?>/owner/communication/filter/change/");
 										var iconList = document.getElementsByTagName("a");
 										for (var i = 0; i < iconList.length; i++) {
 											icon = iconList[i];
@@ -119,7 +130,7 @@ require ROOT . '/interface/common/owner/header.php';
 												}
 											}
 										}
-										request.send();
+										request.send(param);
 									} catch(e) {
 										alert(e.message);
 									}
@@ -135,6 +146,10 @@ require ROOT . '/interface/common/owner/header.php';
 
 								$(document).ready(function() {
 									$('#allChecked').removeAttr('disabled');
+									// Textcube-NG: 방문 시각 기록(GET 화면에서 옮김) — POST, CSRF 토큰은 HTTPRequest 가 X-CSRF-Token 헤더로 붙임(r3-8)
+									var visitRequest = new HTTPRequest("POST", "<?php echo $blogURL;?>/owner/communication/notify/visit/");
+									visitRequest.persistent = false;
+									visitRequest.send();
 									$('#list-form tbody td.selection').click(function(ev) {
 										$('#allChecked').prop('checked', false);
 										var checked = $(':checked', this).prop('checked');
@@ -204,7 +219,7 @@ require ROOT . '/interface/common/owner/communicationTab.php';
 $more = false;
 $mergedComments = array();
 $lastVisitNotifiedPage = Setting::getBlogSettingGlobal('lastVisitNotifiedPage', null);
-setBlogSetting('lastVisitNotifiedPage', time());
+// Textcube-NG: GET 화면에서는 방문 시각을 기록하지 않음 — 화면이 뜬 뒤 POST notify/visit 이 기록(r3-8)
 for ($i = 0; $i < count($comments); $i++) {
 	array_push($mergedComments, $comments[$i]);
 	$result = getCommentCommentsNotified($comments[$i]['id']);
@@ -213,6 +228,8 @@ for ($i = 0; $i < count($comments); $i++) {
 	}
 }
 
+// Textcube-NG: 원격 알림의 링크(siteUrl·entryurl·parentUrl·url)는 http·https 일 때만 escape 해서 걸고, 그 밖(javascript: 등)은 '#'(r3-15, R-264)
+$notifyHref = function ($url) { $url = (string)$url; return preg_match('#^https?://#i', $url) ? htmlspecialchars($url) : '#'; };
 $nameNumber = array();
 for ($i=0; $i<sizeof($mergedComments); $i++) {
 	$comment = $mergedComments[$i];
@@ -239,7 +256,7 @@ for ($i=0; $i<sizeof($mergedComments); $i++) {
 												<label for="commentCheckId<?php echo $comment['id'];?>"></label>
 											</td>
 											<td class="date"><?php echo Timestamp::formatDate($comment['written']);?></td>
-											<td class="site"><a href="<?php echo $comment['siteUrl'];?>" onclick="window.open(this.href); return false;" title="<?php echo _t('사이트를 연결합니다.');?>"><?php echo htmlspecialchars($comment['siteTitle']);?></a></td>
+											<td class="site"><a href="<?php echo $notifyHref($comment['siteUrl']);?>" onclick="window.open(this.href); return false;" title="<?php echo _t('사이트를 연결합니다.');?>"><?php echo htmlspecialchars($comment['siteTitle']);?></a></td>
 											<td class="name">
 <?php
 	if ($isNameFiltered) {
@@ -263,22 +280,22 @@ for ($i=0; $i<sizeof($mergedComments); $i++) {
 <?php
 		}
 	} else {
-		echo '<a class="entryURL" href="'.$comment['entryurl'].'" onclick="window.open(this.href); return false;" title="'._t('댓글이 작성된 포스트로 직접 이동합니다.').'">';
+		echo '<a class="entryURL" href="'.$notifyHref($comment['entryurl']).'" onclick="window.open(this.href); return false;" title="'._t('댓글이 작성된 포스트로 직접 이동합니다.').'">';
 		echo '<span class="entry-title">'. htmlspecialchars($comment['entrytitle']) .'</span>';
 
 		if ($comment['entrytitle'] != '' && $comment['parent'] != '') {
 			echo '<span class="divider"> | </span>';
 		}
 
-		echo empty($comment['parent']) ? '' : "<a href=\"" . $comment['parentUrl'] . "\" onclick=\"window.open(this.href); return false;\">" . _f('%1 님의 댓글에 대한 댓글',$comment['parentName']) . "</a>";
+		echo empty($comment['parent']) ? '' : "<a href=\"" . $notifyHref($comment['parentUrl']) . "\" onclick=\"window.open(this.href); return false;\">" . _f('%1 님의 댓글에 대한 댓글',htmlspecialchars((string)$comment['parentName'])) . "</a>";
 		echo "</a>";
 		echo !empty($comment['title']) || !empty($comment['parent']) ? '<br />' : '';
 	}
 ?>
-												<a class="commentURL" href="<?php echo $comment['url'];?>" onclick="window.open(this.href); return false;" title="<?php echo _t('댓글이 작성된 위치로 직접 이동합니다.');?>"><?php echo htmlspecialchars($comment['comment']);?></a>
+												<a class="commentURL" href="<?php echo $notifyHref($comment['url']);?>" onclick="window.open(this.href); return false;" title="<?php echo _t('댓글이 작성된 위치로 직접 이동합니다.');?>"><?php echo htmlspecialchars($comment['comment']);?></a>
 											</td>
 											<td class="delete">
-												<a class="delete-button button" href="<?php echo $blogURL;?>/owner/entry/notify/delete/<?php echo $comment['id'];?>" onclick="deleteComment(<?php echo $comment['id'];?>); return false;" title="<?php echo _t('이 댓글을 삭제합니다.');?>"><span class="text"><?php echo _t('삭제');?></span></a>
+												<a class="delete-button button" href="<?php echo $blogURL;?>/owner/communication/notify/delete/<?php echo $comment['id'];?>" onclick="deleteComment(<?php echo $comment['id'];?>); return false;" title="<?php echo _t('이 댓글을 삭제합니다.');?>"><span class="text"><?php echo _t('삭제');?></span></a>
 											</td>
 										</tr>
 <?php
@@ -290,7 +307,7 @@ for ($i=0; $i<sizeof($mergedComments); $i++) {
 								<hr class="hidden" />
 
 								<div class="data-subbox">
-									<input type="hidden" name="page" value="<?php echo $suri['page'];?>" />
+									<input type="hidden" name="page" value="<?php echo htmlspecialchars((string)$suri['page'], ENT_QUOTES);?>" />
 									<input type="hidden" name="name" value="" />
 
 									<div id="delete-section" class="section">

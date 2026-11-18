@@ -49,7 +49,8 @@ dl dt
 	font-weight                      : bold;
 	left                             : 0;
 	line-height                      : 2em;
-	position                         : absolute;
+	float                            : left;
+	clear                            : left;
 	text-align                       : left;
 	top                              : 0;
 }

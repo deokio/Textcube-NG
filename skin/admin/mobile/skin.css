@@ -1,0 +1,52 @@
+@charset "utf-8";
+
+/* Textcube-NG: the mobile admin skin had no skin.css, so the skin pages asked for a missing file and their bullets and module icons were not shown.
+   Only the icon rules of canon/skin.css (tree preview title bullet, coverpage and sidebar module title icon, direct link button bullet) are copied; widths are left to basic.css (r3-16) */
+
+/* Tree preview **********************************************************************************/
+
+#tree-preview-box .title
+{
+	background-image                 : url("./image/img_bullet_tree_preview.gif");
+	background-position              : left center;
+	background-repeat                : no-repeat;
+	padding-left                     : 11px;
+}
+
+/* Coverpage *************************************************************************************/
+
+.coverpage-module h4.module-title,
+.coverpage-module .ajax-floating-panel h4.module-title
+{
+	background-position              : right center;
+	background-repeat                : no-repeat;
+}
+
+#coverpage-element-box .coverpage-module h4,
+.coverpage-module .ajax-floating-panel h4
+{
+	background-image                 : url("./image/icon_sidebar_module.gif");
+}
+
+#direct-link-line dd .button
+{
+	background-image                 : url('./image/img_link_bullet.jpg');
+	background-position              : right center;
+	background-repeat                : no-repeat;
+	padding-right                    : 15px;
+}
+
+/* Sidebar ***************************************************************************************/
+
+.sidebar-module h4.module-title,
+.ajax-floating-panel h4.module-title
+{
+	background-position              : right center;
+	background-repeat                : no-repeat;
+}
+
+#sidebar-element-box .sidebar-module h4,
+.ajax-floating-panel h4
+{
+	background-image                 : url("./image/icon_sidebar_module.gif");
+}

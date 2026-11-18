@@ -2,10 +2,18 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 
 //handleTags($view);
 
-$pageTitle = trim($pageTitle);
+$pageTitle = isset($pageTitle) ? trim($pageTitle) : '';
 if (!empty($pageTitle)) {
 	$pageTitleView = $skin->pageTitle;
 	if(!empty($pageTitleView)) {
@@ -24,7 +32,8 @@ if(isset($totalTags)) {
 	$totalTagsView = getBlogTags($blogid);
 }
 
-dress('meta_http_equiv_keywords', $totalTagsView, $view);
+// Textcube-NG: 태그 이름은 스킨의 meta content="…" 속성 안에 들어가므로 escape 한다(entries.php 의 태그 출력과 같음)(r3-15, R-323)
+dress('meta_http_equiv_keywords', htmlspecialchars((string)$totalTagsView), $view);
 
 $searchView = $skin->search;
 dress('search_name', 'search', $searchView);

@@ -14,12 +14,19 @@ requireModel("blog.entry");
 requireStrictBlogURL();
 
 publishEntries();
-if (!file_exists(__TEXTCUBE_CACHE_DIR__."/atom/$blogid.xml"))
-	refreshFeed($blogid,'atom');
-header('Content-Type: application/atom+xml; charset=utf-8');
-$fileHandle = fopen(__TEXTCUBE_CACHE_DIR__."/atom/$blogid.xml", 'r+');
-$result = fread($fileHandle, filesize(__TEXTCUBE_CACHE_DIR__."/atom/$blogid.xml"));
-fclose($fileHandle);
+// Textcube-NG: r3-27 R-435 — 등록되지 않은 Host·포트(uri.isRegisteredOrigin === false, PageCache 와 같은 판정)의 요청은 피드 캐시 파일을 읽지도 쓰지도 않고 매번 만든다(위조 Host 의 URL 이 cache/atom 에 굳어 모든 구독자에게 나가는 것을 막음)
+if (Model_Context::getInstance()->getProperty('uri.isRegisteredOrigin') === false) {
+	header('Content-Type: application/atom+xml; charset=utf-8');
+	$result = refreshFeed($blogid, 'atom', true);
+	if (!is_string($result)) $result = '';
+} else {
+	if (!file_exists(__TEXTCUBE_CACHE_DIR__."/atom/$blogid.xml"))
+		refreshFeed($blogid,'atom');
+	header('Content-Type: application/atom+xml; charset=utf-8');
+	$fileHandle = fopen(__TEXTCUBE_CACHE_DIR__."/atom/$blogid.xml", 'r+');
+	$result = fread($fileHandle, filesize(__TEXTCUBE_CACHE_DIR__."/atom/$blogid.xml"));
+	fclose($fileHandle);
+}
 fireEvent('FeedOBStart');
 echo fireEvent('ViewATOM', $result);
 fireEvent('FeedOBEnd');

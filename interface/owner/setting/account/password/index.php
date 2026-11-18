@@ -11,10 +11,22 @@ $IV = array(
 require ROOT . '/library/preprocessor.php';
 requireStrictRoute();
 $result = false;
-$isAuthToken = getUserSetting('AuthToken',false) ? true : false;
+/* [보안] 현재 비밀번호 없이 변경은 인증 토큰으로 로그인한 세션(library/auth.php login 이 표시)에서, 같은 계정이고
+   토큰 유효 시간(Auth::authTokenLifetime, 0 이면 제한 없음) 안일 때만 허용한다. 원본은 계정에 토큰이 남아 있으면
+   (다른 방법으로 로그인한 세션도) 허용했다. 토큰은 로그인에 쓰면 지워진다(1회용). */
+$isAuthToken = false;
+if (isset($_SESSION['authTokenLogin']['userid']) && (intval($_SESSION['authTokenLogin']['userid']) == getUserId())) {
+	$lifetime = Auth::authTokenLifetime();
+	$isAuthToken = ($lifetime == 0 || (Timestamp::getUNIXtime() - intval($_SESSION['authTokenLogin']['time'])) <= $lifetime);
+}
 if($_POST['pwd'] != '' && (($_POST['prevPwd'] != '') || ($isAuthToken != false))) {
+	// Textcube-NG: 현재 비밀번호가 틀리면 재인증과 같은 세션 횟수를 세어 한도에 이르면 로그아웃한다(v3.202)
+	if (!$isAuthToken && !recordPasswordConfirmResult(User::confirmPassword(getUserId(), $_POST['prevPwd']))) Respond::ResultPage(-1);
 	$result = changePassword(getUserId(), $_POST['pwd'], $_POST['prevPwd'], $isAuthToken);
 }
-if($result) Respond::ResultPage(0);
+if($result) {
+	unset($_SESSION['authTokenLogin']);	// 한 번 변경하면 해제
+	Respond::ResultPage(0);
+}
 else Respond::ResultPage(-1);
 ?>

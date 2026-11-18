@@ -1,4 +1,86 @@
 <?php
+/* Textcube-NG: 직접 SQL(POD 문자열 SQL)을 준비 문장(POD::prepare·bindAndExecute)으로 바꿨다. 값은 SQL 문장과 따로 보낸다(PDO 모드 호환)(v3.211)
+   행은 열 이름 키 배열(fetchAllStmt)이다. 실패하면 원래 POD 함수와 같이 null·false·0을 돌려준다. */
+function MT_Cover_preparedRows($query, $types, $params) {
+	$stmt = POD::prepare($query);
+	if (!$stmt) return null;
+	$rows = POD::bindAndExecute($stmt, $types, ...$params) ? POD::fetchAllStmt($stmt) : null;
+	$stmt->close();
+	return $rows;
+}
+
+function MT_Cover_preparedCell($query, $types, $params) {
+	$rows = MT_Cover_preparedRows($query, $types, $params);
+	if (empty($rows)) return null;
+	$row = array_values($rows[0]);
+	return $row[0];
+}
+
+function MT_Cover_preparedColumn($query, $types, $params) {
+	$rows = MT_Cover_preparedRows($query, $types, $params);
+	if ($rows === null) return null;
+	$column = array();
+	foreach ($rows as $row) {
+		$row = array_values($row);
+		$column[] = $row[0];
+	}
+	return $column;
+}
+
+// Paging::fetch()와 같은 계산(url·prefix는 기본값). COUNT와 목록 질의를 모두 준비 문장으로 보낸다. ? 자리는 FROM … ORDER BY 사이에만 둔다
+function MT_Cover_preparedPaging($sql, $types, $params, $page, $count) {
+	$context = Model_Context::getInstance();
+	$paging = array('url' => $context->getProperty('uri.folder'), 'prefix' => '?page=', 'postfix' => '', 'onclick' => null);
+	if (empty($sql))
+		return array(array(), $paging);
+	if (preg_match('/\s(FROM.*)(ORDER BY.*)$/si', $sql, $matches))
+		$from = $matches[1];
+	else
+		return array(array(), $paging);
+	$paging['total'] = MT_Cover_preparedCell("SELECT COUNT(*) $from", $types, $params);
+	if ($paging['total'] === null)
+		return array(array(), $paging);
+	$count = (int)$count;
+	if ($count < 1) $count = 1;
+	$paging['pages'] = intval(ceil($paging['total'] / $count));
+	$paging['page'] = is_numeric($page) ? $page : 1;
+	if ($paging['page'] > $paging['pages']) {
+		$paging['page'] = $paging['pages'];
+		if ($paging['pages'] > 0)
+			$paging['prev'] = $paging['pages'] - 1;
+	}
+	if ($paging['page'] > 1)
+		$paging['prev'] = $paging['page'] - 1;
+	if ($paging['page'] < $paging['pages'])
+		$paging['next'] = $paging['page'] + 1;
+	$offset = ($paging['page'] - 1) * $count;
+	if ($offset < 0) $offset = 0;
+	return array(MT_Cover_preparedRows("$sql LIMIT $count OFFSET $offset", $types, $params), $paging);
+}
+
+/* Textcube-NG: 여러 블로그 표지(coverMode 2)의 비공개 분류 조건. 분류 id 는 블로그마다 따로이므로 블로그마다 getCategoryVisibilityList($blogid, 'private') 와 같은 방법
+   (visibility 1 인 분류와 그 하위 분류, 같은 정렬·비교)으로 목록을 만들어 ' AND NOT ((e.blogid = 블로그 AND e.category IN (분류,…)) OR …)' 를 돌려준다.
+   정수만 넣으므로 ? 자리가 없다. 비공개 분류가 없거나 읽지 못하면 ''(getPrivateCategoryExclusionQuery 와 같음)(r3-5) */
+function MT_Cover_privateCategoryExclusionByBlog() {
+	global $database;
+	$rows = MT_Cover_preparedRows("SELECT blogid, id, parent, visibility FROM {$database['prefix']}Categories WHERE id >= 0 ORDER BY blogid, parent, priority", '', array());
+	if (empty($rows)) return '';
+	$blogs = array();
+	foreach ($rows as $row) $blogs[$row['blogid']][$row['id']] = $row;
+	$parts = array();
+	foreach ($blogs as $blogid => $categories) {
+		$list = array();
+		foreach ($categories as $row) {
+			if (isset($row['visibility']) && $row['visibility'] == 1) array_push($list, $row['id']);
+		}
+		foreach ($categories as $row) {
+			if (isset($row['parent']) && in_array($row['parent'], $list) && !in_array($row['id'], $list)) array_push($list, $row['id']);
+		}
+		if (!empty($list)) $parts[] = '(e.blogid = ' . intval($blogid) . ' AND e.category IN (' . implode(',', array_map('intval', $list)) . '))';
+	}
+	return empty($parts) ? '' : ' AND NOT (' . implode(' OR ', $parts) . ')';
+}
+
 function MT_Cover_getRecentEntries($parameters){
 	global $database, $blog, $service, $serviceURL, $suri, $configVal, $defaultURL, $skin;
 	requireModel("blog.entry");
@@ -43,23 +125,40 @@ function MT_Cover_getRecentEntries($parameters){
 		}
 	}
 
-	if((Misc::isMetaBlog() == true) && doesHaveOwnership() && $service['type'] != 'single') {
-		$visibility = 'AND e.visibility > 1 AND (c.visibility > 1 OR e.category = 0)';
+	// Textcube-NG: 비공개 분류의 하위 분류 글도 뺀다(정수 id 만 넣어 값에 ? 자리가 없고 아래 자리표시자 순서는 그대로).
+	// 한 블로그 표지는 현재 블로그 목록(getPrivateCategoryExclusionQuery), 여러 블로그 표지(coverMode 2)는 분류 id 가 블로그마다 따로이므로 블로그별 목록(MT_Cover_privateCategoryExclusionByBlog)으로 뺀다(r3-5)
+	$privateCategories = ($data['coverMode']==2) ? MT_Cover_privateCategoryExclusionByBlog() : getPrivateCategoryExclusionQuery(getBlogId());
+	// Textcube-NG: 여러 블로그 표지(coverMode 2)는 single 모드에서도 공개 글만 보인다 — 다른 블로그의 비공개 글이 대표 블로그 구성원에게 나오지 않게(r3-15, R-300)
+	if((Misc::isMetaBlog() == true) && doesHaveOwnership() && ($service['type'] != 'single' || $data['coverMode']==2)) {
+		$visibility = 'AND e.visibility > 1 AND (c.visibility > 1 OR e.category = 0)'.$privateCategories;
 	} else {
-		$visibility = doesHaveOwnership() ? '' : 'AND e.visibility > 1 AND (c.visibility > 1 OR e.category = 0)';
+		$visibility = doesHaveOwnership() ? '' : 'AND e.visibility > 1 AND (c.visibility > 1 OR e.category = 0)'.$privateCategories;
 	}
-	$multiple = ($data['coverMode']==2) ? '' : 'e.blogid = ' . getBlogId() . ' AND';
-	$privateBlogId = POD::queryColumn("SELECT blogid 
+	// Textcube-NG: 글관리 권한(group.editors)이 없는 구성원은 남의 비공개 글을 보지 않는다(목록·아래 COUNT 같은 조건)(v3.145)
+	// Textcube-NG: 값은 자리표시자(?)로 따로 보낸다(v3.211)
+	$visibilityOwn = (doesHaveOwnership() && !Acl::check('group.editors'));
+	$visibility .= $visibilityOwn ? ' AND (e.userid = ? OR e.visibility > 0)' : '';
+	$visibilityTypes = $visibilityOwn ? 'i' : '';
+	$visibilityParams = $visibilityOwn ? array(getUserId()) : array();
+	$multiple = ($data['coverMode']==2) ? '' : 'e.blogid = ? AND';
+	$multipleTypes = ($data['coverMode']==2) ? '' : 'i';
+	$multipleParams = ($data['coverMode']==2) ? array() : array(getBlogId());
+	// Textcube-NG: value 는 text(Cubrid varchar) 열이라 PG 에서 value < 2 는 text < integer 오류, Cubrid 는 value 가 예약어라 구문 오류 — 문자열 비교 '2' 로 바꾸고(값은 '0'~'3' 한 자리라 결과 같음) Cubrid 는 " 로 감싼다(suggest 와 같음)(v3.222)
+	$reserved = POD::reservedFieldNames();
+	$valueField = (is_array($reserved) && in_array('value', $reserved)) ? '"value"' : 'value';
+	$privateBlogId = MT_Cover_preparedColumn("SELECT blogid 
 		FROM {$database['prefix']}BlogSettings
 		WHERE name = 'visibility'
-		AND value < 2");
-	if(!empty($privateBlogId)) $privateBlogs = ' AND e.blogid NOT IN ('.implode(',',$privateBlogId).')';
+		AND $valueField < '2'", '', array());
+	if(!empty($privateBlogId)) $privateBlogs = ' AND e.blogid NOT IN ('.implode(',', array_fill(0, count($privateBlogId), '?')).')';
 	else $privateBlogs = '';
-	list($entries, $paging) = Paging::fetch("SELECT e.blogid, e.id, e.userid, e.title, e.content, e.slogan, e.category, e.published, e.contentformatter, c.label
+	$privateTypes = empty($privateBlogId) ? '' : str_repeat('i', count($privateBlogId));
+	$privateParams = empty($privateBlogId) ? array() : array_values($privateBlogId);
+	list($entries, $paging) = MT_Cover_preparedPaging("SELECT e.blogid, e.id, e.userid, e.title, e.content, e.slogan, e.category, e.published, e.contentformatter, c.label
 		FROM {$database['prefix']}Entries e
 		LEFT JOIN {$database['prefix']}Categories c ON e.blogid = c.blogid AND e.category = c.id
 		WHERE $multiple e.draft = 0 $visibility AND e.category >= 0 $privateBlogs
-		ORDER BY published DESC", $page, $entryLength);
+		ORDER BY published DESC", $multipleTypes . $visibilityTypes . $privateTypes, array_merge($multipleParams, $visibilityParams, $privateParams), $page, $entryLength);
 
 	$html = '';
 	foreach ((array)$entries as $entry){
@@ -106,7 +205,7 @@ function MT_Cover_getRecentEntries($parameters){
 	if ($data['paging'] == '1') {
 
 		$paging['page'] = $page;
-		$paging['total'] = POD::queryCell("SELECT COUNT(*) FROM {$database['prefix']}Entries e WHERE $multiple e.draft = 0 $visibility AND e.category >= 0");
+		$paging['total'] = MT_Cover_preparedCell("SELECT COUNT(*) FROM {$database['prefix']}Entries e WHERE $multiple e.draft = 0 $visibility AND e.category >= 0", $multipleTypes . $visibilityTypes, array_merge($multipleParams, $visibilityParams));
 
 		$html .= Paging::getPagingView($paging, $skin->paging, $skin->pagingItem).CRLF;
 
@@ -226,7 +325,14 @@ function MT_Cover_getHTTPRemoteImage($remoteImage) {
 	$remoteStuff = parse_url($remoteImage);
 	$port = isset($remoteStuff['port']) ? $remoteStuff['port'] : 80;
 
-	$socket = @fsockopen($remoteStuff['host'], $port);
+	/* [보안] 글 본문 첫 이미지 주소의 임의 호스트·포트로 소켓을 열었다(방문자가 표지를 볼 때 실행) →
+	   http 80 포트의 공인 IPv4 주소만(HTTPRequest::getPublicAddress), 확인한 IP 로 연결. 연결 실패 시 빈 응답 */
+	if (!is_array($remoteStuff) || !isset($remoteStuff['scheme'], $remoteStuff['host']) || strtolower($remoteStuff['scheme']) !== 'http'
+		|| (int)$port !== 80 || ($address = HTTPRequest::getPublicAddress($remoteStuff['host'])) === false)
+		return '';
+	$socket = @fsockopen($address, $port);
+	if (!$socket)
+		return '';
     fputs($socket, "GET " . $remoteStuff['path'] . " HTTP/1.1\r\n");
     fputs($socket, "Host: " . $remoteStuff['host'] . "\r\n");
     fputs($socket, "User-Agent: Mozilla/4.0 (compatible; Textcube)\r\n");
@@ -249,7 +355,8 @@ function MT_Cover_getRemoteImageFilename($filename) {
 
 function MT_Cover_getAttachmentExtract($content){
 	$result = null;
-	if(preg_match_all('/\[##_(1R|1L|1C|2C|3C|iMazing|Gallery)\|[^|]*\.(gif|jpg|jpeg|png|bmp|GIF|JPG|JPEG|PNG|BMP)\|.*_##\]/si', $content, $matches)) {
+	// Textcube-NG: webp·avif 치환자도 받는다(크기 조절은 GD 가 읽을 수 있을 때만, Utils_Image::resample)(r3-20)
+	if(preg_match_all('/\[##_(1R|1L|1C|2C|3C|iMazing|Gallery)\|[^|]*\.(gif|jpg|jpeg|png|bmp|webp|avif|GIF|JPG|JPEG|PNG|BMP|WEBP|AVIF)\|.*_##\]/si', $content, $matches)) {
 		$split = explode("|", $matches[0][0]);
 		$result = $split[1];
 	}else if(preg_match_all('/<img[^>]+?src=("|\')?([^\'">]*?)("|\')/si', $content, $matches)) {

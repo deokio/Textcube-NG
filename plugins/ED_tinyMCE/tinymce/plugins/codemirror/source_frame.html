@@ -38,7 +38,7 @@ function inArray(key, arr)
 	tinymce = parent.tinymce;
 	editor = tinymce.activeEditor;
 
-	var i, userSettings = editor.settings.codemirror ? editor.settings.codemirror : null;
+	var i, userSettings = editor.options.get('codemirror') ? editor.options.get('codemirror') : null; // PHP port(Textcube-NG): Editor 의 settings 속성 제거(6.0.0)
 	CMsettings = {
 		path: userSettings.path || 'CodeMirror',
 		indentOnInit: userSettings.indentOnInit || false,
@@ -139,7 +139,7 @@ function start()
 		}
 
 		// Indent all code, if so requested:
-		if (editor.settings.codemirror.indentOnInit) {
+		if (editor.options.get('codemirror').indentOnInit) {
 			var last = inst.lineCount();
 			inst.operation(function() {
 				for (var i = 0; i < last; ++i) {

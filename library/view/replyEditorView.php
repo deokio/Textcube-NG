@@ -2,6 +2,14 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 
 $context = Model_Context::getInstance();
 $confirmString = '';
@@ -24,7 +32,9 @@ $context = Model_Context::getInstance();
 $pageHeadTitle = $pageTitle;
 if( Acl::getIdentity('openid') ) {
 	$pageHeadTitle = $pageTitle;
-	$pageTitle = "$pageTitle ( <img src=\"".$service['path']."/resources/image/icon_openid.gif\" style=\"position:static;\" height=\"16\" width=\"16\"> ".OpenID::getDisplayName(Acl::getIdentity('openid')).")";
+	// [보안] 표시 이름은 escape 해서 넣는다(v3.153). OpenID 아이콘은 소셜 신원에는 붙이지 않는다 — 표시 이름에 공급자 이름이 들어 있음(신원 종류를 섞지 않음, v3.153).
+	$identityIcon = (OpenID::identityKind(Acl::getIdentity('openid')) === 'social') ? '' : "<img src=\"".$service['path']."/resources/image/icon_openid.gif\" style=\"position:static;\" height=\"16\" width=\"16\"> ";
+	$pageTitle = "$pageTitle ( ".$identityIcon.htmlspecialchars(OpenID::getDisplayName(Acl::getIdentity('openid')), ENT_QUOTES).")";
 }
 ?>
 <!DOCTYPE html>
@@ -42,8 +52,9 @@ if( Acl::getIdentity('openid') ) {
 			var doesHaveOwnership = <?php echo doesHaveOwnership() ? 'true' : 'false';?>;
 		//]]>
 	</script>
-	<script type="text/javascript" src="<?php echo (doesHaveOwnership() ? $service['path'].'/resources' : $service['resourcepath']);?>/script/common3.js"></script>
-	<script type="text/javascript" src="<?php echo (doesHaveOwnership() ? $context->getProperty('service.path').'/resources' : $context->getProperty('service.resourcepath'));?>/script/jquery/jquery-<?php echo JQUERY_VERSION;?>.js"></script>
+<?php /* Textcube-NG: 이식본에서 고친 스크립트(EAF4.js·common3.js·gallery.js·jQuery, v3.147·v3.207)는 externalresources 설정과 관계없이 이 서버의 /resources 에서 읽는다 — 외부 리소스 주소의 원본 스크립트에는 CSRF 토큰 패치가 없다(r3-3) */ ?>
+	<script type="text/javascript" src="<?php echo $service['path'].'/resources';?>/script/common3.js?v=<?php echo filemtime(ROOT . '/resources/script/common3.js');?>"></script>
+	<script type="text/javascript" src="<?php echo $context->getProperty('service.path').'/resources';?>/script/jquery/jquery-<?php echo JQUERY_VERSION;?>.js"></script>
 	<script type="text/javascript">jQuery.noConflict();</script>
 	<script type="text/javascript">
 		//<![CDATA[
@@ -73,7 +84,7 @@ if (!doesHaveMembership()) {
 				oForm.submit();
 			}
 			function confirmOverwrite() {
-				return confirm("<?php echo escapeJSInCData(_text('관리자가 방문객의 댓글을 수정하시면 작성자 이름을 관리자 아이디로 덮어 쓰게 됩니다.')).escapeJSInCData('계속 하시겠습니까?');?>");
+				tcConfirm("<?php echo escapeJSInCData(_text('관리자가 방문객의 댓글을 수정하시면 작성자 이름을 관리자 아이디로 덮어 쓰게 됩니다.')).escapeJSInCData(_text('계속 하시겠습니까?'));?>", submitComment);	// Textcube-NG: 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396)
 			}
 		//]]>
 	</script>
@@ -97,7 +108,7 @@ if (!doesHaveMembership()) {
 ?>
 	<form name="commentToComment" method="post" action="<?php echo ($_POST['mode'] == 'edit' ? $blogURL . '/comment/delete/' . $suri['id'] : $suri['url']);?>">
 		<input type="hidden" name="mode" value="commit" />
-		<input type="hidden" name="oldPassword" value="<?php echo isset($_POST['password']) ? $_POST['password'] : '';?>" />
+		<input type="hidden" name="oldPassword" value="<?php echo isset($_POST['password']) ? htmlspecialchars($_POST['password'], ENT_QUOTES) : '';?>" />
 		<a onclick="closeDialog();" href="#" class="close-button"><span>X</span></a>
 		<div id="comment-reply-box">
 			<img src="<?php echo $service['path'] . $adminSkinSetting['skin'];?>/image/img_comment_popup_logo.gif" alt="<?php echo _text('텍스트큐브 로고');?>" />
@@ -105,7 +116,7 @@ if (!doesHaveMembership()) {
 <?php
 if($viewMode == 'comment') {
 	$parent = getComment(getBlogId(), $suri['id'], null, false);
-	if(($parent['secret'] == 1) && !doesHaveOwnership()) {
+	if(($parent['secret'] == 1) && !canReadSecretComment($parent['entry'], $parent)) {	// Textcube-NG: 비밀 댓글 열람(r3-7, 결정 447)
 		$parent['name'] = $parent['written'] = $parent['comment'] = _t('[비밀댓글]');
 	}
 ?>
@@ -122,7 +133,7 @@ if($viewMode == 'comment') {
 				<ul class="child-comments">
 <?php
 		foreach($children as $child) {
-			if(($child['secret'] == 1) && !doesHaveOwnership()) {
+			if(($child['secret'] == 1) && !canReadSecretComment($child['entry'], $child)) {
 				$child['name'] = $child['written'] = $child['comment'] = _t('[비밀댓글]');
 			}
 ?>
@@ -157,7 +168,7 @@ if (!doesHaveOwnership()) {
 if( !Acl::getIdentity('openid') ) { ?>
 				<dl class="password-line">
 					<dt><label for="password"><?php echo _text('비밀번호');?></label></dt>
-					<dd><input type="password" class="input-text" id="password" name="password" value="<?php echo isset($_POST['password']) ? $_POST['password'] : '';?>" /></dd>
+					<dd><input type="password" class="input-text" id="password" name="password" value="<?php echo isset($_POST['password']) ? htmlspecialchars($_POST['password'], ENT_QUOTES) : '';?>" /></dd>
 				</dl>
 <?php } ?>
     			<dl class="homepage-line">
@@ -177,7 +188,7 @@ if( !Acl::getIdentity('openid') ) { ?>
 }
 
 if (doesHaveOwnership() && array_key_exists('replier', $comment) && (is_null($comment['replier']) || ($comment['replier'] != getUserId()))) {
-	$confirmString = "if( confirmOverwrite() )";
+	$confirmString = "confirmOverwrite(); return false;";	// Textcube-NG: 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396)
 }
 ?>
 				<dl class="content-line">

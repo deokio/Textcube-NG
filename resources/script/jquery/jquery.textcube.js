@@ -47,7 +47,8 @@
 				var src = $.path.join(serviceURL, resourceURL || $.plugin.defaultResourceURL, file);
 				$('<script>').attr('type', 'text/javascript').attr('src', src).appendTo($('head'));
 				// TODO: check if loaded correctly?
-				$.plugins.loaded_ones.append({name: name, version: $.plugin.locals[i].version});
+				// PHP port(Textcube-NG): 원본 오류 수정 — $.plugins(정의 안 됨)·Array.append(없는 메서드) → $.plugin.loaded_ones.push
+				$.plugin.loaded_ones.push({name: name, version: $.plugin.locals[i].version});
 				// NOTE: Safari will not actually execute the new script until it gets the control flow.
 				return true;
 			}
@@ -57,8 +58,8 @@
 	$.plugin.locals = [
 //		{name: 'json', version: ''},
 //		{name: 'easing', version: '1.3'},
-		{name: 'ui.essentials', version: '1.11.2.min'}, // includes UI.Core, Draggable, Droppable, Resizable, Selectable, Sortable only
-		{name: 'ui.effects', version: '1.11.2.min'} // includes Effeects Core and others
+		{name: 'ui.essentials', version: '1.13.3.min'}, // includes UI.Core, Draggable, Droppable, Resizable, Selectable, Sortable only
+		{name: 'ui.effects', version: '1.13.3.min'} // includes Effeects Core and others
 	];
 	$.plugin.defaultResourceURL = '/resources/script';
 	$.plugin.loaded_ones = [];

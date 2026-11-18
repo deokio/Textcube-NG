@@ -103,11 +103,14 @@ function setPrimaryDomain($blogid, $name) {
 		return 2;
 	if (POD::queryCount("SELECT * FROM {$database['prefix']}BlogSettings WHERE name = 'name' AND value = '$name'") > 0)
 		return 3;
+	// Textcube-NG: 저장에 실패해도 0(성공과 같은 값)을 돌려주던 것을 4(실패)로, 성공은 null 대신 0 을 돌려준다.
+	// 호출부(domain/primary·domain/set)는 '> 0' 을 실패로 본다(domain/set 은 error 2·msg 4 → '1차 블로그 도메인을 변경하지 못했습니다')(r3-5)
 	if(Setting::setBlogSettingGlobal('name', $name)) {
 		$blog['name'] = $name;
 		clearFeed();
-	} else {
 		return 0;
+	} else {
+		return 4;
 	}
 }
 
@@ -173,9 +176,11 @@ function useBlogSlogan($blogid, $useSloganOnPost, $useSloganOnCategory, $useSlog
 	$blog['useSloganOnPost'] = $useSloganOnPost;
 	$blog['useSloganOnCategory'] = $useSloganOnCategory;
 	$blog['useSloganOnTag'] = $useSloganOnTag;
-	CacheControl::flushCategory();
+	/* Textcube-NG: 원본은 flushCategory()·flushEntry()·flushTag() 를 차례로 불렀다(r3-9, 503-15). 번호 없는 flushEntry() 가
+	   flushCategory()(→ flushRSS())와 flushTag(null, false)(태그 목록·키워드·태그 피드)를 이미 부르므로, 나머지인 태그 페이지(tagPage)만
+	   더 비운다. 비우는 캐시는 원본과 같고, 같은 비우기 질의(피드 캐시 기록 DELETE 등)가 저장 한 번에 세 번씩 나가던 것이 한 번이 된다. */
 	CacheControl::flushEntry();
-	CacheControl::flushTag();
+	CacheControl::flushTagPage();
 	fireEvent('ToggleBlogSlogan',null,$blog['useSloganOnPost']);
 	clearFeed();
 	return true;
@@ -216,6 +221,11 @@ function setBlogLanguage($blogid, $language, $blogLanguage) {
 		$blog['language'] = $language;
 		$blog['blogLanguage'] = $blogLanguage;
 		clearFeed();
+		// Textcube-NG: 언어를 바꿔도 PluginSettings 페이지 캐시(편집기 목록 '편집기 없음' 라벨 등 요청 언어로 만든 문구)가 남아 이전 언어로 나오던 것을
+		// 저장 성공 때만 비운다(owner/plugin/index.php 와 같은 pageCache getInstance/reset/purge)(v3.172)
+		$pageCache = pageCache::getInstance();
+		$pageCache->reset('PluginSettings');
+		$pageCache->purge();
 		return true;
 	} else return false;
 }
@@ -253,7 +263,7 @@ function addBlog($blogid, $userid, $identify) {
 	} else { // If no blogid, create a new blog.
 		if (!preg_match('/^[a-zA-Z0-9]+$/', $identify))
 			return 4; // Wrong Blog name
-		$identify = POD::escapeString(UTF8::lessenAsEncoding($identify, 32));
+		$identify = POD::escapeString(UTF8::lessenAsEncoding(strtolower($identify), 32));
 
 		$blogName = $identify;
 
@@ -263,9 +273,11 @@ function addBlog($blogid, $userid, $identify) {
 		if ($result && $result > 0) {
 			return 60;	// Reserved blog name.
 		}
-		$result = POD::queryCount("SELECT value
+		$reserved = POD::reservedFieldNames();
+		$valueField = (is_array($reserved) && in_array('value', $reserved)) ? '"value"' : 'value';
+		$result = POD::queryCount("SELECT $valueField
 			FROM {$database['prefix']}BlogSettings
-			WHERE name = 'name' AND value = '$blogName'");
+			WHERE name = 'name' AND $valueField = '$blogName'");
 		if ($result && $result > 0) {
 			return 61; // Same blogname is already exists.
 		}
@@ -378,16 +390,16 @@ function getInvited($userid) {
 
 function getBlogName($blogid) {
 	global $database;
-	return POD::queryCell("SELECT value
+	// Textcube-NG: Cubrid 는 value 가 예약어라 SELECT value 가 구문 오류 — " 로 감싼다(suggest 와 같음)(v3.222)
+	$reserved = POD::reservedFieldNames();
+	$valueField = (is_array($reserved) && in_array('value', $reserved)) ? '"value"' : 'value';
+	return POD::queryCell("SELECT $valueField
 		FROM {$database['prefix']}BlogSettings
 		WHERE blogid = $blogid AND name = 'name'");
 }
 function getAuthToken($userid){
-	$query = DBModel::getInstance();
-	$query->reset('UserSettings');
-	$query->setQualifier('userid', 'equals', $userid);
-	$query->setQualifier('name', 'equals', 'AuthToken', true);
-	return $query->getCell('value');
+	// [보안] 유효한(만료되지 않은) 인증 토큰만 돌려준다(Auth::getValidAuthToken — 만료된 토큰은 지움)
+	return Auth::getValidAuthToken($userid);
 }
 
 function sendInvitationMail($blogid, $userid, $name, $comment, $senderName, $senderEmail) {
@@ -397,9 +409,7 @@ function sendInvitationMail($blogid, $userid, $name, $comment, $senderName, $sen
 			FROM {$database['prefix']}BlogSettings"); // If no blogid, get the latest created blogid.
 	}
 	$email = getUserEmail($userid);
-	$password = POD::queryCell("SELECT password
-		FROM {$database['prefix']}Users
-		WHERE userid = ".$userid);
+	// [보안] 저장된 비밀번호 해시는 초대 링크에 넣지 않으므로(getInvitationLink) 읽지 않음
 	$authtoken = getAuthToken($userid);
 	$blogName = getBlogName($blogid);
 
@@ -407,6 +417,13 @@ function sendInvitationMail($blogid, $userid, $name, $comment, $senderName, $sen
 		return 1;
 	if (!preg_match('/^[^@]+@([-a-zA-Z0-9]+\.)+[-a-zA-Z0-9]+$/', $email))
 		return 2;
+	/* [보안] 인증 토큰은 만료·1회용(Auth::getValidAuthToken)이므로, 아직 로그인한 적 없는 계정(Users.lastlogin = 0)에 유효한
+	   토큰이 없으면(만료) 새로 발급해 다시 보낸 초대 메일로 로그인할 수 있게 한다(원본은 토큰이 만료되지 않아 같은 토큰을 다시 보냄). */
+	if (empty($authtoken)) {
+		$lastlogin = POD::queryCell("SELECT lastlogin FROM {$database['prefix']}Users WHERE userid = " . intval($userid), 0, false);
+		if (is_numeric($lastlogin) && (intval($lastlogin) == 0))
+			$authtoken = Auth::issueAuthToken($userid);
+	}
 	if (empty($name))
 		$name = User::getName($userid);
 
@@ -423,9 +440,14 @@ function sendInvitationMail($blogid, $userid, $name, $comment, $senderName, $sen
 	$message = file_get_contents(ROOT . "/resources/style/letter/letter.html");
 	$message = str_replace('[##_title_##]', _text('초대장'), $message);
 	$message = str_replace('[##_content_##]', $comment, $message);
-	$message = str_replace('[##_images_##]', $serviceURL."/resources/style/letter", $message);
-	$message = str_replace('[##_link_##]', getInvitationLink(getBlogURL($blogName),$email, $password, $authtoken), $message);
-	$message = str_replace('[##_go_blog_##]', getBlogURL($blogName), $message);
+	// Textcube-NG: Host 헤더 검사 — 메일의 주소(이미지·초대 링크·블로그 주소)는 요청 Host 가 아니라 domain 과 config.php 의 포트(적지 않았으면
+	// 서비스 포트)로 만든다(v3.205)
+	$mailPort = isset($service['configuredPort']) ? $service['configuredPort'] : (isset($service['port']) ? $service['port'] : null);
+	$mailDomain = $service['domain'] . (!empty($mailPort) ? ':' . $mailPort : '');
+	$mailServiceURL = isset($service['serviceURL']) ? URL::toAbsolute($service['serviceURL']) : (Model_Context::getInstance()->getProperty('service.useSSL', false) ? 'https://' : 'http://') . ((isset($service['type']) && $service['type'] == 'domain' && (string)$blogName !== '') ? $blogName . '.' : '') . $mailDomain . $service['path'];	// Textcube-NG: 서비스 주소가 //host 이면 useSSL 기준 스킴을 붙인다(빈 값일 때의 기본 분기와 같은 규칙)(r3-34)
+	$message = str_replace('[##_images_##]', $mailServiceURL."/resources/style/letter", $message);
+	$message = str_replace('[##_link_##]', getInvitationLink(getBlogURL($blogName, $mailDomain),$email, null, $authtoken), $message);
+	$message = str_replace('[##_go_blog_##]', getBlogURL($blogName, $mailDomain), $message);
 	$message = str_replace('[##_link_title_##]', _text('블로그 바로가기'), $message);
 	if (empty($name)) {
 		$message = str_replace('[##_to_##]', '', $message);
@@ -441,7 +463,11 @@ function sendInvitationMail($blogid, $userid, $name, $comment, $senderName, $sen
 }
 
 function getInvitationLink($url, $email, $password, $authtoken) {
-	return $url. '/login?loginid=' . rawurlencode($email) . '&password=' . rawurlencode($authtoken) . '&requestURI=' . rawurlencode($url . "/owner/setting/account?password=" . rawurlencode($password));
+	/* [보안] 원본은 requestURI 에 저장된 비밀번호 해시(?password=)를 넣어 초대 메일·팀블로그 화면 URL 로 해시가 나갔다.
+	   초대받은 사용자는 인증 토큰이 있으면 현재 비밀번호 없이 변경되고(owner/setting/account/password), 저장된 해시는
+	   이전 비밀번호로 받지 않으므로(changePassword) 넣지 않는다. $password 인자는 호출 호환용으로 남김(사용하지 않음).
+	   토큰이 없을 때 rawurlencode(null) 은 PHP 8.1+ deprecated(내장 함수 non-nullable 인자에 null) → 문자열로 변환. */
+	return $url. '/login?loginid=' . rawurlencode((string)$email) . '&password=' . rawurlencode((string)$authtoken) . '&requestURI=' . rawurlencode($url . "/owner/setting/account");
 }
 
 function cancelInvite($userid,$clean = true) {
@@ -467,20 +493,21 @@ function changePassword($userid, $pwd, $prevPwd, $forceChange = false) {
 	if (!strlen($pwd) || (!strlen($prevPwd) && !$forceChange))
 		return false;
 	if($forceChange === true) {
-		$pwd = md5($pwd);
-		@POD::execute("DELETE FROM {$database['prefix']}UserSettings WHERE userid = $userid AND name = 'AuthToken' LIMIT 1");
-		return POD::execute("UPDATE {$database['prefix']}Users SET password = '$pwd' WHERE userid = $userid");
+		// Auth::storePassword 로 저장(저장 방식 $service['passwordHash'], 기본 md5). 저장에 성공한 경우에만 인증 토큰 삭제
+		if (!Auth::storePassword($userid, $pwd))
+			return false;
+		Auth::removeAuthToken($userid);	// 토큰·발급 시각 삭제(원본 DELETE ... LIMIT 1 은 MySQL 전용)
+		return true;
 	}
-	if ((strlen($prevPwd) == 32) && preg_match('/[0-9a-f]/i', $prevPwd))
-		$secret = '(password = \'' . md5($prevPwd) . "' OR password = '$prevPwd')";
-	else
-		$secret = 'password = \'' . md5($prevPwd) . '\'';
-	$count = POD::queryCell("SELECT count(*) FROM {$database['prefix']}Users WHERE userid = $userid and $secret");
-	if ($count == 0)
+	/* [보안] 원본은 32자 입력을 저장된 해시 자체로도 받아(해시만 알면 비밀번호 변경 가능) 그 값을 escape 없이 SQL 에 넣었다 →
+	   이전 비밀번호는 저장값을 읽어 Auth::verifyPassword 로만 확인 */
+	$hash = POD::queryCell("SELECT password FROM {$database['prefix']}Users WHERE userid = " . intval($userid), 0, false);
+	if (!Auth::verifyPassword($prevPwd, $hash))
 		return false;
-	$pwd = md5($pwd);
-	@POD::execute("DELETE FROM {$database['prefix']}UserSettings WHERE userid = $userid AND name = 'AuthToken' LIMIT 1");
-	return POD::execute("UPDATE {$database['prefix']}Users SET password = '$pwd' WHERE userid = $userid");
+	if (!Auth::storePassword($userid, $pwd))
+		return false;
+	Auth::removeAuthToken($userid);	// 토큰·발급 시각 삭제(원본 DELETE ... LIMIT 1 은 MySQL 전용)
+	return true;
 }
 
 function changeAPIKey($userid, $key) {
@@ -542,11 +569,11 @@ function removeBlog($blogid) {
 	POD::execute("DELETE FROM {$database['prefix']}XMLRPCPingSettings WHERE blogid = $blogid");
 
 	//Delete Tags
-	if (count($tags) > 0)
+	if (!empty($tags))
 	{
 		$tagliststr = implode(', ', $tags);	// Tag id used at deleted blog.
 		$nottargets = POD::queryColumn("SELECT DISTINCT tag FROM {$database['prefix']}TagRelations WHERE tag in ( $tagliststr )");	// Tag id used at other blogs.
-		if (count($nottargets) > 0) {
+		if (!empty($nottargets)) {
 			$nottargetstr	= implode(', ', $nottargets);
 			POD::execute("DELETE FROM {$database['prefix']}Tags WHERE id IN ( $tagliststr ) AND id NOT IN ( $nottargetstr )");
 		} else {
@@ -554,7 +581,7 @@ function removeBlog($blogid) {
 		}
 	}
 	//Delete Feeds
-	if (count($feeds) > 0)
+	if (!empty($feeds))
 	{
 		foreach($feeds as $feedId)
 		{
@@ -565,7 +592,9 @@ function removeBlog($blogid) {
 	//Clear Plugin Database
 	// TODO : encapsulate with 'value'
 	$query = "SELECT name, value FROM {$database['prefix']}ServiceSettings WHERE name like 'Database\\_%'";
+	// Textcube-NG: POD::queryAll() 은 쿼리가 실패하면 null 을 돌려준다 — foreach(null) 은 원본 5.6 부터 경고(PHP 8: foreach() argument must be of type array|object). 배열이 아니면 빈 배열로 둔다(원본 5.6 결과와 같음)(v3.222)
 	$plugintablesraw = POD::queryAll($query);
+	if (!is_array($plugintablesraw)) $plugintablesraw = array();
 	foreach($plugintablesraw as $table) {
 		$dbname = $database['prefix'] . substr($table['name'], 9);
 		POD::execute("DELETE FROM {$database['prefix']}{$dbname} WHERE blogid = $blogid");

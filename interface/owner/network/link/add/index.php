@@ -19,7 +19,7 @@ $tabsClass['add'] = true;
 										return false;		
 									}
 
-									if(document.getElementById('addForm').rss.value.indexOf("http://")==-1) {
+									if(!/^https?:\/\//i.test(document.getElementById('addForm').rss.value)) { // Textcube-NG: https 주소도 그대로(r3-8)
 										uri = 'http://'+document.getElementById('addForm').rss.value;
 									} else {
 										uri = document.getElementById('addForm').rss.value;
@@ -54,12 +54,14 @@ $tabsClass['add'] = true;
 if($service['reader'] != false) {
 ?>
 									if (oForm.rss != '' && RSSread == true) {
-										if(confirm('<?php echo _t('이 링크의 RSS를 바깥 글 읽기에 추가하시겠습니까?\n추가하면 바깥 글 읽기 메뉴에서 해당 링크의 새 글을 읽을 수 있습니다.');?>'))
-											addRSS = true;
+										tcConfirm('<?php echo _t('이 링크의 RSS를 바깥 글 읽기에 추가하시겠습니까?\n추가하면 바깥 글 읽기 메뉴에서 해당 링크의 새 글을 읽을 수 있습니다.');?>', function () { addRSS = true; tcAddLinkSend(); }, tcAddLinkSend);	// Textcube-NG: 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396)
+										return false;
 									}
 <?php
 }
 ?>
+									tcAddLinkSend();	// Textcube-NG: 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396)
+									function tcAddLinkSend() {
 									if(addRSS == true) {
 										var request = new HTTPRequest("POST", blogURL + "/owner/reader/action/feed/add/");
 										request.onSuccess = function () {
@@ -92,6 +94,7 @@ if($service['reader'] != false) {
 									"&category=" + encodeURIComponent(oForm.category.value) +
 									"&newCategory=" + encodeURIComponent(oForm.newCategory.value)
 									);
+									}
 								}	
 							//]]>
 						</script>

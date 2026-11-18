@@ -16,6 +16,9 @@ if(!isset($suri['id']) || (Setting::getBlogSettingGlobal('useSloganOnCategory',1
 }
 if(!doesHaveOwnership() && getCategoryVisibility($blogid, $category) < 2)
 	$category = null;
+// Textcube-NG: 비공개 분류의 하위 분류(getCategoryVisibilityList 'private' 에 함께 들어 있다)도 손님에게는 없는 분류로 본다(목록·본문 모두)(r3-5)
+if(!doesHaveOwnership() && $category !== null && in_array($category, getCategoryVisibilityList($blogid, 'private')))
+	$category = null;
 
 // Keylog as category description
 $keylogEntry = null;
@@ -38,6 +41,7 @@ if(Setting::getBlogSettingGlobal('useKeywordAsCategory',false)==true) {
 	$cache->reset();
 }
 
+fireEvent('OBStart');	// Textcube-NG: archive·entry·cover 처리기와 같이 화면 출력 앞뒤로 OBStart·OBEnd 를 낸다(SearchOptimizer 가 스킨의 description 메타 중복을 뺀다)(r3-5)
 if ($skinSetting['showListOnCategory'] != 0) {
 	require ROOT . '/interface/common/blog/begin.php';
 	if(!empty($keylogEntry)) {
@@ -47,7 +51,8 @@ if ($skinSetting['showListOnCategory'] != 0) {
 		unset($entries);
 	}
     $cache->reset();
-    $cache->name = 'categoryList-'.$category."-".$suri['page']."-";
+    // Textcube-NG: ?page[]= 처럼 page 가 배열이면 원본은 Array to string conversion(5.6/7.4 Notice, PHP 8 Warning) 뒤 'Array' 이름의 캐시를 따로 만들었다. 목록은 Paging::fetch() 가 숫자가 아닌 page 를 1 쪽으로 보므로 1 쪽 캐시 이름을 쓴다(v3.221)
+    $cache->name = 'categoryList-'.$category."-".(is_numeric($suri['page']) ? $suri['page'] : 1)."-";
 	if (!$cache->load()) {
 		if(!$listWithPaging = getEntryListWithPagingByCategory($blogid, $category, $suri['page'], $blog['entriesOnList']))
 			$listWithPaging = array(array(), array('total' => 0));
@@ -80,5 +85,6 @@ if ($skinSetting['showListOnCategory'] != 2) {
 	require ROOT . '/interface/common/blog/entries.php';
 }
 require ROOT . '/interface/common/blog/end.php';
+fireEvent('OBEnd');	// (r3-5)
 
 ?>

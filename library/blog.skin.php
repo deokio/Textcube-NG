@@ -2,6 +2,14 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 
 global $__gDressTags;
 
@@ -25,8 +33,10 @@ class Skin {
 	var $locative;
 	var $locativeSpot;
 	var $locativeEntry;
+	var $media;	// Textcube-NG: <s_media> 블록 안(미디어로그 페이지 자리, 쓰는 곳 interface/freeSlogan.php)(r3-13)
 	var $guest;
 	var $guestForm;
+	var $guestFormOpenIDOnly;
 	var $guestGuest;
 	var $guestMember;
 	var $guestContainer;
@@ -48,6 +58,7 @@ class Skin {
 	var $comment;
 	var $commentCount;
 	var $commentForm;
+	var $commentFormOpenIDOnly;
 	var $commentGuest;
 	var $commentMember;
 	var $commentContainer;
@@ -96,7 +107,9 @@ class Skin {
 		global $service, $blogURL, $suri, $blog, $__gDressTags, $serviceURL;
 		$context = Model_Context::getInstance();
 		$this->cache = new pageCache;
-		$this->cache->reset('skinCache-'.$name);
+		// Textcube-NG: 스킨 출력 주소 설정(useServiceURLonSkin·Attach·Resources) 값마다 스킨 캐시를 따로 둔다 — 설정을 바꾸면 바로 반영된다(v3.206)
+		// Textcube-NG: 스킨 출력 주소는 $serviceURL(scheme·host·port·path)을 따르므로 키 끝에 그 해시(md5 앞 8자)를 붙여 서비스 주소마다 캐시를 따로 둔다. CacheControl::flushSkin 은 'skinCache-' 접두로 지우므로 새 키도 함께 지워진다 (r3-38 R-545)
+		$this->cache->reset('skinCache-'.$name.'-'.($service['useServiceURLonSkin'] ? 1 : 0).($service['useServiceURLonAttach'] ? 1 : 0).($service['useServiceURLonResources'] ? 1 : 0).'-'.substr(md5((string)$serviceURL), 0, 8));
 		$__gDressTags = array();
 		if($previewMode == true || ($service['skincache'] != true) || !$this->loadCache()) {
 			$this->noneCommentMessage = Setting::getBlogSettingGlobal('noneCommentMessage',null);
@@ -197,12 +210,14 @@ class Skin {
 			$this->coverpageBasicModules[0] = array();
 			$this->coverpageName[0] =_t('표지');
 
-			$sval = str_replace('./', str_replace(ROOT, $serviceURL,__TEXTCUBE_SKIN_DIR__)."/$name/", $sval);
+			// Textcube-NG: 스킨 상대 경로(./) 치환 주소 — 서버 설정 useServiceURLonSkin 이 꺼져 있으면 도메인 없는 서비스 경로($service['path'])를 쓴다(v3.206)
+			$skinPathURL = str_replace(ROOT, ($service['useServiceURLonSkin'] ? $serviceURL : $service['path']),__TEXTCUBE_SKIN_DIR__)."/$name/";
+			$sval = str_replace('./', $skinPathURL, $sval);
 
-			$this->noneCommentMessage = str_replace('./', str_replace(ROOT, $serviceURL,__TEXTCUBE_SKIN_DIR__)."/$name/", $this->noneCommentMessage);
-			$this->singleCommentMessage = str_replace('./', str_replace(ROOT, $serviceURL,__TEXTCUBE_SKIN_DIR__)."/$name/", $this->singleCommentMessage);
-			$this->noneTrackbackMessage = str_replace('./', str_replace(ROOT, $serviceURL,__TEXTCUBE_SKIN_DIR__)."/$name/", $this->noneTrackbackMessage);
-			$this->singleTrackbackMessage = str_replace('./', str_replace(ROOT, $serviceURL,__TEXTCUBE_SKIN_DIR__)."/$name/", $this->singleTrackbackMessage);
+			$this->noneCommentMessage = str_replace('./', $skinPathURL, $this->noneCommentMessage);
+			$this->singleCommentMessage = str_replace('./', $skinPathURL, $this->singleCommentMessage);
+			$this->noneTrackbackMessage = str_replace('./', $skinPathURL, $this->noneTrackbackMessage);
+			$this->singleTrackbackMessage = str_replace('./', $skinPathURL, $this->singleTrackbackMessage);
 
 			// Store skin tags.
 			$__gDressTags = $this->getDressTags($sval);
@@ -240,6 +255,9 @@ class Skin {
 			list($sval, $this->locativeEntry) = $this->cutSkinTag($sval, 'local_info_rep');
 			list($sval, $this->locativeSpot) = $this->cutSkinTag($sval, 'local_spot_rep');
 			list($sval, $this->locative) = $this->cutSkinTag($sval, 'local');
+			// Textcube-NG: <s_media> 블록을 잘라 [##_media_##] 로 둔다(블록 안 [##_media_content_##] 에 미디어로그 본문). 블록이 없는 스킨은 그대로이고,
+			// 잘린 [##_media_##] 는 다른 화면에서 removeAllTags 가 지운다(블록째 지우던 것과 같은 결과)(r3-13)
+			list($sval, $this->media) = $this->cutSkinTag($sval, 'media');
 
 			list($sval, $this->guestSubContainer) = $this->cutSkinTag($sval, 'guest_reply_container');
 			if ($this->guestSubContainer == '') {
@@ -258,6 +276,7 @@ class Skin {
 
 			list($sval, $this->guestGuest) = $this->cutSkinTag($sval, 'guest_form');
 			list($sval, $this->guestMember) = $this->cutSkinTag($sval, 'guest_member');
+			list($sval, $this->guestFormOpenIDOnly) = $this->cutSkinTag($sval, 'guest_input_form_openid_only');
 			list($sval, $this->guestForm) = $this->cutSkinTag($sval, 'guest_input_form');
 			list($sval, $this->guest) = $this->cutSkinTag($sval, 'guest');
 			list($sval, $this->entryProtected) = $this->cutSkinTag($sval, 'article_protected');
@@ -306,6 +325,7 @@ class Skin {
 
 			list($sval, $this->commentGuest) = $this->cutSkinTag($sval, 'rp_guest');
 			list($sval, $this->commentMember) = $this->cutSkinTag($sval, 'rp_member');
+			list($sval, $this->commentFormOpenIDOnly) = $this->cutSkinTag($sval, 'rp_input_form_openid_only');
 			list($sval, $this->commentForm) = $this->cutSkinTag($sval, 'rp_input_form');
 			list($sval, $this->comment) = $this->cutSkinTag($sval, 'rp');
 
@@ -334,7 +354,7 @@ class Skin {
 		}
 	}
 
-	function cutSkinTag($contents, $tag, $replace = null) {
+	static function cutSkinTag($contents, $tag, $replace = null) {
 		global $__gDressTags;
 		$context = Model_Context::getInstance();
 		if(!isset($__gDressTags)) $__gDressTags = array();
@@ -594,7 +614,8 @@ class KeylogSkin {
 		global $service, $serviceURL;
 		if (!$sval = file_get_contents($filename))
 			Respond::ErrorPage("KeywordSkin");
-		$origPath = $serviceURL . substr($filename,strlen(ROOT));
+		// Textcube-NG: 스킨 상대 경로(./) 치환 주소 — useServiceURLonSkin 이 꺼져 있으면 도메인 없는 서비스 경로를 쓴다(v3.206)
+		$origPath = ($service['useServiceURLonSkin'] ? $serviceURL : $service['path']) . substr($filename,strlen(ROOT));
 		$origPath = substr($origPath, 0, 0 - strlen(Path::getBaseName($origPath)));
 		$sval = str_replace('./', $origPath, $sval);
 		replaceSkinTag($sval, 'html');
@@ -627,10 +648,11 @@ function dressStaticElements(& $view) {
 	dress('title', htmlspecialchars($blog['title']), $view);
 	dress('blogger', htmlspecialchars($writer), $view);
 	dress('desc', htmlspecialchars($blog['description']), $view);
+	// Textcube-NG: 블로그 로고(attach)·빈 이미지(resources) 주소 — 서버 설정 useServiceURLonAttach·useServiceURLonResources 가 꺼져 있으면 도메인 없는 서비스 경로($service['path'])를 쓴다(v3.206)
 	if (!empty($blog['logo']))
-		dress('image', "{$serviceURL}/attach/$blogid/{$blog['logo']}", $view);
+		dress('image', ($service['useServiceURLonAttach'] ? $serviceURL : $service['path'])."/attach/$blogid/{$blog['logo']}", $view);
 	else
-		dress('image', "{$serviceURL}/resources/image/spacer.gif", $view);
+		dress('image', ($service['useServiceURLonResources'] ? $serviceURL : $service['path'])."/resources/image/spacer.gif", $view);
 	dress('blog_link', "$blogURL/", $view);
 	dress('keylog_link', "$blogURL/keylog", $view);
 	dress('localog_link', "$blogURL/location", $view);

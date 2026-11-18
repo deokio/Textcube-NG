@@ -211,7 +211,7 @@ function Tag(container, language, disable)
 	this.name = "Eolin Tag Object";
 	this.copyright = "Tatter & Company";
 
-	this.allowEolinSuggestion = (typeof(disable) == "undefined") ? false : !disable;
+	this.allowEolinSuggestion = false;	// Textcube-NG: 외부 suggest.tc.com 으로 입력 내용을 보내지 않고 이 블로그의 /suggest/(v3.135) 만 쓴다(requestSuggestion 로컬 분기)(r3-7, 결정 503-2)
 
 	this.isSettingValue = false;	// setValue가 짧은 시간에 여러번 실행될때 Safari가 죽어버리는 문제 해결
 
@@ -572,12 +572,12 @@ if(!String.prototype.trim) {
 
 if(!String.prototype.htmlspecialchars) {
 	String.prototype.htmlspecialchars = function()
-	{ return this.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll("<", "&gt;"); };
+	{ return this.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;"); };	// Textcube-NG: 세 번째는 ">"(원본 "<" 오타, r3-15)
 }
 
 if(!String.prototype.unhtmlspecialchars) {
 	String.prototype.unhtmlspecialchars = function()
-	{ return this.replaceAll("&amp;", "&").replaceAll("&lt;", "<").replaceAll("&gt;", ">"); };
+	{ return this.replaceAll("&lt;", "<").replaceAll("&gt;", ">").replaceAll("&amp;", "&"); };	// Textcube-NG: &amp; 를 마지막에 풀어 이름의 '&lt;' 가 '<' 로 바뀌지 않게(r3-8)
 }
 
 var x=0;

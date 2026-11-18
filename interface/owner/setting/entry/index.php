@@ -2,6 +2,14 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 require ROOT . '/library/preprocessor.php';
 require ROOT . '/interface/common/owner/header.php';
 
@@ -19,14 +27,14 @@ printFormatterSelectScript();
 
 								
 								function setEditorConfig() {
-									var request = new HTTPRequest("GET", "<?php echo $blogURL;?>/owner/setting/entry/editor/?defaultEditor=" + document.getElementById('editor-form').defaultEditor.value + "&defaultFormatter=" + document.getElementById('editor-form').defaultFormatter.value + "&useBlogAPI=" + document.getElementById('editor-form').useBlogAPI.checked + "&blogApiPassword=" + document.getElementById('editor-form').blogApiPassword.value );
+									var request = new HTTPRequest("POST", "<?php echo $blogURL;?>/owner/setting/entry/editor/");
 									request.onSuccess = function() {
 										PM.showMessage("<?php echo _t('저장되었습니다');?>", "center", "bottom");
 									}
 									request.onError = function() {
 										alert("<?php echo _t('에디터 설정을 변경할 수 없습니다');?>");
 									}
-									request.send();
+									request.send("defaultEditor=" + encodeURIComponent(document.getElementById('editor-form').defaultEditor.value) + "&defaultFormatter=" + encodeURIComponent(document.getElementById('editor-form').defaultFormatter.value) + "&useBlogAPI=" + document.getElementById('editor-form').useBlogAPI.checked + "&blogApiPassword=" + encodeURIComponent(document.getElementById('editor-form').blogApiPassword.value)); // Textcube-NG: 값 인코딩(r3-8)
 								}
 								
 								function checkManualInput(obj) {
@@ -69,9 +77,14 @@ printFormatterSelectScript();
 								function chooseBlogPassword() {
 									var blogApiPassword = document.getElementById('blogApiPassword');
 									var value = "";
+									// [보안] Math.random() 은 예측 가능한 난수 → crypto.getRandomValues 로 16진 20자(원본과 같은 형식) 생성
+									var rnd = window.crypto || window.msCrypto;
+									if (!rnd || !rnd.getRandomValues) return;
+									var bytes = new Uint8Array(10);
+									rnd.getRandomValues(bytes);
 									var asciibase = "0123456789abcdef";
-									for( i=0;i<20;i++) {
-										value += "" + asciibase.charAt(Math.round((Math.random()*15)));
+									for (var i = 0; i < 10; i++) {
+										value += asciibase.charAt(bytes[i] >> 4) + asciibase.charAt(bytes[i] & 15);
 									}
 									blogApiPassword.value = value;
 								}
@@ -157,7 +170,7 @@ foreach (getAllEditors() as $key => $value) {
 										<dl id="blogapi-password-line" class="line">
 											<dt><span class="label"><?php echo _t('블로그 API 용 비밀번호');?></span></dt>
 											<dd>
-												<input type="text" style="width:14em" class="input-text" id="blogApiPassword" name="blogApiPassword" value="<?php echo Setting::getBlogSettingGlobal("blogApiPassword", "");?>" />
+												<input type="text" style="width:14em" class="input-text" id="blogApiPassword" name="blogApiPassword" value="<?php echo htmlspecialchars((string)Setting::getBlogSettingGlobal("blogApiPassword", ""), ENT_QUOTES);?>" />
 												<input type="button" class="input-button" value="<?php echo _t('임의로 생성')?>" onclick="chooseBlogPassword()" />
 												<input type="button" class="input-button" value="<?php echo _t('관리자 비밀번호를 그대로 사용')?>" onclick="clearBlogPassword()" />
 											</dd>

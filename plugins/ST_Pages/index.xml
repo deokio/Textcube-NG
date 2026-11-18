@@ -1,0 +1,162 @@
+<?xml version="1.0" encoding="utf-8"?>
+<plugin version="1.0">
+  <title xml:lang="ko">페이지</title>
+  <title xml:lang="en">Pages</title>
+  <link>http://www.textcube.org/</link>
+  <version>1.0</version>
+  <description xml:lang="ko"><![CDATA[블로그 주소 아래의 정해진 경로에 페이지를 둡니다. 기존 글(스킨 포함)·비공개 글(소유자만)과 연결하거나, 스킨에 맞춘 내용 또는 완전히 새 페이지를 직접 작성합니다. 관리 화면 운영 경로(/owner, /control 등)와 Textcube 가 쓰는 경로 아래에는 만들 수 없습니다.]]></description>
+  <description xml:lang="en"><![CDATA[Serves pages at fixed paths under the blog address. A page can link an existing post (with the skin), a private post (owner only), skin-wrapped content, or a standalone page. Paths under service routes (/owner, /control, ...) and paths Textcube already uses are refused.]]></description>
+  <license>GPL</license>
+  <author xml:lang="ko" link="http://deok.io/"><![CDATA[@deokio]]></author>
+  <author xml:lang="en" link="http://deok.io/"><![CDATA[@deokio]]></author>
+  <safety changeData="yes" exposeData="no" accessLocal="no" accessRemote="no" accessRaw="no" />
+  <requirements>
+    <textcube>
+      <minVersion>1.8</minVersion>
+    </textcube>
+  </requirements>
+  <binding>
+    <listener event="AccessFreeSlogan" handler="ST_Pages_access" />
+    <adminMenu>
+      <viewMethods>
+        <method>
+          <topMenu>entry</topMenu>
+          <title xml:lang="ko">페이지</title>
+          <title xml:lang="en">Pages</title>
+          <handler>ST_Pages_manage</handler>
+          <params>
+            <param>
+              <name>action</name>
+              <type>string</type>
+              <mandatory>0</mandatory>
+            </param>
+            <param>
+              <name>pageid</name>
+              <type>string</type>
+              <mandatory>0</mandatory>
+            </param>
+            <param>
+              <name>path</name>
+              <type>string</type>
+              <mandatory>0</mandatory>
+            </param>
+            <param>
+              <name>kind</name>
+              <type>string</type>
+              <mandatory>0</mandatory>
+            </param>
+            <param>
+              <name>target</name>
+              <type>string</type>
+              <mandatory>0</mandatory>
+            </param>
+            <param>
+              <name>title</name>
+              <type>string</type>
+              <mandatory>0</mandatory>
+            </param>
+            <param>
+              <name>content</name>
+              <type>string</type>
+              <mandatory>0</mandatory>
+            </param>
+          </params>
+        </method>
+      </viewMethods>
+      <methods>
+        <method>
+          <handler>ST_Pages_searchEntries</handler>
+          <params>
+            <param>
+              <name>q</name>
+              <type>string</type>
+              <mandatory>0</mandatory>
+            </param>
+          </params>
+        </method>
+      </methods>
+    </adminMenu>
+    <config xml:lang="ko" dataValHandler="">
+      <window width="500" height="600"/>
+      <fieldset legend="편집기">
+        <field title="편집 구역 스타일" type="select" name="skinstyle">
+          <op value="none" checked="checked"><![CDATA[편집기 기본 스타일 (wysiwyg.css)]]></op>
+          <op value="local"><![CDATA[블로그 화면용 CSS 함께 싣기]]></op>
+          <op value="cdn"><![CDATA[블로그 화면용 CSS·외부(CDN) CSS 함께 싣기]]></op>
+          <caption><![CDATA[<strong>편집기 기본 스타일 (wysiwyg.css)</strong>: 편집기 전용 스타일 파일(wysiwyg.css)만 싣습니다. 블로그 화면용 CSS는 싣지 않습니다. wysiwyg.css가 없으면 기본 default-wysiwyg.css를 씁니다.<br /><strong>블로그 화면용 CSS 함께 싣기</strong>: 블로그 화면용 CSS(skin.html이 거는 스타일시트)를 편집 구역에 더 싣습니다. 순서는 블로그 화면용 CSS → 편집 구역 배치 되돌림 CSS(resources/style/editor-skin-reset.css) → wysiwyg.css(없으면 default-wysiwyg.css)입니다.<br />- 싣는 것: skin.html의 &lt;head&gt;에 있는 &lt;link rel="stylesheet"&gt; 가운데 스킨 폴더 안의 .css 파일을 가리키는 상대 주소(앞의 ./는 있어도 되고, ?·# 뒤는 뗍니다)이며, media가 없거나 비었거나 all·screen(only all·only screen 포함)이 들어 있는 것만 skin.html 순서대로 싣습니다.<br />- 싣지 않는 것: 주석 안의 링크, rel에 alternate가 있는 링크, http:·//·/로 시작하는 주소, ../가 든 주소, print 등 다른 media만 있는 링크, 조건이 붙은 media(예: screen and (max-width:600px))의 링크.<br />- 편집 구역 class: skin.html에서 본문 자리(치환자 article_rep_desc)를 감싼 요소들(body 안쪽, 바깥 요소부터 차례로)의 class를 편집 구역(본문)에 붙여 그 class에 걸린 글 모양(글자 크기·색 등)이 보이게 합니다. 같은 class는 한 번만 붙이고, 32개가 넘으면 안쪽 요소의 class부터 32개만 붙입니다. body·html 요소의 class는 붙이지 않습니다.<br />- 배치 되돌림 CSS: 그 class와 본문에 걸린 위치·float·너비·높이·바깥 여백·변형을 되돌려 편집 구역이 깨지지 않게 하고, 블로그 화면용 CSS가 바꾼 문서 기준 글자 크기(html의 font-size)를 브라우저 기본값(100%)으로 되돌립니다. 배경·글자 색·글꼴 종류·안쪽 여백은 바꾸지 않습니다.<br />- 글자 크기 맞춤: 편집기를 연 뒤 한 번, 본문 자리를 감싼 요소들의 글자 크기를 편집기 안에서 재어 편집 구역 본문 글자 크기를 블로그 화면과 같게 맞춥니다. 편집기 문서의 html 글자 크기만 바꾸며 저장되는 글 내용은 바뀌지 않습니다. 재지 못하면 맞추지 않습니다.<br /><strong>블로그 화면용 CSS·외부(CDN) CSS 함께 싣기</strong>: 위에 더해, skin.html이 https 주소로 거는 외부(CDN) 스타일시트 가운데 integrity(sha256·sha384·sha512)가 있는 것만 integrity·crossorigin과 함께 편집 구역에 넣습니다. 이때 페이지 편집 화면을 여는 브라우저가 그 외부 서버에 접속합니다.<br /><strong>한계</strong>: 바깥 #id 요소 아래에서만 걸리도록 쓴 스킨 규칙(예: #content .article p)은 편집 구역에 걸리지 않습니다. 조건이 붙은 media의 스타일시트는 싣지 않으므로 화면 너비에 따라 바뀌는 모양은 보이지 않습니다. 글자 크기를 rem(html 글자 크기 기준)으로 정한 부분과 바깥 요소의 #id 등 class가 아닌 조건에 묶인 글자 크기는 편집 구역에서 블로그 화면과 다르게 보일 수 있습니다.]]></caption>
+        </field>
+      </fieldset>
+    </config>
+    <config xml:lang="en" dataValHandler="">
+      <window width="500" height="600"/>
+      <fieldset legend="Editor">
+        <field title="Editing area style" type="select" name="skinstyle">
+          <op value="none" checked="checked"><![CDATA[Editor default style (wysiwyg.css)]]></op>
+          <op value="local"><![CDATA[Add blog page CSS]]></op>
+          <op value="cdn"><![CDATA[Add blog page CSS + external (CDN) CSS]]></op>
+          <caption><![CDATA[<strong>Editor default style (wysiwyg.css)</strong>: Loads only the editor stylesheet (wysiwyg.css). Blog page CSS is not loaded. If wysiwyg.css is missing, the default default-wysiwyg.css is used.<br /><strong>Add blog page CSS</strong>: Also loads the blog page CSS (the stylesheets that skin.html links) into the editing area, in this order: blog page CSS → editing area layout reset CSS (resources/style/editor-skin-reset.css) → wysiwyg.css (or default-wysiwyg.css if missing).<br />- Loaded: &lt;link rel="stylesheet"&gt; in the &lt;head&gt; of skin.html whose address is a relative path to a .css file inside the skin folder (a leading ./ is allowed; anything after ? or # is dropped) and whose media is absent, empty, or contains all or screen (including only all and only screen), in skin.html order.<br />- Not loaded: links inside comments, links whose rel contains alternate, addresses starting with http:, // or /, addresses containing ../, links with only other media such as print, and links with conditional media (e.g. screen and (max-width:600px)).<br />- Editing area class: the classes of the elements that wrap the post body placeholder (article_rep_desc) in skin.html (inside body, from the outermost element inward) are added to the editing area, so that post styles bound to those classes (text size, color, etc.) apply. Each class is added once; if there are more than 32, only 32 are added, starting from the innermost element. Classes of the body and html elements are not added.<br />- Layout reset CSS: resets the position, float, width, height, outer margin and transform set on those classes and on the body, so the editing area does not break, and resets the document base text size (font-size of html) changed by the blog page CSS to the browser default (100%). Background, text color, font family and inner padding are not changed.<br />- Text size matching: once after the editor opens, the text size of the elements that wrap the post body is measured inside the editor and the text size of the editing area is matched to the blog page. Only the text size of the html element of the editor document is changed; the saved post content is not changed. If it cannot be measured, the text size is not matched.<br /><strong>Add blog page CSS + external (CDN) CSS</strong>: In addition, among the external (CDN) stylesheets that skin.html links over https, only those with integrity (sha256, sha384, sha512) are added to the editing area with their integrity and crossorigin. The browser that opens the page editor then connects to that external server.<br /><strong>Limits</strong>: Skin rules written to apply only under an outer #id element (e.g. #content .article p) do not apply in the editing area. Stylesheets with conditional media are not loaded, so styles that change with the screen width are not shown. Text sizes set in rem (based on the html text size) and text sizes bound to conditions other than classes on outer elements (such as #id) may look different in the editing area than on the blog page.]]></caption>
+        </field>
+      </fieldset>
+    </config>
+  </binding>
+  <storage>
+    <table>
+      <name>ST_Pages</name>
+      <fields>
+        <field>
+          <name>pageid</name>
+          <attribute>int</attribute>
+          <length>11</length>
+          <isnull>0</isnull>
+          <default>0</default>
+        </field>
+        <field>
+          <name>pagepath</name>
+          <attribute>varchar</attribute>
+          <length>255</length>
+          <isnull>0</isnull>
+        </field>
+        <field>
+          <name>pagekind</name>
+          <attribute>varchar</attribute>
+          <length>32</length>
+          <isnull>0</isnull>
+        </field>
+        <field>
+          <name>targetid</name>
+          <attribute>int</attribute>
+          <length>11</length>
+          <isnull>0</isnull>
+          <default>0</default>
+        </field>
+        <field>
+          <name>title</name>
+          <attribute>varchar</attribute>
+          <length>255</length>
+          <isnull>0</isnull>
+        </field>
+        <field>
+          <name>content</name>
+          <attribute>text</attribute>
+          <isnull>1</isnull>
+        </field>
+        <field>
+          <name>created</name>
+          <attribute>int</attribute>
+          <length>11</length>
+          <isnull>0</isnull>
+          <default>0</default>
+        </field>
+        <field>
+          <name>modified</name>
+          <attribute>int</attribute>
+          <length>11</length>
+          <isnull>0</isnull>
+          <default>0</default>
+        </field>
+      </fields>
+      <key>pageid</key>
+      <index>pagepath</index>
+    </table>
+  </storage>
+</plugin>

@@ -2,6 +2,14 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 define('__TEXTCUBE_ADMINPANEL__',true);
 
 $IV = array(
@@ -30,6 +38,8 @@ if(!Acl::check('group.administrators') && !Acl::check('group.owners')) { // If n
 			if(!Acl::check('group.editors') && $replier != getUserId()) {
 				echo "<script type=\"text/javascript\">//<![CDATA[".CRLF
 					."alert('"._t('권한이 없습니다.')."'); window.close(); //]]></script>";
+				// [보안] 원본은 안내만 출력하고 아래 처리(편집 화면 출력 등)를 계속했다 → 여기서 종료
+				exit;
 			}
 		}
 	}
@@ -99,7 +109,10 @@ list($tempTag, $commentView) = getCommentCountPart($commentCount, $skin);
 		case 'edit':
 			if( !empty( $_POST['openidedit'] ) ) {
 				//$comment is feched top of this script;
-				if( $openid_identity != $comment['openid'] ) {
+				/* [보안] 비로그인이면 $openid_identity 는 null, 일반 댓글의 openid 는 '' 라 느슨한 비교(null != '')가 거짓이 되어
+				   비밀번호 확인 없이 댓글(비밀 댓글·방명록 포함)이 편집 화면에 출력됐다 →
+				   OpenID 신원이 있고 댓글의 openid 와 정확히 같을 때만 허용 */
+				if( empty($openid_identity) || !is_array($comment) || $openid_identity !== $comment['openid'] ) {
 					$comment = false;
 				}
 			} else {
@@ -114,7 +127,8 @@ list($tempTag, $commentView) = getCommentCountPart($commentCount, $skin);
 		case 'commit':
 			if( !empty( $_POST['openidedit'] ) ) {
 				//$comment is feched top of this script;
-				if( $openid_identity != $comment['openid'] ) {
+				// [보안] edit 와 같은 엄격 비교(OpenID 신원 필수)
+				if( empty($openid_identity) || !is_array($comment) || $openid_identity !== $comment['openid'] ) {
 					$comment = false;
 				}
 			} else {
@@ -216,7 +230,8 @@ list($tempTag, $commentView) = getCommentCountPart($commentCount, $skin);
 			var adminSkin = "<?php echo $adminSkinSetting['skin'];?>";
 		//]]>
 	</script>
-	<script type="text/javascript" src="<?php echo $service['resourcepath'];?>/script/common3.js"></script>
+<?php /* Textcube-NG: 이식본에서 고친 스크립트(EAF4.js·common3.js·gallery.js·jQuery, v3.147·v3.207)는 externalresources 설정과 관계없이 이 서버의 /resources 에서 읽는다 — 외부 리소스 주소의 원본 스크립트에는 CSRF 토큰 패치가 없다(r3-3) */ ?>
+	<script type="text/javascript" src="<?php echo $service['path'];?>/resources/script/common3.js?v=<?php echo filemtime(ROOT . '/resources/script/common3.js');?>"></script>
 </head>
 <body>
 	<form name="deleteComment" method="post" action="<?php echo $blogURL;?>/comment/delete/<?php echo $suri['id'];?>">

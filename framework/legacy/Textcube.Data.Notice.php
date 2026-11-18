@@ -120,9 +120,9 @@ class Notice {
 			$this->userid = getUserId();
 			$query->setAttribute('userid',getUserId());
 		}
-		$this->saveSlogan();
 		if (!$query->insert())
 			return $this->_error('insert');
+		$this->saveSlogan();	// Textcube-NG: 행이 만들어진 뒤에 부른다(Post::add 와 같게, 반환값은 무시). 이전에는 insert 전에 불러 doesExist() 가 항상 실패해 slogan 이 저장되지 않았다(r3-25, R-475)
 		
 		return true;
 	}
@@ -187,9 +187,9 @@ class Notice {
 
 		$query = new DBModel;
 		$query->reset('Entries');
-		$query->setQualifier('blogid',$this->blogid);
-		if(isset($this->userid)) $query->setQualifier('userid', $this->userid);
-		$query->setQualifier('id', $this->id);
+		$query->setQualifier('blogid', 'equals', $this->blogid);
+		if(isset($this->userid)) $query->setQualifier('userid', 'equals', $this->userid);
+		$query->setQualifier('id', 'equals', $this->id);	// Textcube-NG: setQualifier 는 (이름, 조건, 값) 3인자다. 2인자는 값이 조건 자리로 들어가 조건이 걸리지 않아 doesExist()/update() 가 실패했다. Post::saveSlogan 과 같게 'equals' 를 쓴다(r3-25, R-475)
 		if (!$query->doesExist())
 			return $this->_error('id');
 
@@ -206,7 +206,7 @@ class Notice {
 			$query->setAttribute('slogan', $checkSlogan, true);
 			if (!POD::queryExistence(
 				"SELECT id FROM {$database['prefix']}Entries " 
-				. "WHERE blogid = ".$this->blogid." AND id <> {$this->id} AND slogan ='{$checkSlogan}'")
+				. "WHERE blogid = ".$this->blogid." AND id <> {$this->id} AND slogan ='".POD::escapeString($checkSlogan)."'")	// Textcube-NG: slogan 은 validateSlogan()·makeSlogan() 을 거쳐 따옴표·역슬래시가 없지만, SQL 줄에서도 POD::escapeString() 으로 감싼다(심층 방어). 위 setAttribute(…, true) 의 escape 는 UPDATE 쪽이라 이중 escape 가 아니다(r3-29 R-503)
 				) 
 			{
 				if (!$query->update())
@@ -217,6 +217,20 @@ class Notice {
 		}
 		// if try saveSlogan again, slogan string has more $i
 		return $this->_error('limit');
+	}
+
+	// Textcube-NG: Notice::saveSlogan() 이 부르는데 Notice 에 없던 메서드를 Textcube.Data.Post.php 의 같은 이름 메서드와 같은 본문으로 둔다(r3-24, R-433)
+	function makeSlogan($title) {
+		$title = str_replace("\xC2\xB7", '-', $title);	// Textcube-NG: 가운뎃점(·, U+00B7)을 '-' 로(getSlogan 과 같은 규칙)(r3-20)
+		$slogan = preg_replace('/-+/', ' ', $title);
+		$slogan = preg_replace('/[!-\/:-@\[-\^`{-~]+/', '', $slogan);
+		$slogan = preg_replace('/\s+/', '-', $slogan);
+		$slogan = trim($slogan, '-');
+		return strlen($slogan) > 0 ? $slogan : 'XFile';
+	}
+	
+	function validateSlogan($slogan) {
+		return preg_match('/^[^!-,.\/:-@\[-\^`{-~\s]+$/', $slogan);
 	}
 
 	/*@static@*/

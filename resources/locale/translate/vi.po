@@ -18,7 +18,7 @@ msgid "\"%1\"에 %2 파일을 생성할 수 없습니다. \"%1\"의 퍼미션을
 msgstr "Cannot create file \"%2\" in \"%1\". Change the permission setting of \"%1\" to \"%3\""
 
 msgid "\"%1\"에 접근할 수 없습니다. 퍼미션을 %2(으)로 수정해 주십시오."
-msgstr "Cannot access to \"%1\". Change the permission setting to $2"
+msgstr "Cannot access to \"%1\". Change the permission setting to %2"
 
 msgid "\"%1\"의 하위에 새 분류를 만듭니다."
 msgstr "Create new category under \"%1\""
@@ -78,7 +78,7 @@ msgid "%Y:년, %M:월, %D:일"
 msgstr "%Y:Year, %M:Month, %D:Day"
 
 msgid "&copy; 2004 - 2008. 모든 저작권은 개발자 및 공헌자에게 있습니다.<br />텍스트큐브는 니들웍스/TNF에서 개발합니다.<br />텍스트큐브와 텍스트큐브 로고는 니들웍스의 상표입니다."
-msgstr "&amp;copy; 2004 - 2008. All rights reserved for developers and contributors.&lt;br /&gt;Textcube is developed by Needleworks/TNF.&lt;br /&gt;Textcube and its logo are copyrighted."
+msgstr "&copy; 2004 - 2008. All rights reserved for developers and contributors.<br />Textcube is developed by Needleworks/TNF.<br />Textcube and its logo are copyrighted."
 
 msgid "(로그인시 ID로 사용됩니다)"
 msgstr "(Default ID)"
@@ -162,13 +162,13 @@ msgid "7일 평균"
 msgstr "Avg.7 days"
 
 msgid "<acronym title=\"Outline Processor Markup Language\">OPML</acronym> 업로드"
-msgstr "&lt;acronym title=\"Outline Processor Markup Language\"&gt;OPML&lt;/acronym&gt; Upload"
+msgstr "<acronym title=\"Outline Processor Markup Language\">OPML</acronym> Upload"
 
 msgid "<acronym title=\"Rich Site Summary\">RSS</acronym> 주소"
-msgstr "&lt;acronym title=\"Rich Site Summary\"&gt;RSS&lt;/acronym&gt; address"
+msgstr "<acronym title=\"Rich Site Summary\">RSS</acronym> address"
 
 msgid "<acronym title=\"Uniform Resource Locator\">URL</acronym> 입력"
-msgstr "Typing &lt;acronym title=\"Uniform Resource Locator\"&gt;URL&lt;/acronym&gt;"
+msgstr "Typing <acronym title=\"Uniform Resource Locator\">URL</acronym>"
 
 msgid "API Key 설정"
 msgstr "Setting API Key"
@@ -186,7 +186,7 @@ msgid "Body Id 변경"
 msgstr "Body Id"
 
 msgid "Body id는 블로그 스킨의 <acronym title=\"Cascading Style Sheet\">CSS</acronym> 활용을 위해 사용합니다.<br /> 기본값인 \"tt-body-category\"를 그냥 사용하셔도 사용에 지장은 없습니다."
-msgstr "Body Id is used for the skin &lt;acronym title=\"Cascading Style Sheet\"&gt;CSS&lt;/acronym&gt;.&lt;br /&gt; You can use \"tt-body-category\" which is the default value"
+msgstr "Body Id is used for the skin <acronym title=\"Cascading Style Sheet\">CSS</acronym>.<br /> You can use \"tt-body-category\" which is the default value"
 
 msgid "Comments 테이블에 openid 필드를 추가합니다."
 msgstr "Add OpenID field into Comments table."
@@ -573,7 +573,7 @@ msgid "공지사항"
 msgstr "Notice"
 
 msgid "공지사항 캐시를 초기화합니다."
-msgstr "Reset page cache."
+msgstr "Tạo lại Cache."
 
 msgid "공지사항을 가져올 수 없습니다. 잠시 후 다시 시도해 주십시오."
 msgstr "Could not find notice. Try again later."
@@ -618,7 +618,7 @@ msgid "관리자 비밀번호를 그대로 사용"
 msgstr "Use admin\\'s password"
 
 msgid "관리자 설정에 의해 오픈아이디로만 댓글을 남길 수 있습니다."
-msgstr "You have to log in with an OpenID to leave a comment."
+msgstr "Theo thiết lập của Administrator, bạn chỉ có thể viết bình luận bằng OpenID hoặc Social Login."
 
 msgid "관리자 정보 입력"
 msgstr "Enter Admin Info"
@@ -1386,7 +1386,7 @@ msgid "로그보기"
 msgstr "Show log"
 
 msgid "로그아웃"
-msgstr "Logout"
+msgstr "Thoát"
 
 msgid "로그아웃하고 블로그 메인으로 이동합니다."
 msgstr "Logout and move to blog main page."
@@ -1743,7 +1743,7 @@ msgid "백업이 저장되었습니다."
 msgstr "Backup saved."
 
 msgid "백업파일 <acronym title=\"Uniform Resource Locator\">URL</acronym>"
-msgstr "Backup file &lt;acronym title=\"Uniform Resource Locator\"&gt;URL&lt;/acronym&gt;"
+msgstr "Backup file <acronym title=\"Uniform Resource Locator\">URL</acronym>"
 
 msgid "백업파일 URL을 입력하십시오."
 msgstr "Enter Backup file URL."
@@ -1773,7 +1773,7 @@ msgid "백업파일을 올리고 있습니다."
 msgstr "Uploading backup file"
 
 msgid "백업파일을 읽어서 데이터를 복원합니다.<br />백업파일에 첨부파일이 포함되어 있으면 첨부파일도 자동으로 복원됩니다.<br />이전 버전으로부터의 데이터도 복원을 통해 가져올 수 있습니다."
-msgstr "Restore data from the backup file.&lt;br /&gt;Attached files and migration data will also be restored.."
+msgstr "Restore data from the backup file.<br />Attached files and migration data will also be restored.."
 
 msgid "백업파일을 자신의 하드디스크로부터 직접 선택하여 데이터베이스를 복원합니다. 백업파일의 용량이 업로드 허용용량을 초과하지 않는지 주의하십시오."
 msgstr "Restore database from local backup file. Make sure the backup file size does not exceed upload file size limit."
@@ -2061,7 +2061,7 @@ msgid "블로그 글을 한 쪽당 %1개 보여줍니다."
 msgstr "Show %1 posts per page"
 
 msgid "블로그 로고 및 파비콘"
-msgstr "Blog Logo &amp; Favicon"
+msgstr "Blog Logo & Favicon"
 
 msgid "블로그 로그인 암호가 초기화되었습니다."
 msgstr "Login password resetted."
@@ -2298,7 +2298,7 @@ msgid "비우기에 실패하였습니다."
 msgstr "Failed to delete."
 
 msgid "비정상적인 데이터를 교정합니다.<br />동적인 캐쉬 데이터는 재계산하여 저장합니다."
-msgstr "Correcting data.&lt;br /&gt; Active cache data will be recalculated and saved."
+msgstr "Correcting data.<br /> Active cache data will be recalculated and saved."
 
 msgid "사용 가능한 운영 방법은 다음과 같습니다. 선택하여 주십시오."
 msgstr "Please select Textcube\\'s mode of operation:"
@@ -2544,7 +2544,7 @@ msgid "서버에 <em>%1</em>에 저장된 백업파일이 있습니다."
 msgstr "Found a backup file saved on the server in the location %1"
 
 msgid "서버에 <em>%1</em>에 저장된 백업파일이 있습니다. 삭제후 복원에는 이 파일을 이용하실 수 있습니다."
-msgstr "Found a backup file saved on the server in the location &lt;em&gt;%1&lt;/em&gt;. You can use this for restoration."
+msgstr "Found a backup file saved on the server in the location <em>%1</em>. You can use this for restoration."
 
 msgid "서버에 백업파일을 저장하여 복원에 사용할 수 있습니다."
 msgstr "save backup file on the server for restoration."
@@ -3039,10 +3039,10 @@ msgid "언어"
 msgstr "Language"
 
 msgid "언어 및 시간대"
-msgstr "Language &amp;amp; Timezone"
+msgstr "Language &amp; Timezone"
 
 msgid "언어, 시간대를 설정합니다"
-msgstr "Language &amp;amp; Timezone"
+msgstr "Language &amp; Timezone"
 
 msgid "업데이트 주기"
 msgstr "Update Frequency"
@@ -3098,6 +3098,9 @@ msgstr "Connect: will acquire the permission of this account after login."
 msgid "연결하였습니다."
 msgstr "Connected."
 
+msgid "연결할 계정의 인증을 확인하지 못했습니다. 다시 시도해 주십시오."
+msgstr "Không thể kiểm tra xác nhận của tài khoản cần kết nối. Xin vui lòng thử lại."
+
 msgid "연락처를 아는"
 msgstr "Contact"
 
@@ -3108,19 +3111,19 @@ msgid "예) textcube.idtail.com, textcube.myid.net"
 msgstr "Ex.) textcube.idtail.com, textcube.myid.net"
 
 msgid "예: AllowOverride <b>All</b>"
-msgstr "e.g. AllowOverride &lt;b&gt;All&lt;/b&gt;"
+msgstr "e.g. AllowOverride <b>All</b>"
 
 msgid "예: AllowOverride <b>FileInfo</b>"
-msgstr "e.g. AllowOverride &lt;b&gt;FileInfo&lt;/b&gt;"
+msgstr "e.g. AllowOverride <b>FileInfo</b>"
 
 msgid "예: LoadModule <b>rewrite_module</b> modules/<b>mod_rewrite</b>.so"
-msgstr "e.g. LoadModule &lt;b&gt;rewrite_module&lt;/b&gt; modules/&lt;b&gt;mod_rewrite&lt;/b&gt;.so"
+msgstr "e.g. LoadModule <b>rewrite_module</b> modules/<b>mod_rewrite</b>.so"
 
 msgid "예: Options <b>All</b>"
-msgstr "e.g. Options &lt;b&gt;All&lt;/b&gt;"
+msgstr "e.g. Options <b>All</b>"
 
 msgid "예: Options <b>FollowSymLinks</b>"
-msgstr "e.g. Options &lt;b&gt;FollowSymLinks&lt;/b&gt;"
+msgstr "e.g. Options <b>FollowSymLinks</b>"
 
 msgid "예약"
 msgstr "Reserve"
@@ -3147,7 +3150,7 @@ msgid "오픈아이디"
 msgstr "OpenID"
 
 msgid "오픈아이디 게스트 로그인"
-msgstr "OpenID Guest login"
+msgstr "OpenID khách đăng nhập"
 
 msgid "오픈아이디 기록"
 msgstr "OpenID record"
@@ -3186,7 +3189,7 @@ msgid "오픈아이디로 글쓰기"
 msgstr "Write with OpenID"
 
 msgid "오픈아이디로 로그인을 해야만 댓글 및 방명록을 쓸 수 있습니다."
-msgstr "You have to log in with an OpenID to comment on posts or write in guestbook."
+msgstr "Phải đăng nhập bằng OpenID hoặc Social Login mới có thể bình luận trên bài viết hay viết lưu niệm."
 
 msgid "오픈아이디로 로그인하여 쓴 댓글/방명록에 오픈아이디 아이콘을 표시합니다."
 msgstr "Display the OpenID icon in comments and guestbook entries written with OpenID."
@@ -3195,7 +3198,7 @@ msgid "오픈아이디로 사용할 블로그 주소를 선택하세요"
 msgstr "Choose blog address for OpenID"
 
 msgid "오픈아이디로만 댓글을 남길 수 있습니다"
-msgstr "You have to log in with and OpenID to leave a comment."
+msgstr "Bạn phải đăng nhập bằng OpenID hoặc Social Login mới có thể bình luận."
 
 msgid "오픈아이디를 입력하지 않았거나, 도메인 없는 오픈아이디를 입력하였습니다."
 msgstr "Did not input OpenID, or inputted OpenID without domain."
@@ -3255,10 +3258,10 @@ msgid "웹서버 설정에 <b>mod_rewrite</b>의 로딩이 포함되어야 합�
 msgstr "mod_rewrite loading should be included in the web server settings"
 
 msgid "웹서버 설정의 이 디렉토리에 대한 <em>AllowOverride</em> 항목에 <b>FileInfo</b>가 포함되거나 <b>All</b>이어야 합니다."
-msgstr "On the web server settings &lt;em&gt;AllowOverride&lt;/em&gt; must have &lt;b&gt;FileInfo&lt;/b&gt; or &lt;b&gt;All&lt;/b&gt; settings."
+msgstr "On the web server settings <em>AllowOverride</em> must have <b>FileInfo</b> or <b>All</b> settings."
 
 msgid "웹서버 설정의 이 디렉토리에 대한 <em>Options</em> 항목에 <b>FollowSymLinks</b>가 포함되거나 <b>All</b>이어야 합니다."
-msgstr "On the web server settings &lt;em&gt;Options&lt;/em&gt; must have &lt;b&gt;FollowSymLinks&lt;/b&gt; or &lt;b&gt;All&lt;/b&gt; settings."
+msgstr "On the web server settings <em>Options</em> must have <b>FollowSymLinks</b> or <b>All</b> settings."
 
 msgid "웹에서 백업파일 가져오기."
 msgstr "Import backup file from a server"
@@ -3516,7 +3519,7 @@ msgid "이름 필터링"
 msgstr " Name to be filtered"
 
 msgid "이름&lt;이메일&gt; 혹은 이메일"
-msgstr "Name&amp;lt;Email&amp;gt; or Email"
+msgstr "Name&lt;Email&gt; or Email"
 
 msgid "이름(e-mail)"
 msgstr "Name (e-mail)"
@@ -3588,7 +3591,7 @@ msgid "이미지 리샘플링을 설정합니다"
 msgstr "Image Resampling"
 
 msgid "이미지 리샘플링을 통하여 올린 이미지의 크기를 줄여 저장한 후 출력하여 블로그의 트래픽을 줄여줍니다."
-msgstr "Image Resampling will resize uploaded image. This will decrease blog traffic bandwidth.&lt;br /&gt;"
+msgstr "Image Resampling will resize uploaded image. This will decrease blog traffic bandwidth."
 
 msgid "이올린"
 msgstr "Eolin"
@@ -4041,7 +4044,7 @@ msgid "초대 메일은 발송되지 않으며, 새로 추가된 참여자는 �
 msgstr "Newbie will have basic permission. Invitation mail will not send to the user."
 
 msgid "초대받을 사람의 이름<이메일>을 적어 주십시오.\\n이메일만 적어도 됩니다."
-msgstr "Enter invitee`s name&lt;Email&gt;.\\\\nYou can only enter the email."
+msgstr "Enter invitee`s name<Email>.\\\\nYou can only enter the email."
 
 msgid "초대받을 사람이 사용할 블로그 식별자를 적어 주십시오."
 msgstr "Enter the blog name to be used by the invitee."
@@ -4305,7 +4308,7 @@ msgid "태그"
 msgstr "Tag"
 
 msgid "태그 &amp; 위치"
-msgstr "Tag &amp;amp; Location"
+msgstr "Tag &amp; Location"
 
 msgid "태그 선택 시"
 msgstr "When tag is selected"
@@ -4421,6 +4424,15 @@ msgstr "Begin Installation"
 msgid "텍스트큐브 시스템 점검이 필요합니다. 지금 점검하시겠습니까?"
 msgstr "System check is necessary. Start the system check now?"
 
+msgid "지금 점검"
+msgstr "Kiểm tra ngay"
+
+msgid "지금 생성"
+msgstr "Tạo ngay"
+
+msgid "나중에"
+msgstr "Để sau"
+
 msgid "텍스트큐브 점검을 시작합니다."
 msgstr "Starts textcube maintenance."
 
@@ -4434,7 +4446,7 @@ msgid "텍스트큐브 홈페이지의 %1을 방문하시면 다양한 스킨을
 msgstr "More themes can be found at %1. To use the theme, upload the theme file onto the skin directory, find the downloaded theme from the list, and click to select."
 
 msgid "텍스트큐브 홈페이지의 %1을 방문하시면 다양한 플러그인을 받을 수 있습니다. 받은 플러그인 파일을 텍스트큐브의 plugin 디렉토리(폴더)로 업로드하면 설치가 완료됩니다. 업로드 후, 이 페이지에서 해당 플러그인을 사용중으로 전환하여 사용을 시작할 수 있습니다."
-msgstr "Please visit %1 at Textcube site to download more plugins. You can upload plugins into the /plugin folder of your Textcube install. Once uploaded, you can activate them here. For more information on the individual plugins, visit &lt;a href=\\'http://blog.textcube.org\\' onclick=\\'window.open(this.href); return false;\\'&gt;TNF Plugin Review&lt;/a&gt;."
+msgstr "Please visit %1 at Textcube site to download more plugins. You can upload plugins into the /plugin folder of your Textcube install. Once uploaded, you can activate them here. For more information on the individual plugins, visit <a href=\\'http://blog.textcube.org\\' onclick=\\'window.open(this.href); return false;\\'>TNF Plugin Review</a>."
 
 msgid "텍스트큐브 홈페이지의 스킨 업로드 게시판으로 연결합니다."
 msgstr "Connecting to the Theme upload BBS on Textcube official homepage."
@@ -4464,7 +4476,7 @@ msgid "텍스트큐브의 동작을 위하여 모듈이 필요한 부분마다 �
 msgstr "At lease one module is needed to make Textcube work.\\\\n You cannot inavtivate this module because it is the only one activated. "
 
 msgid "텍스트큐브의 모든 데이터를 삭제합니다.<br />첨부파일의 삭제 여부를 선택하실 수 있습니다.<br />데이터의 복원은 백업파일을 통해서만 가능하므로 먼저 백업을 하시기 바랍니다."
-msgstr "Erase Textcube data.&lt;br /&gt;You can optionally choose to erase attachments.&lt;br /&gt;Recovering data is only possible through the Restore data option so please do a backup first."
+msgstr "Erase Textcube data.<br />You can optionally choose to erase attachments.<br />Recovering data is only possible through the Restore data option so please do a backup first."
 
 msgid "텍스트큐브의 전반적인 캐시 기능을 사용합니다. 페이지 캐시, 스킨캐시, 실시간 쿼리 캐시 및 정책을 모두 포함됩니다."
 msgstr "Use Textcube general cache purpose. Page cache, skin cache, dynamic query cache and policy will be included."
@@ -4938,7 +4950,7 @@ msgid "현재 달의 달력을 보여줍니다."
 msgstr "Shows calendar of current month."
 
 msgid "현재 로그인한 오픈아이디"
-msgstr "Currently logged-in OpenID"
+msgstr "Đang đăng nhập với OpenID"
 
 msgid "현재 버전 - %1"
 msgstr "Current version - %1"
@@ -4974,7 +4986,7 @@ msgid "현재글 스크랩"
 msgstr "Star This Article"
 
 msgid "현재의 모든 데이터를 TTXML형태의 백업파일로 보관합니다.<br />첨부파일을 포함시킬 수 있으며, 복원할 경우 자동으로 첨부파일이 처리됩니다.<br />백업파일은 서버에 저장하거나 다운받으실 수 있습니다."
-msgstr "Store all data as TTXML backup file.&lt;br /&gt;You can include attachments, and they will be processed automatically when restoring.&lt;br /&gt;You can download backup file or store at the server."
+msgstr "Store all data as TTXML backup file.<br />You can include attachments, and they will be processed automatically when restoring.<br />You can download backup file or store at the server."
 
 msgid "현재창"
 msgstr "Current window"
@@ -5028,7 +5040,7 @@ msgid "환영합니다!"
 msgstr "Welcome!"
 
 msgid "환영합니다. <em>%1</em>님."
-msgstr "Welcome, &lt;em&gt;%1&lt;/em&gt;"
+msgstr "Welcome, <em>%1</em>"
 
 msgid "효과 제거"
 msgstr "Remove effect"

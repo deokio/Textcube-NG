@@ -178,6 +178,11 @@ final class Validator {
 				trigger_error("Validator: The type of '$key' is not defined", E_USER_WARNING);
 				continue;
 			}
+			// Textcube-NG: 배열을 받지 않는 type 에 배열(key[]=x, key[a][]=x, 빈 배열)이 오면 필수·선택·기본값 규칙 모두 검증 실패로 처리한다.
+			// 원본은 아래 strlen() 에 배열을 넘겨 PHP 8 에서 TypeError(500)가 났고, PHP 7.4 는 strlen() 이 NULL(경고)이라 값이 없는 것으로
+			// 처리되어 기본값이 없는 선택 입력은 배열이 검사 없이 그대로 남았다(v3.143)
+			if (isset($array[$key]) && ($rule[0] !== 'file') && is_array($array[$key]))
+				return false;
 			if (isset($array[$key]) && (($rule[0] == 'file') || (strlen($array[$key]) > 0))) {
 				$value = &$array[$key];
 				if (isset($rule['min']))
@@ -267,7 +272,9 @@ final class Validator {
 							return false;
 						break;
 					case 'file':
-						if (!isset($value['name']) || preg_match('@[/\\\\]@', $value['name']))
+						// Textcube-NG: 여러 파일 업로드 형식(key[])이면 name 이 배열 — 단일 파일만 받으므로 검증 실패(원본은 PHP 8 에서 preg_match() TypeError,
+						// PHP 7.4 는 NULL 이라 통과)(v3.143)
+						if (!isset($value['name']) || !is_string($value['name']) || preg_match('@[/\\\\]@', $value['name']))
 							return false;
 						break;
 					default:
@@ -316,10 +323,13 @@ final class Validator {
 	}
 
 	static function isInteger($value, $min = -2147483648, $max = 2147483647, $bypass = false) {
-		if (($bypass === false) && !preg_match('/^(0|-?[1-9][0-9]{0,9})$/', $value))
+		// Textcube-NG: [보안] $ 는 끝 줄바꿈 앞에서도 맞아 "1\n" 이 통과했다 — /D 로 막는다. 배열·객체는 preg_match() 에 넘기지 않고 false(원본: 배열·__toString 없는 객체는 PHP 7.4 경고, PHP 8.0 부터 TypeError. __toString 객체는 문자열로 검사되어 이 경우만 원본과 결과가 다르다), null 은 (string) 으로 '' 가 되어 false(PHP 8.1 null 인자 deprecation 없음)(v3.182)
+		if (($bypass === false) && (is_array($value) || is_object($value) || !preg_match('/^(0|-?[1-9][0-9]{0,9})$/D', (string)$value)))
 			return false;
 		if(!is_null($value)) {
-			if (($value < $min) || ($value > $max))
+			// Textcube-NG: PHP 8.0 부터 숫자가 아닌 문자열과 정수의 비교는 문자열 비교라 bypass(true) 일 때 ''·'abc'·'5abc'·' ' 는 false, '-2147483649abc' 는 true 처럼 원본과 달랐다 — 원본(PHP 5~7.4)처럼 앞부분 숫자(없으면 0)로 비교한다(v3.221)
+			$number = (is_string($value) && !is_numeric($value)) ? (float)$value : $value;
+			if (($number < $min) || ($number > $max))
 				return false;
 		}
 		return true;
@@ -383,11 +393,11 @@ final class Validator {
 	}
 
 	static function filename($value) {
-		return preg_match('/^\w+(\.\w+)*$/', $value);
+		return preg_match('/^\w+(\.\w+)*$/D', $value);	// Textcube-NG: D — 끝 줄바꿈이 붙은 값은 받지 않는다(r3-15, R-324)
 	}
 
 	static function directory($value) {
-		return preg_match('/^[\-\w]+( [\-\w]+)*$/', $value);
+		return preg_match('/^[\-\w]+( [\-\w]+)*$/D', $value);	// Textcube-NG: D — 끝 줄바꿈이 붙은 값은 받지 않는다(r3-15, R-370)
 	}
 
 	static function path($value) {
@@ -405,7 +415,8 @@ final class Validator {
 	static function escapeXML($string, $escape = true) {
 		if (is_null($string))
 			return null;
-		return ($escape ? htmlspecialchars($string) : str_replace('&amp;', '&', preg_replace(array('&quot;', '&lt;', '&gt;'), array('"', '<', '>'), $string)));
+		// Textcube-NG: $escape 가 false 인 분기의 preg_replace() 패턴('&quot;' 등)에 구분자가 없어 원본(PHP 5.6 포함)부터 경고(No ending delimiter '&') 뒤 NULL → 언제나 '' 였고, PHP 8.1 부터는 str_replace() 에 null 을 넘기는 지원 중단 경고도 났다 — 바깥 str_replace() 와 같은 문자열 치환으로 바로잡는다. 이 분기는 엔티티를 되돌린 원문을 돌려주므로 HTML/XML 출력에 그대로 쓰지 않는다(현재 호출 0곳)(v3.221)
+		return ($escape ? htmlspecialchars($string) : str_replace('&amp;', '&', str_replace(array('&quot;', '&lt;', '&gt;'), array('"', '<', '>'), $string)));
 	}
 }
 
@@ -443,7 +454,30 @@ final class Timezone {
 			return sprintf("%+03d:%02d", intval(Timezone::getOffset() / 3600), abs((Timezone::getOffset() / 60) % 60));
 	}
 
+	/* [보안] PHP 시간대 식별자(tz 데이터베이스, 하위 호환 이름 포함)인지 확인 — 블로그 시간대 값은 DB 세션 시간대 설정 SQL 과
+	   TZ 환경변수에 쓰이므로 식별자 외 문자열(따옴표 등)을 받지 않는다. 대소문자는 date_default_timezone_set() 처럼 구분하지 않음 */
+	static function isValid($timezone) {
+		static $identifiers = null;
+		if (!is_string($timezone) || ($timezone === ''))
+			return false;
+		if ($identifiers === null)
+			$identifiers = array_change_key_case(array_flip(timezone_identifiers_list(DateTimeZone::ALL_WITH_BC)), CASE_LOWER);
+		return isset($identifiers[strtolower($timezone)]);
+	}
+
 	static function set($timezone) {
+		// [보안] 식별자가 아니면 거부(원본은 date_default_timezone_set() 실패를 무시하고 putenv() 결과(true)를 돌려줘 호출자가 그대로 저장)
+		if (!Timezone::isValid($timezone))
+			return false;
+		return Timezone::_apply($timezone);
+	}
+
+	/* 원본 set() 본문. setRFC822()·setISO8601() 는 검사한 숫자로 만든 POSIX 오프셋(GMT±hh:mm·UTC±hh:mm, PHP 식별자 아님)을
+	   넘기므로 원본 동작 그대로 이 경로를 쓴다(외부 입력은 set() 에서 검사) */
+	private static function _apply($timezone) {
+		// Textcube-NG: 빈 값(null·''·0·false)이면 기본 시간대(config.default.php $service['timezone'])를 쓴다(v3.182)
+		if (in_array($timezone, array(null, '', 0, false), true))
+			$timezone = 'Asia/Seoul';
 		if ( isset( $_ENV['OS'] ) && strncmp($_ENV['OS'], 'Windows', 7) == 0)
 			$timezone = Timezone::getAlternative($timezone);
 		date_default_timezone_set($timezone);
@@ -460,9 +494,9 @@ final class Timezone {
 		else if (!is_numeric($timezone) || (strlen($timezone) != 5))
 			return false;
 		else if ($timezone[0] == '+')
-			return Timezone::set('UTC-' . substr($timezone, 1, 2) . ':' . substr($timezone, 3, 2));
+			return Timezone::_apply('UTC-' . substr($timezone, 1, 2) . ':' . substr($timezone, 3, 2));
 		else if ($timezone[0] == '-')
-			return Timezone::set('UTC+' . substr($timezone, 1, 2) . ':' . substr($timezone, 3, 2));
+			return Timezone::_apply('UTC+' . substr($timezone, 1, 2) . ':' . substr($timezone, 3, 2));
 		else
 			return false;
 	}
@@ -480,7 +514,7 @@ final class Timezone {
 			$matches[3] = ':';
 		if (empty($matches[4]))
 			$matches[4] = '00';
-		return Timezone::set(implode('', $matches));
+		return Timezone::_apply(implode('', $matches));
 	}
 
 	static function getList() {
@@ -507,6 +541,9 @@ final class Timezone {
 	}
 
 	static function getAlternative($timezone) {
+		// Textcube-NG: PHP 8.0 부터 정수와 문자열 비교가 문자열 비교로 바뀌어 switch 에서 0 이 'Asia/Seoul' 에 맞지 않는다(Saner string to number comparisons) — 빈 값(null·''·0·false)은 'KST-9'(v3.182)
+		if (in_array($timezone, array(null, '', 0, false), true))
+			return 'KST-9';
 		switch ($timezone) {
 			case 'Asia/Seoul':
 				return 'KST-9';
@@ -558,29 +595,40 @@ function _strftime_apply(string $fmt, int $ts, bool $gmt): string {
 		}
 		$i++;
 		$fn = $gmt ? 'gmdate' : 'date';
+		// Textcube-NG: 지정자 매핑을 C 로케일 strftime() 결과(php:5.6 실측)에 맞춤 — %C·%D·%F·%G·%g·%h·%k·%l·%r·%s·%U·%x 추가, %c·%e·%W 교정(v3.182)
 		$result .= match($fmt[$i]) {
 			'A' => $fn('l', $ts),
 			'a' => $fn('D', $ts),
 			'B' => $fn('F', $ts),
-			'b' => $fn('M', $ts),
-			'c' => $fn('D, d M Y H:i:s', $ts) . ($gmt ? ' GMT' : ' ' . date('O', $ts)),
+			'b', 'h' => $fn('M', $ts),
+			'C' => (string)intdiv((int)$fn('Y', $ts), 100),
+			'c' => $fn('D M ', $ts) . sprintf('%2d', (int)$fn('j', $ts)) . $fn(' H:i:s ', $ts) . $fn('Y', $ts),
+			'D', 'x' => $fn('m/d/y', $ts),
 			'd' => $fn('d', $ts),
-			'e' => ltrim($fn('d', $ts), '0') ?: '0',
+			'e' => sprintf('%2d', (int)$fn('j', $ts)),
+			'F' => $fn('Y', $ts) . $fn('-m-d', $ts),
+			'G' => $fn('o', $ts),
+			'g' => sprintf('%02d', (int)$fn('o', $ts) % 100),
 			'H' => $fn('H', $ts),
 			'I' => $fn('h', $ts),
 			'j' => sprintf('%03d', (int)$fn('z', $ts) + 1),
+			'k' => sprintf('%2d', (int)$fn('G', $ts)),
+			'l' => sprintf('%2d', (int)$fn('g', $ts)),
 			'M' => $fn('i', $ts),
 			'm' => $fn('m', $ts),
 			'n' => "\n",
 			'p' => $fn('A', $ts),
 			'P' => $fn('a', $ts),
 			'R' => $fn('H:i', $ts),
+			'r' => $fn('h:i:s A', $ts),
 			'S' => $fn('s', $ts),
+			's' => $gmt ? (string)mktime((int)gmdate('G', $ts), (int)gmdate('i', $ts), (int)gmdate('s', $ts), (int)gmdate('n', $ts), (int)gmdate('j', $ts), (int)gmdate('Y', $ts)) : (string)$ts,
 			'T' => $fn('H:i:s', $ts),
 			't' => "\t",
+			'U' => sprintf('%02d', intdiv((int)$fn('z', $ts) + 7 - (int)$fn('w', $ts), 7)),
 			'u' => $fn('N', $ts),
 			'V' => $fn('W', $ts),
-			'W' => $fn('W', $ts),
+			'W' => sprintf('%02d', intdiv((int)$fn('z', $ts) + 7 - ((int)$fn('w', $ts) + 6) % 7, 7)),
 			'w' => $fn('w', $ts),
 			'X' => $fn('H:i:s', $ts),
 			'Y' => $fn('Y', $ts),
@@ -601,15 +649,48 @@ function gmstrftime_compat(string $format, ?int $timestamp = null): string {
 }
 
 final class Timestamp {
+	// Textcube-NG: 원본 strftime()·date() 는 timestamp 를 정수로 바꿔 받았다(PHP 7.4 기준 — 앞부분만 숫자인 문자열은 경고 뒤 그 숫자, 소수부는 버림). 바꿀 수 없는 값(''·'abc'·' '·배열·객체·정수 범위 밖)은 경고 뒤 false 를 돌려줬다. PHP 8.0 부터 strftime_compat(?int)·date() 는 이런 값에 TypeError, PHP 8.1 부터 소수는 암시적 변환 deprecation 이라 여기서 같은 정수로 바꾸고, 바꿀 수 없으면 false 를 돌려준다(경고는 내지 않는다)(v3.221)
+	private static function toTimestamp($time) {
+		if (is_null($time) || is_int($time))
+			return $time;
+		if (is_bool($time))
+			return (int)$time;
+		if (is_float($time))
+			return (is_finite($time) && $time >= PHP_INT_MIN && $time < PHP_INT_MAX) ? (int)$time : false;
+		if (is_string($time) && is_numeric($time))
+			return self::toTimestamp($time + 0);
+		if (is_string($time) && preg_match('/^[ \t\n\r\x0B\f]*[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?/', $time, $m))
+			return self::toTimestamp($m[0] + 0);
+		return false;
+	}
+
+	// Textcube-NG: 원본 date()·gmdate() 는 timestamp 를 정수로 바꿔 받았고(PHP 7.4 기준), 바꿀 수 없는 값은 경고 뒤 false 를 돌려줬다. PHP 8.0 부터 이런 값은 TypeError, PHP 8.1 부터 소수는 암시적 변환 deprecation 이라 toTimestamp() 로 같은 정수로 바꿔 넘기고, 바꿀 수 없으면 false 를 돌려준다(경고는 내지 않는다)(v3.222)
+	private static function dateOf($gmt, $format, $time) {
+		if (($time = self::toTimestamp($time)) === false)
+			return false;
+		return $gmt ? gmdate($format, $time) : date($format, $time);
+	}
+
 	static function format($format = '%c', $time = null) {
+		// Textcube-NG: 정수로 바꿀 수 없는 timestamp 는 원본처럼 false — toTimestamp() 참조(v3.221)
+		if (($time = self::toTimestamp($time)) === false)
+			return false;
 		return strftime_compat(_t($format), $time);
 	}
 
 	static function formatGMT($format = '%c', $time = null) {
+		// Textcube-NG: 정수로 바꿀 수 없는 timestamp 는 원본처럼 false — toTimestamp() 참조(v3.221)
+		if (($time = self::toTimestamp($time)) === false)
+			return false;
 		return gmstrftime_compat(_t($format), $time);
 	}
 
 	static function format2($time) {
+		// Textcube-NG: PHP 8.0 부터 date() 의 timestamp 가 nullable 이라 null 이면 현재 시각이 된다 — 원본(PHP 5~7.4)처럼 0(1970-01-01)으로 처리(v3.182)
+		if ($time === null) $time = 0;
+		// Textcube-NG: 정수로 바꿀 수 없는 timestamp 는 원본처럼 false — toTimestamp() 참조(v3.221)
+		if (($time = self::toTimestamp($time)) === false)
+			return false;
 		if (date('Ymd', $time) == date('Ymd'))
 			return strftime_compat(_t('%H:%M'), $time);
 		else if (date('Y', $time) == date('Y', time()))
@@ -619,6 +700,11 @@ final class Timestamp {
 	}
 
 	static function format3($time) {
+		// Textcube-NG: PHP 8.0 부터 date() 의 timestamp 가 nullable 이라 null 이면 현재 시각이 된다 — 원본(PHP 5~7.4)처럼 0(1970-01-01)으로 처리(v3.182)
+		if ($time === null) $time = 0;
+		// Textcube-NG: 정수로 바꿀 수 없는 timestamp 는 원본처럼 false — toTimestamp() 참조(v3.221)
+		if (($time = self::toTimestamp($time)) === false)
+			return false;
 		if (date('Ymd', $time) == date('Ymd'))
 			return strftime_compat(_t('%H:%M:%S'), $time);
 		else
@@ -626,63 +712,86 @@ final class Timestamp {
 	}
 
 	static function format5($time = null) {
+		// Textcube-NG: 정수로 바꿀 수 없는 timestamp 는 원본처럼 false — toTimestamp() 참조(v3.221)
+		if (($time = self::toTimestamp($time)) === false)
+			return false;
 		return strftime_compat(_t('%Y/%m/%d %H:%M'), $time);
 	}
 
 	static function formatDate($time = null) {
+		// Textcube-NG: 정수로 바꿀 수 없는 timestamp 는 원본처럼 false — toTimestamp() 참조(v3.221)
+		if (($time = self::toTimestamp($time)) === false)
+			return false;
 		return strftime_compat(_t('%Y/%m/%d'), $time);
 	}
 
 	static function formatDate2($time = null) {
+		// Textcube-NG: 정수로 바꿀 수 없는 timestamp 는 원본처럼 false — toTimestamp() 참조(v3.221)
+		if (($time = self::toTimestamp($time)) === false)
+			return false;
 		return strftime_compat(_t('%Y/%m'), $time);
 	}
 
 	static function formatTime($time = null) {
+		// Textcube-NG: 정수로 바꿀 수 없는 timestamp 는 원본처럼 false — toTimestamp() 참조(v3.221)
+		if (($time = self::toTimestamp($time)) === false)
+			return false;
 		return strftime_compat(_t('%H:%M:%S'), $time);
 	}
 
 	static function get($format = 'YmdHis', $time = null) {
-		return (isset($time) ? date($format, $time) : date($format));
+		// Textcube-NG: 정수로 바꿀 수 없는 timestamp 는 원본처럼 false — dateOf() 참조(v3.222)
+		return (isset($time) ? self::dateOf(false, $format, $time) : date($format));
 	}
 
 	static function getGMT($format = 'YmdHis', $time = null) {
-		return (isset($time) ? gmdate($format, $time) : gmdate($format));
+		// Textcube-NG: 정수로 바꿀 수 없는 timestamp 는 원본처럼 false — dateOf() 참조(v3.222)
+		return (isset($time) ? self::dateOf(true, $format, $time) : gmdate($format));
 	}
 
 	static function getDate($time = null) {
-		return (isset($time) ? date('Ymd', $time) : date('Ymd'));
+		// Textcube-NG: 정수로 바꿀 수 없는 timestamp 는 원본처럼 false — dateOf() 참조(v3.222)
+		return (isset($time) ? self::dateOf(false, 'Ymd', $time) : date('Ymd'));
 	}
 
 	static function getYearMonth($time = null) {
-		return (isset($time) ? date('Ym', $time) : date('Ym'));
+		// Textcube-NG: 정수로 바꿀 수 없는 timestamp 는 원본처럼 false — dateOf() 참조(v3.222)
+		return (isset($time) ? self::dateOf(false, 'Ym', $time) : date('Ym'));
 	}
 
 	static function getYear($time = null) {
-		return (isset($time) ? date('Y', $time) : date('Y'));
+		// Textcube-NG: 정수로 바꿀 수 없는 timestamp 는 원본처럼 false — dateOf() 참조(v3.222)
+		return (isset($time) ? self::dateOf(false, 'Y', $time) : date('Y'));
 	}
 
 	static function getTime($time = null) {
-		return (isset($time) ? date('His', $time) : date('His'));
+		// Textcube-NG: 정수로 바꿀 수 없는 timestamp 는 원본처럼 false — dateOf() 참조(v3.222)
+		return (isset($time) ? self::dateOf(false, 'His', $time) : date('His'));
 	}
 
 	static function getRFC1123($time = null) {
-		return (isset($time) ? date('r', $time) : date('r'));
+		// Textcube-NG: 정수로 바꿀 수 없는 timestamp 는 원본처럼 false — dateOf() 참조(v3.222)
+		return (isset($time) ? self::dateOf(false, 'r', $time) : date('r'));
 	}
 
 	static function getRFC1123GMT($time = null) {
-		return (isset($time) ? gmdate('D, d M Y H:i:s \G\M\T', $time) : gmdate('D, d M Y H:i:s \G\M\T'));
+		// Textcube-NG: 정수로 바꿀 수 없는 timestamp 는 원본처럼 false — dateOf() 참조(v3.222)
+		return (isset($time) ? self::dateOf(true, 'D, d M Y H:i:s \G\M\T', $time) : gmdate('D, d M Y H:i:s \G\M\T'));
 	}
 
 	static function getRFC1036($time = null) {
-		return ((isset($time) ? date('l, d-M-Y H:i:s ', $time) : date('l, d-M-Y H:i:s ')) . Timezone::getRFC822());
+		// Textcube-NG: 정수로 바꿀 수 없는 timestamp 는 원본처럼 false — dateOf() 참조(v3.222)
+		return ((isset($time) ? self::dateOf(false, 'l, d-M-Y H:i:s ', $time) : date('l, d-M-Y H:i:s ')) . Timezone::getRFC822());
 	}
 
 	static function getISO8601($time = null) {
-		return ((isset($time) ? date('Y-m-d\TH:i:s', $time) : date('Y-m-d\TH:i:s')) . Timezone::getISO8601());
+		// Textcube-NG: 정수로 바꿀 수 없는 timestamp 는 원본처럼 false — dateOf() 참조(v3.222)
+		return ((isset($time) ? self::dateOf(false, 'Y-m-d\TH:i:s', $time) : date('Y-m-d\TH:i:s')) . Timezone::getISO8601());
 	}
 
 	static function getUNIXtime($time = null) {
-		return intval(isset($time) ? date('U', $time) : date('U'));
+		// Textcube-NG: 정수로 바꿀 수 없는 timestamp 는 원본처럼 false — dateOf() 참조(v3.222)
+		return intval(isset($time) ? self::dateOf(false, 'U', $time) : date('U'));
 	}
 		
 	static function getHumanReadable($time = null, $from = null) {
@@ -883,11 +992,11 @@ class XMLStruct {
 		} else {
 			$p = xml_parser_create();
 		}
-		xml_set_object($p, $this);
+		// PHP 8.4: xml_set_object() 및 메서드명 문자열 핸들러 deprecated → 메서드 Closure 를 직접 등록
 		xml_parser_set_option($p, XML_OPTION_CASE_FOLDING, 0);
-		xml_set_element_handler($p, 'o', 'c');
-		xml_set_character_data_handler($p, 'd');
-		xml_set_default_handler($p, 'x');
+		xml_set_element_handler($p, Closure::fromCallable(array($this, 'o')), Closure::fromCallable(array($this, 'c')));
+		xml_set_character_data_handler($p, Closure::fromCallable(array($this, 'd')));
+		xml_set_default_handler($p, Closure::fromCallable(array($this, 'x')));
 		$this->struct = array();
 		$this->_cursor = &$this->struct;
 		$this->_path = array('');
@@ -898,19 +1007,18 @@ class XMLStruct {
 		unset($this->_cdata);
 		if (xml_get_error_code($p) != XML_ERROR_NONE)
 			return $this->_error($p);
-		xml_parser_free($p);
 		return true;
 	}
 
 	function openFile($filename, $correct = false) {
-		if (!$fp = fopen($filename, 'r'))
+		if (!$fp = fopen($filename, 'rb'))
 			return false;
 		$p = xml_parser_create();
-		xml_set_object($p, $this);
+		// PHP 8.4: xml_set_object() 및 메서드명 문자열 핸들러 deprecated → 메서드 Closure 를 직접 등록
 		xml_parser_set_option($p, XML_OPTION_CASE_FOLDING, 0);
-		xml_set_element_handler($p, 'o', 'c');
-		xml_set_character_data_handler($p, 'd');
-		xml_set_default_handler($p, 'x');
+		xml_set_element_handler($p, Closure::fromCallable(array($this, 'o')), Closure::fromCallable(array($this, 'c')));
+		xml_set_character_data_handler($p, Closure::fromCallable(array($this, 'd')));
+		xml_set_default_handler($p, Closure::fromCallable(array($this, 'x')));
 		$this->struct = array();
 		$this->_cursor = &$this->struct;
 		$this->_path = array('');
@@ -944,6 +1052,10 @@ class XMLStruct {
 					return $this->_error($p);
 				}
 			}
+			if (($remains !== '') && !xml_parse($p, UTF8::correct($remains, '?'), false)) {
+				fclose($fp);
+				return $this->_error($p);
+			}
 		} else {
 			while (!feof($fp)) {
 				if (!xml_parse($p, fread($fp, 10240), false)) {
@@ -959,7 +1071,6 @@ class XMLStruct {
 		unset($this->_cdata);
 		if (xml_get_error_code($p) != XML_ERROR_NONE)
 			return $this->_error($p);
-		xml_parser_free($p);
 		return true;
 	}
 
@@ -1116,7 +1227,9 @@ class XMLStruct {
 	}
 
 	function getNodeCount($path) {
-		return count($this->selectNodes($path));
+		// Textcube-NG: selectNodes() 가 실패하면 null — count(null) 은 PHP 7.2 부터 경고, PHP 8.0 부터 TypeError. 원본(PHP 5)처럼 0 을 돌려준다(v3.182)
+		$nodes = $this->selectNodes($path);
+		return is_array($nodes) ? count($nodes) : 0;
 	}
 
 	private function o($p, $n, $a) {
@@ -1182,13 +1295,13 @@ class XMLStruct {
 			'line' => xml_get_current_line_number($p),
 			'column' => xml_get_current_column_number($p)
 		);
-		xml_parser_free($p);
 		return false;
 	}
 }
 
 final class URL {
 	static function encode($url,$useEncodedURL = true) {
+		$url = $url ?? '';
 		$postfix = '';
 		if(substr($url,strlen($url)-1) == '?') {
 			$url = substr($url,0,strlen($url)-1);
@@ -1201,10 +1314,20 @@ final class URL {
 	}
 
 	static function decode($url,$useEncodedURL = true) {
+		$url = $url ?? '';
 		if ($useEncodedURL == true)
 			return rawurldecode($url);
 		else
 			return urldecode($url);
+	}
+
+	// Textcube-NG: 스킴 없는 서비스 주소(//host…)에 스킴을 붙여 절대 주소로 돌려준다. $scheme('https'·'http')이 있으면 그 값, 없으면 service.useSSL 기준(URIHandler 의 uri.host·uri.default 와 같은 규칙).
+	//   그 밖의 값(빈 값·스킴이 있는 값·상대 경로·문자열 아님)은 그대로 돌려준다. 피드·메일·Referer·소셜 로그인 콜백 등 절대 주소가 필요한 외부 출력에서만 쓰고 화면 HTML 은 //host 그대로 둔다(r3-34)
+	static function toAbsolute($url, $scheme = null) {
+		if (!is_string($url) || strncmp($url, '//', 2) !== 0) return $url;
+		if ($scheme !== 'https' && $scheme !== 'http')
+			$scheme = Model_Context::getInstance()->getProperty('service.useSSL', false) ? 'https' : 'http';
+		return $scheme . ':' . $url;
 	}
 }
 ?>

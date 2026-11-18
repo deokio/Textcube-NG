@@ -8,12 +8,13 @@
 /// 이 엔드포인트는 더 이상 위임 설정을 저장하지 않는다(과거 OpenIDConsumer::setDelegate 대체).
 
 $IV = array(
-	'GET' => array(
+	'POST' => array(
 		'openid_identifier' => array('string', 'mandatory' => false )
 	)
 );
 
 require ROOT . '/library/preprocessor.php';
+requirePostMethod();	// Textcube-NG: 상태 변경은 POST 만 받는다(그 밖은 405) — 링크·<img> 로 실행되던 GET CSRF 차단(v3.148)
 requireStrictRoute();
 
 // 위임 기능 제거 — 미지원.

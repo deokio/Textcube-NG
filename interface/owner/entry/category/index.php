@@ -2,6 +2,14 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 if(count($_POST) > 0) {
 	$IV = array(
 		'POST' => array(
@@ -18,12 +26,14 @@ if(count($_POST) > 0) {
 require ROOT . '/library/preprocessor.php';
 requireModel('blog.category');
 requireModel('blog.entry');
+/* [보안] $IV 는 POST 요청에만 정의돼 GET id 가 검증 없이 SQL(getNumberEntryInCategories 등)과
+   인라인 스크립트(oform.id.value=...)에 그대로 쓰였다 → 정수로 변환 */
 if (!empty($_POST['id']))
-	$selected = $_POST['id'];
+	$selected = (int)$_POST['id'];
 else if (empty($_GET['id']))
 	$selected = 0;
 else
-	$selected = $_GET['id'];
+	$selected = (int)$_GET['id'];
 
 if (!empty($_POST['visibility'])) {
 	$setVisibility = $_POST['visibility'];
@@ -99,12 +109,12 @@ require ROOT . '/interface/common/owner/header.php';
 						<script type="text/javascript">
 							//<![CDATA[
 								function removeCategory() {
-									if(confirm('<?php echo _t('삭제 하시겠습니까?');?>')) {
+									tcConfirm('<?php echo _t('삭제 하시겠습니까?');?>', function () {	// Textcube-NG: 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396)
 										var oform=document.forms[0];
 										oform.deleteCategory.value=<?php echo $selected;?>;
 
 										oform.submit()
-									}
+									});
 								}
 
 								function moveCategory(direction) {
@@ -175,7 +185,7 @@ require ROOT . '/interface/common/owner/header.php';
 									<fieldset id="property-box" class="container">
 										<legend><?php echo _t('분류 관리 및 설정');?></legend>
 
-										<input type="hidden" name="page" value="<?php echo $suri['page'];?>" />
+										<input type="hidden" name="page" value="<?php echo htmlspecialchars((string)$suri['page'], ENT_QUOTES);?>" />
 										<input type="hidden" name="deleteCategory" />
 										<input type="hidden" name="direction" />
 										<input type="hidden" name="id" />

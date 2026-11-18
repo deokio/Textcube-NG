@@ -2,6 +2,14 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 $service['admin_script']='control.js';
 
 require ROOT . '/library/preprocessor.php';
@@ -20,7 +28,7 @@ $pool = DBModel::getInstance();
 						//<![CDATA[
 
 						function setDefaultBlog(bid) {
-							var request = new HTTPRequest("<?php echo $context->getProperty('uri.blog');?>/control/action/blog/setDefault/?blogid="+bid);
+							var request = new HTTPRequest("POST", "<?php echo $context->getProperty('uri.blog');?>/control/action/blog/setDefault/");
 							request.onSuccess = function() {
 								alert("<?php echo _t('대표 블로그가 설정되었습니다.');?>");
 								window.location.reload();
@@ -29,30 +37,33 @@ $pool = DBModel::getInstance();
 								msg = this.getText("/response/result");
 								alert("<?php echo _t('대표 블로그가 설정되지 못했습니다.');?>\r\nError : " + msg);
 							}
-							request.send();
+							request.send("blogid="+bid);
 						}
 
 						function deleteUser(userid, atype) {
 							if(atype == 1) { // If there are posts from user.
-								if(!confirm("<?php echo _t('선택된 사용자를 정말 삭제하시겠습니까?');?>\n\n<?php echo _t('삭제되는 기존 사용자의 글은 전부 관리자의 글로 변환됩니다.');?>\n(<?php echo _t('글이 전부 삭제되지는 않고 팀블로그의 로그인 데이터만 삭제됩니다');?>)\n<?php echo _t('삭제 이후에는 복원이 불가능합니다.');?> <?php echo _t('정말 삭제 하시겠습니까?');?>")) return false;
+								tcConfirm("<?php echo _t('선택된 사용자를 정말 삭제하시겠습니까?');?>\n\n<?php echo _t('삭제되는 기존 사용자의 글은 전부 관리자의 글로 변환됩니다.');?>\n(<?php echo _t('글이 전부 삭제되지는 않고 팀블로그의 로그인 데이터만 삭제됩니다');?>)\n<?php echo _t('삭제 이후에는 복원이 불가능합니다.');?> <?php echo _t('정말 삭제 하시겠습니까?');?>", tcDeleteUserGo);	// Textcube-NG: 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396)
+								return false;
 							} else { // No post from user.
-								if(!confirm('<?php echo _t('삭제 하시겠습니까?');?>')) 
-									return false;
+								tcConfirm('<?php echo _t('삭제 하시겠습니까?');?>', tcDeleteUserGo);	// Textcube-NG: 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396)
+								return false;
 							}
-							var request = new HTTPRequest("GET", "<?php echo $context->getProperty('uri.blog');?>/control/action/blog/deleteUser/" + "?userid=" + userid + "&blogid=" + <?php echo $bid?>);
+							function tcDeleteUserGo() {	// Textcube-NG: 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396)
+							var request = new HTTPRequest("POST", "<?php echo $context->getProperty('uri.blog');?>/control/action/blog/deleteUser/");
 							request.onSuccess = function() {
 								window.location.href="<?php echo $context->getProperty('uri.blog');?>/control/blog/detail/<?php echo $bid?>";
 							}
 							request.onError = function() {
 								alert("<?php echo _t('실패했습니다.');?>");
 							}
-							request.send();
+							request.send("userid=" + userid + "&blogid=" + <?php echo $bid?>);
+							}
 						}
 						
 						
 						function deleteBlog(bid) {
-							if (!confirm("<?php echo _t('되돌릴 수 없습니다.');?>\t\n\n<?php echo _t('계속 진행 하시겠습니까?');?>")) return false;
-							var request = new HTTPRequest("GET", "<?php echo $context->getProperty('uri.blog');?>/control/action/blog/delete/?item="+bid);
+							tcConfirm("<?php echo _t('되돌릴 수 없습니다.');?>\t\n\n<?php echo _t('계속 진행 하시겠습니까?');?>", function () {	// Textcube-NG: 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396)
+							var request = new HTTPRequest("POST", "<?php echo $context->getProperty('uri.blog');?>/control/action/blog/delete/");
 							request.onSuccess = function() {
 								PM.removeRequest(this);
 								window.location.href = '../';
@@ -63,24 +74,37 @@ $pool = DBModel::getInstance();
 								alert("<?php echo _t('블로그 삭제에 실패하였습니다.');?>\r\nError : " + msg);
 							}
 							PM.addRequest(request, _t('블로그 삭제중'));
-							request.send();
+							request.send("item="+bid);
+							});
+							return false;
 						}
 						
 						function changeOwner(owner) {
-							var request = new HTTPRequest("<?php echo $context->getProperty('uri.blog');?>/control/action/blog/changeOwner/?owner="+owner+"&blogid="+<?php echo $bid?>);
+							var password = document.getElementById('changeOwnerConfirmativePassword');	// Textcube-NG: 비밀번호 재확인(v3.149)
+							if (password.value == '') {
+								alert("<?php echo _t('비밀번호를 입력해 주십시오.');?>");
+								password.focus();
+								return;
+							}
+							var request = new HTTPRequest("POST", "<?php echo $context->getProperty('uri.blog');?>/control/action/blog/changeOwner/");
 							request.onSuccess = function() {
 								alert("<?php echo _t('소유자가 변경되었습니다. \r\n기존의 소유자는 관리자로 변경되었습니다.');?>");
 								window.location.reload();
 							}
 							request.onError = function() {
+								password.value = '';
+								if (parseInt(this.getText("/response/error")) == 9) {
+									alert("<?php echo _t('비밀번호가 일치하지 않습니다.');?>");
+									return;
+								}
 								msg = this.getText("/response/result");
 								alert("<?php echo _t('소유자를 변경하지 못했습니다.');?>\r\nError : " + msg);
 							}
-							request.send();
+							request.send("owner="+owner+"&blogid="+<?php echo $bid?>+"&confirmativePassword="+encodeURIComponent(password.value));
 						}
 						
 						function changeACL(acltype, userid, checked) {
-							var request = new HTTPRequest("GET", "<?php echo $context->getProperty('uri.blog');?>/control/action/blog/changeACL/?blogid=" + <?php echo $bid?> + "&acltype=" + acltype + "&userid=" + userid + "&switch=" + checked);
+							var request = new HTTPRequest("POST", "<?php echo $context->getProperty('uri.blog');?>/control/action/blog/changeACL/");
 							request.onSuccess = function() {
 								PM.showMessage("<?php echo _t('설정을 변경했습니다.');?>", "center", "bottom");
 								window.location.reload();
@@ -88,11 +112,11 @@ $pool = DBModel::getInstance();
 							request.onError = function() {
 								PM.showErrorMessage("<?php echo _t('실패했습니다.');?>", "center", "bottom");
 							}
-							request.send();
+							request.send("blogid=" + <?php echo $bid?> + "&acltype=" + acltype + "&userid=" + userid + "&switch=" + checked);
 						}
 						
 						function addUser(user) {
-							var request = new HTTPRequest("GET", "<?php echo $context->getProperty('uri.blog');?>/control/action/blog/addUser/?user="+user+"&blogid="+<?php echo $bid?>);
+							var request = new HTTPRequest("POST", "<?php echo $context->getProperty('uri.blog');?>/control/action/blog/addUser/");
 							request.onSuccess = function() {
 								alert("<?php echo _t('팀블로그 참여자를 추가하였습니다.');?>\r\n<?php echo _t('초대 메일은 발송되지 않으며, 새로 추가된 참여자는 기본 권한만을 가지게 됩니다.');?>");
 								window.location.reload();
@@ -101,7 +125,7 @@ $pool = DBModel::getInstance();
 								msg = this.getText("/response/message");
 								PM.showErrorMessage("<?php echo _t('참여자를 추가하지 못하였습니다.');?>\r\nMessage : \r\n" + msg,"center","bottom");
 							}
-							request.send();
+							request.send("user="+encodeURIComponent(user)+"&blogid="+<?php echo $bid?>);	// Textcube-NG: 이메일의 '+'·'&' 가 깨지지 않게 인코딩한다 — 받는 쪽 $IV email 검사(r3-7, 459a)
 						}
 						//]]> 
 						</script>
@@ -110,10 +134,10 @@ $pool = DBModel::getInstance();
 							<h2 class="caption"><span class="main-text"><?php echo _t('블로그 정보');?></span></h2>
 							
 							<div id="team-blog-about" class="container">
-								<h3><?php echo empty($blogsetting['title']) ? '<em>'._t('비어 있는 타이틀').'</em>' : '<a href="'.getDefaultUrl($bid).'">'.$blogsetting['title'].'</a>';?></h3>
+								<h3><?php /* [보안] Textcube-NG: 블로그 주소·제목을 HTML 인코딩해 출력한다 — 원본은 그대로 출력해 저장된 제목으로 관리 화면에 HTML 을 넣을 수 있었다(r3-7, 459e) */ echo empty($blogsetting['title']) ? '<em>'._t('비어 있는 타이틀').'</em>' : '<a href="'.htmlspecialchars((string)getDefaultUrl($bid), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8').'">'.htmlspecialchars((string)$blogsetting['title'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8').'</a>';?></h3>
 								
 								<div class="main-explain-box">
-									<p class="explain"><?php echo empty($blogsetting['description']) ? '<em>'._t('비어 있는 블로그 설명').'</em>' : $blogsetting['description'];?></p>
+									<p class="explain"><?php /* [보안] Textcube-NG: 블로그 설명을 HTML 인코딩해 출력한다(블로그 화면 [##_desc_##] 와 같음) — 원본은 그대로 출력했다(r3-7, 459e) */ echo empty($blogsetting['description']) ? '<em>'._t('비어 있는 블로그 설명').'</em>' : htmlspecialchars((string)$blogsetting['description'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');?></p>
 								</div>
 <?php
 	$isRepBlog = ($bid == Setting::getServiceSetting("defaultBlogId",1,true) ? true : false);
@@ -170,16 +194,16 @@ $pool = DBModel::getInstance();
 
 	foreach ($teamblog as $row){
 		echo "<tr>".CRLF;
-		echo "<td class=\"name\"><a href=\"".$context->getProperty('uri.blog')."/control/user/detail/{$row['userid']}\">".User::getName($row['userid'])."(".User::getEmail($row['userid']).")</a></td>".CRLF;
+		echo "<td class=\"name\"><a href=\"".$context->getProperty('uri.blog')."/control/user/detail/{$row['userid']}\">".htmlspecialchars((string)User::getName($row['userid']), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')."(".htmlspecialchars((string)User::getEmail($row['userid']), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8').")</a></td>".CRLF;	// [보안] Textcube-NG: 팀원 이름·로그인 아이디를 HTML 인코딩해 출력한다 — 원본은 그대로 출력했다(r3-7, 459e)
 
 		if ($row['acl'] & BITWISE_OWNER) {
 			echo '<td class="role" colspan="4">'._t('이 사용자는 블로그의 소유자입니다.').'</td>'.CRLF;
 		}
 		else {
-		echo "<td class=\"role\"><a href=\"".$context->getProperty('uri.blog')."/control/action/blog/changeACL/?blogid=" . $bid . "&acltype=admin&userid=" .$row['userid']."&switch=".(($row['acl'] & BITWISE_ADMINISTRATOR)?0:1)."\" onclick=\"changeACL('admin',".$row['userid'].",".(($row['acl'] & BITWISE_ADMINISTRATOR)?0:1).");return false;\">".(($row['acl'] & BITWISE_ADMINISTRATOR)?_t('ON'):_t('OFF'))."</a></td>".CRLF;
-		echo "<td class=\"role\"><a href=\"".$context->getProperty('uri.blog')."/control/action/blog/changeACL/?blogid=" . $bid . "&acltype=editor&userid=" .$row['userid']."&switch=".(($row['acl'] & BITWISE_EDITOR)?0:1)."\" onclick=\"changeACL('editor',".$row['userid'].",".(($row['acl'] & BITWISE_EDITOR)?0:1).");return false;\">".(($row['acl'] & BITWISE_EDITOR)?_t('ON'):_t('OFF'))."</a></td>".CRLF;
-		echo "<td class=\"role\"><a href=\"".$context->getProperty('uri.blog')."/control/action/blog/deleteUser/?blogid=" . $bid . "&userid=".$row['userid']."\" onclick =  \"deleteUser(".$row['userid'].",1);return false;\">" . _t('팀원 제외') . "</a></td>".CRLF;
-		echo "<td class=\"role\"><a href=\"".$context->getProperty('uri.blog')."/control/action/blog/changeOwner/?blogid=" . $bid . "&owner=".$row['userid']."\" onclick =  \"changeOwner(".$row['userid'].");return false;\">" . _t('소유자 변경') . "</a></td>".CRLF;
+		echo "<td class=\"role\"><a href=\"#void\" onclick=\"changeACL('admin',".$row['userid'].",".(($row['acl'] & BITWISE_ADMINISTRATOR)?0:1).");return false;\">".(($row['acl'] & BITWISE_ADMINISTRATOR)?_t('ON'):_t('OFF'))."</a></td>".CRLF;
+		echo "<td class=\"role\"><a href=\"#void\" onclick=\"changeACL('editor',".$row['userid'].",".(($row['acl'] & BITWISE_EDITOR)?0:1).");return false;\">".(($row['acl'] & BITWISE_EDITOR)?_t('ON'):_t('OFF'))."</a></td>".CRLF;
+		echo "<td class=\"role\"><a href=\"#void\" onclick =  \"deleteUser(".$row['userid'].",1);return false;\">" . _t('팀원 제외') . "</a></td>".CRLF;
+		echo "<td class=\"role\"><a href=\"#void\" onclick =  \"changeOwner(".$row['userid'].");return false;\">" . _t('소유자 변경') . "</a></td>".CRLF; // Textcube-NG: 위 네 링크 href를 #void로(GET 요청이 나가지 않음, 동작은 onclick의 POST)(r3-8)
 		echo "</tr>".CRLF;
 		}
 	}
@@ -188,10 +212,15 @@ $pool = DBModel::getInstance();
 								</table>
 							</div>
 							
+							<div id="team-owner-password" class="container">
+								<label for="changeOwnerConfirmativePassword"><?php echo _t('현재 비밀번호');?></label>
+								<input type="password" id="changeOwnerConfirmativePassword" class="input-text" value="" />
+							</div>
+							
 							<div id="team-new-member" class="container">
 								<h4><?php echo _t('팀원 추가');?></h4>
 								
-								<form action="<?php echo $context->getProperty('uri.blog');?>/control/action/blog/addUser/">
+								<form method="post" action="<?php echo $context->getProperty('uri.blog');?>/control/action/blog/addUser/">
 									<dl>
 										<dt><label for=""><?php echo _t('사용자'); ?></label></dt>
 										<dd>

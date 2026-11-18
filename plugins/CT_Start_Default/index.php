@@ -29,24 +29,25 @@ function CT_Start_Default($target) {
 	$blogid = $context->getProperty('blog.id');
 
 	$target .= '<ul>';
-	$target .= '<li><a href="'.$blogURL.'/owner/entry/post">'. _t('새 글을 씁니다').'</a></li>'.CRLF;
+	// Textcube-NG: 위젯 문구는 HTML escape 해서 넣는다(v3.193)
+	$target .= '<li><a href="'.$blogURL.'/owner/entry/post">'. htmlspecialchars(_t('새 글을 씁니다'), ENT_QUOTES, 'UTF-8').'</a></li>'.CRLF;
 
 	$latestEntryId = Setting::getBlogSettingGlobal('LatestEditedEntry_user'.getUserId(),0);
 	if($latestEntryId !== 0){
 		$latestEntry = CT_Start_Default_getEntry($blogid,$latestEntryId);
 		if($latestEntry!=false){
-			$target .= '<li><a href="'.$blogURL.'/owner/entry/edit/'.$latestEntry['id'].'">'. _f('최근글(%1) 수정', htmlspecialchars(UTF8::lessenAsEm($latestEntry['title'],10))).'</a></li>';
+			$target .= '<li><a href="'.$blogURL.'/owner/entry/edit/'.$latestEntry['id'].'">'. htmlspecialchars(_f('최근글(%1) 수정', UTF8::lessenAsEm($latestEntry['title'],10)), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8').'</a></li>';
 		}
 	}
 	if(Acl::check('group.administrators')) {
-		$target .= '<li><a href="'.$blogURL.'/owner/skin">'. _t('스킨을 변경합니다').'</a></li>'.CRLF;
-		$target .= '<li><a href="'.$blogURL.'/owner/skin/sidebar">'. _t('사이드바 구성을 변경합니다').'</a></li>'.CRLF;
-		$target .= '<li><a href="'.$blogURL.'/owner/skin/setting">'. _t('블로그에 표시되는 값들을 변경합니다').'</a></li>'.CRLF;
-		$target .= '<li><a href="'.$blogURL.'/owner/entry/category">'. _t('카테고리를 변경합니다').'</a></li>'.CRLF;
-		$target .= '<li><a href="'.$blogURL.'/owner/plugin">'. _t('플러그인을 켜거나 끕니다').'</a></li>'.CRLF;
+		$target .= '<li><a href="'.$blogURL.'/owner/skin">'. htmlspecialchars(_t('스킨을 변경합니다'), ENT_QUOTES, 'UTF-8').'</a></li>'.CRLF;
+		$target .= '<li><a href="'.$blogURL.'/owner/skin/sidebar">'. htmlspecialchars(_t('사이드바 구성을 변경합니다'), ENT_QUOTES, 'UTF-8').'</a></li>'.CRLF;
+		$target .= '<li><a href="'.$blogURL.'/owner/skin/setting">'. htmlspecialchars(_t('블로그에 표시되는 값들을 변경합니다'), ENT_QUOTES, 'UTF-8').'</a></li>'.CRLF;
+		$target .= '<li><a href="'.$blogURL.'/owner/entry/category">'. htmlspecialchars(_t('카테고리를 변경합니다'), ENT_QUOTES, 'UTF-8').'</a></li>'.CRLF;
+		$target .= '<li><a href="'.$blogURL.'/owner/plugin">'. htmlspecialchars(_t('플러그인을 켜거나 끕니다'), ENT_QUOTES, 'UTF-8').'</a></li>'.CRLF;
 	}
 	if($context->getProperty('service.reader',false) != false) {
-		$target .= '<li><a href="'.$blogURL.'/owner/network/reader">'. _t('RSS 리더를 봅니다').'</a></li>'.CRLF;
+		$target .= '<li><a href="'.$blogURL.'/owner/network/reader">'. htmlspecialchars(_t('RSS 리더를 봅니다'), ENT_QUOTES, 'UTF-8').'</a></li>'.CRLF;
 	}
 	$target .= '</ul>';
 	return $target;

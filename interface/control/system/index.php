@@ -25,12 +25,16 @@ function getSymbolByQuantity($bytes) {
 $serverTime = strftime_compat("Server Time: %Y-%m-%d %H:%M:%S %z (%Z)", time());
 
 /* Database version */
-$dbVersion = '';
-//if( $service['dbms'] == 'mysql' ) {
-	$dbVersion = POD::queryColumn("SELECT VERSION()");
-	$dbVersion = "MySQL: " . $dbVersion[0];
-	$dbStat = preg_replace( "/\\s{2,}/", "<br />", POD::stat());
-//}
+/* 원본은 DBMS 와 관계없이 SELECT VERSION() 결과에 'MySQL' 을 붙였다(SQLite3 는 VERSION() 함수가 없어 질의 실패·빈 값,
+   PostgreSQL·Cubrid 도 'MySQL' 로 표시). 설치 화면처럼 어댑터의 dbms()·version() 으로 표시한다.
+   PostgreSQL 의 stat() 은 연결 상태 값(정수)이므로 이름으로 바꾼다. DB 에서 받은 문자열이므로 HTML 인코딩해 출력한다. */
+$dbVersion = POD::dbms() . ': ' . POD::version();
+$dbStat = POD::stat();
+if (is_int($dbStat) && POD::dbms() == 'PostgreSQL') {
+	$dbStat = ($dbStat === (defined('PGSQL_CONNECTION_OK') ? PGSQL_CONNECTION_OK : 0)) ? 'Connection OK' : 'Connection bad';	// PDO 전용 설치(pgsql 확장 없음)에는 상수가 없다 — stat() 은 같은 값 0 을 돌려줌
+}
+$dbVersion = htmlspecialchars((string)$dbVersion);
+$dbStat = preg_replace( "/\\s{2,}/", "<br />", htmlspecialchars((string)$dbStat));
 
 /* Webserver information */
 $webServer = "Unknown";
@@ -45,9 +49,13 @@ if( function_exists('php_uname') ) {
 }
 
 /* Disk space */
-$totalSpace = getSymbolByQuantity( disk_total_space( dirname( __FILE__ ) ) );
-$freeSpace = getSymbolByQuantity( disk_free_space( dirname( __FILE__ ) ) );
-$diskSpace = "$freeSpace / $totalSpace (Free/Total)";
+if( function_exists('disk_total_space') && function_exists('disk_free_space') ) {
+	$totalSpace = getSymbolByQuantity( disk_total_space( dirname( __FILE__ ) ) );
+	$freeSpace = getSymbolByQuantity( disk_free_space( dirname( __FILE__ ) ) );
+	$diskSpace = "$freeSpace / $totalSpace (Free/Total)";
+} else {
+	$diskSpace = "Unknown";
+}
 
 /* Load average */
 $loadAvg = "Unknown";
@@ -195,7 +203,13 @@ if (!in_array('phpinfo', array_map('trim', explode(',', ini_get('disable_functio
 	array_push($resultArray, '');
 	//array_push($resultArray, '');
 
-	echo preg_replace($regexpArray, $resultArray, $phpinfo);
+	$phpinfo = preg_replace($regexpArray, $resultArray, $phpinfo);
+	// 쉼표로만 이어진 긴 값(disable_functions 등)은 줄을 바꿀 자리가 없어 표가 화면 밖으로 늘어난다.
+	// 태그 밖 글자의 쉼표 뒤(공백·쉼표·태그가 바로 이어지지 않을 때)에 줄바꿈 가능 자리 <wbr /> 를 넣는다. 복사되는 글자는 그대로이고, 치환이 실패(null)하면 넣기 전 출력을 쓴다.
+	if (is_string($phpinfo)) {
+		$wrapped = preg_replace('/,(?=[^\s,<])(?![^<>]*+>)/', ',<wbr />', $phpinfo);
+		echo is_string($wrapped) ? $wrapped : $phpinfo;
+	}
 } else {
 	echo _t('서버 정책이 보안을 위하여 PHP 정보를 출력할 수 없도록 설정되어 있습니다.');
 }

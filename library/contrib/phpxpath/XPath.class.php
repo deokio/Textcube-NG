@@ -164,7 +164,7 @@
 // Include guard, protects file being included twice
 $ConstantName = 'INCLUDED_'.strtoupper(__FILE__);
 if (defined($ConstantName)) return;
-define($ConstantName,1, TRUE);
+define($ConstantName,1);
 
 /************************************************************************************************
 * ===============================================================================================
@@ -1691,11 +1691,11 @@ class XPathEngine extends XPathBase {
       }
 
       // Set the object and the element handlers for the XML parser.
-      xml_set_object($parser, $this);
-      xml_set_element_handler($parser, '_handleStartElement', '_handleEndElement');
-      xml_set_character_data_handler($parser, '_handleCharacterData');
-      xml_set_default_handler($parser, '_handleDefaultData');
-      xml_set_processing_instruction_handler($parser, '_handlePI');
+      // PHP 8.4: xml_set_object() 및 메서드명 문자열 핸들러 deprecated → 메서드 Closure 를 직접 등록
+      xml_set_element_handler($parser, Closure::fromCallable(array($this, '_handleStartElement')), Closure::fromCallable(array($this, '_handleEndElement')));
+      xml_set_character_data_handler($parser, Closure::fromCallable(array($this, '_handleCharacterData')));
+      xml_set_default_handler($parser, Closure::fromCallable(array($this, '_handleDefaultData')));
+      xml_set_processing_instruction_handler($parser, Closure::fromCallable(array($this, '_handlePI')));
 
       if ($bDebugThisFunction)
        $this->_profileFunction($aStartTime, "Setup for parse");
@@ -1709,8 +1709,6 @@ class XPathEngine extends XPathBase {
         break; // try-block
       }
 
-      // Free the parser.
-      @xml_parser_free($parser);
       // And we don't need this any more.
       $this->nodeStack = array();
 
@@ -3645,7 +3643,7 @@ class XPathEngine extends XPathBase {
       // * matches all element nodes.
       return (!preg_match(':/[^/]+\(\)\[\d+\]$:U', $contextPath));
     }
-    elseif (preg_match('/^[\w-:\.]+$/', $nodeTest)) {
+    elseif (preg_match('/^[\w\-:\.]+$/', $nodeTest)) {
        // http://www.w3.org/TR/2000/REC-xml-20001006#NT-Name
        // The real spec for what constitutes whitespace is quite elaborate, and
        // we currently just hope that "\w" catches them all.  In reality it should
@@ -5507,7 +5505,7 @@ class XPath extends XPathEngine {
       $pos += $afterText ? 1 : 0;
       $parentNode['textParts'] = array_merge(
                                    array_slice($parentNode['textParts'], 0, $pos),
-                                   '',
+                                   array(''),
                                    array_slice($parentNode['textParts'], $pos)
                                  );
 
@@ -5589,7 +5587,7 @@ class XPath extends XPathEngine {
       $pos -= $afterText ? 0 : 1;
       $parentNode['textParts'] = array_merge(
                                    array_slice($parentNode['textParts'], 0, $pos),
-                                   '',
+                                   array(''),
                                    array_slice($parentNode['textParts'], $pos)
                                  );
       // We are going from bottom to top, but the user will want results from top to bottom.
@@ -5828,7 +5826,7 @@ class XPath extends XPathEngine {
       $attribute = $matches[2];
       if (!isSet($this->nodeIndex[$absoluteXPath]['attributes'][$attribute])) {
         $this->_displayError("The $absoluteXPath/attribute::$attribute value isn't a node in this document.", __LINE__, __FILE__, FALSE);
-        continue;
+        return FALSE;
       }
       return array($this->nodeIndex[$absoluteXPath]['attributes'][$attribute]);
     } else if (preg_match(":(.*)/text\(\)(\[(.*)\])?$:U", $xPathQuery, $matches)) {
@@ -5975,7 +5973,7 @@ class XPath extends XPathEngine {
                     XML_OPTION_CASE_FOLDING => $this->getProperties('caseFolding'),
                     XML_OPTION_SKIP_WHITE   => $this->getProperties('skipWhiteSpaces')
                   );
-    $xmlParser =& new XPathEngine($xmlOptions);
+    $xmlParser = new XPathEngine($xmlOptions);
     $xmlParser->setVerbose($this->properties['verboseLevel']);
     // Parse the XML string
     if (!$xmlParser->importFromString($xmlString)) {
@@ -6233,7 +6231,7 @@ EOD;
 
   // The sample code:
   $xmlOptions = array(XML_OPTION_CASE_FOLDING => TRUE, XML_OPTION_SKIP_WHITE => TRUE);
-  $xPath =& new XPath(FALSE, $xmlOptions);
+  $xPath = new XPath(FALSE, $xmlOptions);
   //$xPath->bDebugXmlParse = TRUE;
   if (!$xPath->importFromString($xmlSource)) { echo $xPath->getLastError(); exit; }
 

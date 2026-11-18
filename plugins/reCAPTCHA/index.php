@@ -263,7 +263,6 @@ function Recaptcha_AddingCommentHandler($target, $mother)
 		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 		curl_setopt($ch, CURLOPT_TIMEOUT, 10);
 		$output = curl_exec($ch);
-		curl_close($ch);
 
 		if ($output === false) {
 			Respond::PrintResult(array('error' => 2, 'description' => 'Cannot connect to the Google reCAPTCHA server.'));

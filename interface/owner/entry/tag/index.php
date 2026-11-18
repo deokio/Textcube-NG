@@ -2,6 +2,14 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 if(count($_POST) > 0) {
 	$IV = array(
 		'POST' => array(
@@ -17,17 +25,25 @@ require ROOT . '/library/preprocessor.php';
 requireModel('blog.tag');
 requireModel('blog.entry');
 $blogid = getBlogId();
+/* Textcube-NG: 태그 삭제·이름 변경(POST)에 출처 확인 — panel/index.php 와 같이 requireStrictRoute()(CSRF, v3.135) */
+if (count($_POST) > 0)
+	requireStrictRoute();
 if (!empty($_POST['deleteTag'])) {
-	deleteTagById($blogid, $_POST['deleteTag']);
-	Respond::ResultPage(0);
+	// Textcube-NG: 지우지 못하면 오류 응답(이름 변경과 같은 -1). 원본은 실패해도 0(r3-8)
+	Respond::ResultPage(deleteTagById($blogid, $_POST['deleteTag']) ? 0 : -1);
 	exit;
 }
 
 if (!empty($_POST['modifyTag']) && !empty($_POST['newName'])) {
 	$newTagId = renameTag($blogid, $_POST['modifyTag'], $_POST['newName']);
+	/* Textcube-NG: 이름을 바꾸지 못하면(새 태그를 만들지 못함) 오류 응답(v3.136). 원본은 실패해도 성공 응답을 보냈다 */
+	if ($newTagId === false)
+		Respond::ResultPage(-1);
 	$newTagList = getTagListTemplate(getSiteTags($blogid));
-	$newEntryList = '<a href="'.$blogURL.'/owner/entry/?tagId='.$newTagId.'">'._f('"%1" 태그를 갖는 모든 글의 목록을 봅니다',$_POST['newName']).'</a>';
-	$result = array('error'=>0, 'tagId' => $newTagId, 'entryList' => $newEntryList, 'tagList' => $newTagList);	
+	// Textcube-NG: 응답에는 저장된 이름(renameTag 가 정리·길이 상한을 적용한 이름, 이미 있던 태그로 합쳐지면 그 이름)을 쓴다. 원본은 입력값을 그대로 썼다(r3-8)
+	$newTagName = (string)getTagById($blogid, $newTagId);
+	$newEntryList = '<a href="'.$blogURL.'/owner/entry/?tagId='.$newTagId.'">'._f('"%1" 태그를 갖는 모든 글의 목록을 봅니다',htmlspecialchars($newTagName, ENT_QUOTES)).'</a>';
+	$result = array('error'=>0, 'tagId' => $newTagId, 'tagName' => $newTagName, 'entryList' => $newEntryList, 'tagList' => $newTagList);	
 	Respond::PrintResult($result);
 	exit;
 }
@@ -50,8 +66,9 @@ if(isset($suri['value']) && !empty($suri['value']) ) {
 
 function getTagListTemplate($tags) {
 	$view = '';
+	/* Textcube-NG: 태그 이름은 필자(writers)도 넣을 수 있으므로 HTML 로 쓸 때 escape(v3.135) */
 	foreach($tags as $t):
-		$view .= '<span id="tag'.$t['id'].'" class="tag"><a href="#" class="tag" onclick="updateTagPanel('.$t['id'].');return false;">'.$t['name'].'</a></span> ';
+		$view .= '<span id="tag'.$t['id'].'" class="tag"><a href="#" class="tag" onclick="updateTagPanel('.$t['id'].');return false;">'.htmlspecialchars($t['name'], ENT_QUOTES).'</a></span> ';
 	endforeach;
 	return $view;
 }
@@ -66,7 +83,7 @@ require ROOT . '/interface/common/owner/header.php';
 								request.onSuccess = function () {
 									PM.removeRequest(this);
 									tagName = this.getText("/response/tagName");
-									updatePanel("tag-name",tagName);
+									updatePanelText("tag-name",tagName);
 									document.getElementById('tag-newname').value = tagName;
 									numberOfPosts = this.getText("/response/numberOfPosts");
 									updatePanel("tag-number-of-posts-value",numberOfPosts);
@@ -87,6 +104,14 @@ require ROOT . '/interface/common/owner/header.php';
 								Econtent = document.getElementById(id);
 								Econtent.innerHTML = view;
 								return true;							
+							}
+							
+							// Textcube-NG: 태그 이름(서버 응답 tagName·입력란 값)은 HTML 이 아니라 글자로 넣는다(v3.135)
+							function updatePanelText(id,text) {
+								var element = document.getElementById(id);
+								element.innerHTML = '';
+								element.appendChild(document.createTextNode(text));
+								return true;
 							}
 							
 							function deleteTag() {
@@ -123,7 +148,9 @@ require ROOT . '/interface/common/owner/header.php';
 								var request = new HTTPRequest("POST","<?php echo $blogURL;?>/owner/entry/tag/");
 								request.onSuccess = function () {
 									PM.removeRequest(this);
-									updatePanel("tag-name",newName);
+									var savedName = this.getText("/response/tagName");	// Textcube-NG: 서버가 저장한 이름(정리·길이 상한 뒤)을 보여준다(r3-8)
+									updatePanelText("tag-name",savedName);
+									document.getElementById('tag-newname').value = savedName;
 									tagEntryList = this.getText("/response/entryList");
 									updatePanel("tag-entry-list",tagEntryList);
 									tagList = this.getText("/response/tagList");

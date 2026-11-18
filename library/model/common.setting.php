@@ -32,7 +32,8 @@ function removeServiceSetting($name,$pruneSimilarEntries = false) {
 	global $database;
 	clearServiceSettingCache();
 	if($pruneSimilarEntries) return POD::execute("DELETE FROM {$database['prefix']}ServiceSettings WHERE name like '".POD::escapeString($name)."'");
-	else return POD::execute("DELETE FROM {$database['prefix']}ServiceSettings WHERE name = '".POD::escapeString($name)."'");
+	// Textcube-NG: 저장(Setting::setServiceSetting)과 같이 이름을 32바이트로 줄여 지운다(ServiceSettings.name varchar(32))(r3-5)
+	else return POD::execute("DELETE FROM {$database['prefix']}ServiceSettings WHERE name = '".POD::escapeString(UTF8::lessenAsEncoding($name, 32))."'");
 }
 
 function getBlogSetting($name, $default = null, $blogid = null) {

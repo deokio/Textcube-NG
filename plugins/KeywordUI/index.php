@@ -45,11 +45,12 @@ function KeywordUI_bindTag($target, $mother) {
     if (isset($mother) && isset($target)) {
         $tagsWithKeywords = array();
         $keywordNames = getKeywordNames($blogid);
+        if (!is_array($keywordNames)) $keywordNames = array();	// Textcube-NG: 키워드가 없어 null 이면 in_array() TypeError(PHP 8) — 빈 배열로(r3-3)
         foreach ($target as $tag => $tagLink) {
             if (in_array($tag, $keywordNames) == true) {
-                $safeBlogURL = htmlspecialchars($blogURL, ENT_QUOTES, 'UTF-8');
+                // Textcube-NG: onclick 의 JS 문자열은 json_encode() 뒤 HTML escape(속성 값이 먼저 HTML 로 풀리므로 HTML escape 만으로는 따옴표가 JS 로 들어감)(r3-3)
                 $safeTag     = htmlspecialchars($tag, ENT_QUOTES, 'UTF-8');
-                $tagsWithKeywords[$tag] = $tagLink . "<a href=\"#\" class=\"key1\" onclick=\"openKeyword('{$safeBlogURL}/keylog/" . URL::encode($tag) . "'); return false\"><img src=\"" . $pluginURL . "/images/flag_green.gif\" alt=\"Keyword {$safeTag}\"/></a>";
+                $tagsWithKeywords[$tag] = $tagLink . "<a href=\"#\" class=\"key1\" onclick=\"openKeyword(" . htmlspecialchars(json_encode((string)$blogURL . '/keylog/' . URL::encode($tag), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?: '""', ENT_QUOTES, 'UTF-8') . "); return false\"><img src=\"" . $pluginURL . "/images/flag_green.gif\" alt=\"Keyword {$safeTag}\"/></a>";
             } else {
                 $tagsWithKeywords[$tag] = $tagLink;
             }

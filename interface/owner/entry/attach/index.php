@@ -2,6 +2,14 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 if(count($_POST) > 0) {
 	$IV = array(
 		'FILES' => array(
@@ -16,6 +24,12 @@ require ROOT . '/library/preprocessor.php';
 requireModel("blog.attachment");
 
 requireStrictRoute();
+/* [보안] 원본은 entryId 를 확인하지 않아 다른 사람의 글·임시 첨부에 올릴 수 있었다 → 공통 기준(blog.attachment.php getAttachmentParentForEdit()) */
+$attachmentParent = getAttachmentParentForEdit($blogid, isset($suri['id']) ? $suri['id'] : null);
+if ($attachmentParent === false) {
+	header('HTTP/1.1 403 Forbidden');
+	exit;
+}
 ?>
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="ko">
@@ -27,12 +41,13 @@ requireStrictRoute();
 		<!--[if IE 7]><link rel="stylesheet" type="text/css" media="screen" href="<?php echo $service['path'].$adminSkinSetting['skin'];?>/editor.ie7.css" /><![endif]-->
 		<script type="text/javascript" src="<?php echo $service['path'];?>/resources/script/jquery/jquery-<?php echo JQUERY_VERSION;?>.js"></script>
 		<script type="text/javascript">jQuery.noConflict();</script>
-		<script type="text/javascript" src="<?php echo $service['path'];?>/resources/script/EAF4.js"></script>
-		<script type="text/javascript" src="<?php echo $service['path'];?>/resources/script/common3.js"></script>
+		<script type="text/javascript" src="<?php echo $service['path'];?>/resources/script/EAF4.js?v=<?php echo filemtime(ROOT . '/resources/script/EAF4.js');?>"></script>
+		<script type="text/javascript" src="<?php echo $service['path'];?>/resources/script/common3.js?v=<?php echo filemtime(ROOT . '/resources/script/common3.js');?>"></script>
 		<script type="text/javascript">
 			//<![CDATA[
 				var servicePath = "<?php echo $service['path'];?>";
 				var blogURL = "<?php echo $blogURL;?>";
+				var csrfToken = "<?php echo getCSRFToken();?>";	// Textcube-NG: CSRF 토큰 — EAF4.js 가 같은 출처 XHR(GET·HEAD 외)·POST 폼에 붙인다(v3.147)
 				var adminSkin = "<?php echo $adminSkinSetting['skin'];?>";
 				var oSelect = window.parent.document.getElementById('TCfilelist');
 				
@@ -76,7 +91,7 @@ requireStrictRoute();
 <?php
 if (count($_FILES) == 1) {
 	$file = array_pop($_FILES);
-	if (getAttachmentByLabel($blogid, $suri['id'], Path::getBaseName($file['name']))) {
+	if (getAttachmentByLabel($blogid, $attachmentParent, Path::getBaseName($file['name']))) {
 		print ('alert("' . _t('동일한 이름을 가진 파일이 이미 첨부되었습니다.') . '");');
 ?>
 
@@ -86,7 +101,7 @@ if (count($_FILES) == 1) {
 					}
 				}
 <?php
-	} else if (($attachment = addAttachment($blogid, $suri['id'], $file)) === false) {
+	} else if (($attachment = addAttachment($blogid, $attachmentParent, $file)) === false) {
 		print ('alert("' . _t('첨부하지 못했습니다.') . '");');
 ?>
 				
@@ -123,6 +138,9 @@ if (count($_FILES) == 1) {
 				alert('['+e.message+']');
 			}
 <?php
+		// Textcube-NG: svg 정화로 외부 참조를 지웠으면 알린다(r3-20). 개수는 정수로만 넣는다
+		if (!empty($attachment['svgExternal']))
+			print('alert("' . escapeJSInCData(_f('외부 참조 %1개를 지웠습니다. 이미지가 원본과 다르게 보일 수 있습니다.', (int)$attachment['svgExternal'])) . '");');
 	}
 }
 ?>
@@ -147,6 +165,7 @@ if (count($_FILES) == 1) {
 </head>
 <body id="body-editor-attachment">
 	<form method="post" action="" enctype="multipart/form-data" id="uploadForm">
+		<input type="hidden" name="csrfToken" value="<?php echo getCSRFToken();?>" />
 		<script type="text/javascript">
 			//<![CDATA[				
 				document.write('<input type="file" class="input-file" name="attachment" size="16" onchange="addAttachOption(this.value); document.getElementById(\'uploadForm\').submit();" />');

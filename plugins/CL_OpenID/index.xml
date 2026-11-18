@@ -24,6 +24,7 @@
 	<listener event="ViewCommenter" handler="openid_ViewCommenter" />
 	<listener event="ViewGuestCommenter" handler="openid_ViewCommenter" />
 	<listener event="OpenIDAffiliateLinks" handler="openid_OpenIDAffiliateLinks" />
+	<tag name="OpenIDLogin" handler="openid_LoginTag" />
 
 	<config manifestHandler="CL_OpenID_ConfigHandler" />
   </binding>

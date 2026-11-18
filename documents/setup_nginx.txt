@@ -21,10 +21,41 @@ by Jaepil Koh
   if ($request_filename ~* ^(cache)+/+(.+[^/])\.(cache|xml|txt|log)$) {
     return 403;
   }  
+  # [v3.171] $request_filename is an absolute path, so the ^ anchor may never match (the cache example above has the same limit); adjust the prefix to your environment. framework/Dispatcher.php rejects these paths too.
+  if ($request_filename ~* ^(plugins/+[^/]+/+(locale/+.+|index\.xml)|resources/+locale/+.+)$) {
+    return 403;
+  }  
   if (-d $request_filename) {
     rewrite ^(.+[^/])$ $1/;
   }  
   rewrite  ^(.*)$ $rewrite_base/rewrite.php last;
+  }
+  # [r3-6] block direct requests to PHP files under plugins/ (plugin pages use /plugin/<name> URLs, which go through rewrite.php).
+  # Put this regex location in the same server block, before your "location ~ \.php$" block: nginx uses the first matching regex location.
+  # Don't forget to change '/tc' below to the same path as line 1 & 2 (if the blog is at the root, use ^/plugins/...).
+  location ~* ^/tc/plugins/.+\.(php[0-9]*|phps|phtml|phar)(/|$) {
+    return 403;
+  }
+  # [r3-20] block PHP files under attach/ (uploaded files must never run as PHP). Same placement as the plugins block above.
+  # [r3-27 R-448] the pattern also matches a middle extension such as a.php.jpg: '.' may follow the PHP extension.
+  location ~* ^/tc/attach/.+\.(php[0-9]*|phps|phtml|pht|phar)(\.|/|$) {
+    return 403;
+  }
+  # [r3-20] response headers for uploaded files: a CSP sandbox for SVG (an SVG opened by itself is a document and could run script)
+  # and nosniff for every file under attach/. Keep these two after the PHP block above and in this order: nginx uses the first
+  # matching regex location. An add_header in a location replaces the add_header lines inherited from the server block.
+  location ~* ^/tc/attach/.+\.svgz?$ {
+    add_header Content-Security-Policy "default-src 'none'; style-src 'unsafe-inline'; img-src data:; sandbox" always;
+    add_header X-Content-Type-Options "nosniff" always;
+  }
+  # [r3-27 R-434] force download for .html/.htm/.xhtml under attach/ (an uploaded HTML file must not open as a document on the blog origin).
+  # Keep it before the generic attach/ block below.
+  location ~* ^/tc/attach/.+\.x?html?$ {
+    add_header Content-Disposition "attachment" always;
+    add_header X-Content-Type-Options "nosniff" always;
+  }
+  location ~* ^/tc/attach/ {
+    add_header X-Content-Type-Options "nosniff" always;
   }
   ----------------------------
     
@@ -39,3 +70,25 @@ I used http://sunblu.sh/2008/04/installing-ngi ··· opard%2F as reference to m
 ### trouble shooting
 If you have any problems with uploading, add this line in server section of your nginx.conf. "8m" means 8MB.
 client_max_body_size 8m;
+
+### ImageMagick policy for optional SVG to PNG conversion [r3-20]
+Only needed when config.php sets $service['svgRasterize'] = true (default false) and the PHP imagick extension is installed.
+Textcube-NG sanitizes every uploaded SVG first and converts only the sanitized copy, with ImageMagick's internal SVG renderer (MSVG).
+- MSVG draws through the MVG coder, and a policy that blocks every delegate (pattern "*") stops SVG reading before it reaches MSVG.
+  With either of those blocked, conversion always fails and the sanitized SVG is shown as is.
+- The policy below keeps the usual limits and coder blocks but does not block MVG or delegates.
+  It does not stop an SVG <image> from reading a local image file by path. The sanitizer keeps an <image> only when it is an inline
+  data:image/(png|jpeg|gif|webp);base64 URI, so convert sanitized files only.
+- Put it in ImageMagick's policy.xml (for example /etc/ImageMagick-7/policy.xml; keep a copy of the original) and restart PHP.
+
+  <policymap>
+    <policy domain="resource" name="memory" value="256MiB"/>
+    <policy domain="resource" name="map" value="512MiB"/>
+    <policy domain="resource" name="area" value="16MP"/>
+    <policy domain="resource" name="width" value="8KP"/>
+    <policy domain="resource" name="height" value="8KP"/>
+    <policy domain="resource" name="time" value="30"/>
+    <policy domain="path" rights="none" pattern="@*"/>
+    <policy domain="coder" rights="none" pattern="{MSL,URL,HTTP,HTTPS,FTP,EPHEMERAL,TEXT,LABEL}"/>
+    <policy domain="coder" rights="none" pattern="{PS,PS2,PS3,EPS,EPI,EPSF,EPSI,EPT,PDF,PDFA,XPS}"/>
+  </policymap>

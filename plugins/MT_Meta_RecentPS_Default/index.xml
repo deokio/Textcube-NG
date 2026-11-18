@@ -42,7 +42,7 @@
 	<config xml:lang="en" dataValHandler="MT_Cover_getRecentEntries_DataSet" manifestHandler="MT_Cover_getRecentEntries_ConfigOut_en">
 		<window width="500" height="298" />
 	</config>
-	<config xml:lang="ja" dataValHandler="MT_Cover_getRecentEntries_DataSet" manifestHandler="MT_Cover_getRecentEntries_ConfigOut_ja">
+	<config xml:lang="ja" dataValHandler="MT_Cover_getRecentEntries_DataSet" manifestHandler="MT_Cover_getRecentEntries_ConfigOut_en">
 		<window width="500" height="298" />
 	</config>
   </binding>

@@ -45,7 +45,6 @@ class POD extends DBQuery {
 	function construct() {
 	}
 	function destruct() {
-		unset($this);
 	}
 
 	/** Definition **/

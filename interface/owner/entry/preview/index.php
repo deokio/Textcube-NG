@@ -7,6 +7,11 @@ requireModel('blog.entry');
 requireModel('blog.response.remote');
 requireModel('blog.sidebar');
 define('__TEXTCUBE_NO_ENTRY_CACHE__', true);
+/* [보안] Textcube-NG: 글 미리보기는 글관리 권한(group.editors)이 있거나 그 글의 작성자만 — 원본은 블로그 구성원이면 남의 비공개·임시 글도 볼 수 있었다(r3-7, 453) */
+if (!Acl::check('group.editors')) {
+	if (empty($suri['id']) || getUserIdOfEntry(getBlogId(), (int)$suri['id']) != getUserId())
+		Respond::NotFoundPage();
+}
 
 $entries = array();
 if (is_null($entry = getEntry($blogid, $suri['id'], true)))

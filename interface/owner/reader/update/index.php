@@ -2,13 +2,27 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 require ROOT . '/library/preprocessor.php';
+requirePostMethod();	// Textcube-NG: 상태 변경은 POST 만 받는다(그 밖은 405) — 링크·<img> 로 실행되던 GET CSRF 차단(v3.148)
 requireStrictRoute();
 
 if(isset($suri['id'])) {
-	if ($feed = POD::queryRow("SELECT * 
-		FROM {$database['prefix']}Feeds 
-		WHERE id = {$suri['id']}")) {
+	// Textcube-NG: 피드 하나 갱신이 블로그를 보지 않고 Feeds.id 로만 찾아, 다른 블로그만 구독한 피드도 갱신(원격 요청)할 수 있었다.
+	// 아래 전체 갱신과 같이 이 블로그가 구독한 피드(FeedGroupRelations.blogid)로 한정한다(v3.144)
+	if ($feed = POD::queryRow("SELECT f.* 
+		FROM {$database['prefix']}Feeds f, 
+			{$database['prefix']}FeedGroupRelations r 
+		WHERE r.blogid = $blogid 
+			AND r.feed = f.id 
+			AND f.id = {$suri['id']}")) {
 		Respond::ResultPage(updateFeed($feed));
 		exit;
 	} else {
@@ -25,7 +39,7 @@ ob_implicit_flush();
 	<head>
 		<title>Update all feeds</title>
 		<meta http-equiv="content-type" content="text/html; charset=utf-8" />
-		<script type="text/javascript" src="<?php echo $serviceURL;?>/resources/script/common3.js"></script>
+		<script type="text/javascript" src="<?php echo $serviceURL;?>/resources/script/common3.js?v=<?php echo filemtime(ROOT . '/resources/script/common3.js');?>"></script>
 		<script type="text/javascript">
 			//<![CDATA[
 				var servicePath = "<?php echo $service['path'];?>";

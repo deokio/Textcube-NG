@@ -35,7 +35,7 @@ class POD extends DBAdapter {
 		$cache->reset($query, $prefix);
 		if(!$cache->load()) {
 			$cache->contents = POD::queryAll($query, $type, $count);
-			$cache->update();
+			if(!is_null($cache->contents)) $cache->update();	// 실패(null)는 영구 캐시(PageCacheLog·Memcached)에 저장하지 않는다(원본은 실패도 저장해 캐시를 비울 때까지 같은 실패를 돌려줬다)
 		}
 		return $cache->contents;
 	}
@@ -44,7 +44,7 @@ class POD extends DBAdapter {
 		$cache->reset($query, $prefix);
 		if(!$cache->load()) {
 			$cache->contents = POD::queryRow($query, $type, $count);
-			$cache->update();
+			if(!is_null($cache->contents)) $cache->update();	// 실패·행 없음(null)은 영구 캐시(PageCacheLog·Memcached)에 저장하지 않는다(원본은 실패도 저장해 캐시를 비울 때까지 같은 실패를 돌려줬다)
 		}
 		return $cache->contents;
 	}
@@ -53,7 +53,7 @@ class POD extends DBAdapter {
 		$cache->reset($query, $prefix);
 		if(!$cache->load()) {
 			$cache->contents = POD::queryColumn($query, $type, $count);
-			$cache->update();
+			if(!is_null($cache->contents)) $cache->update();	// 실패(null)는 영구 캐시(PageCacheLog·Memcached)에 저장하지 않는다(원본은 실패도 저장해 캐시를 비울 때까지 같은 실패를 돌려줬다)
 		}
 		return $cache->contents;
 	}

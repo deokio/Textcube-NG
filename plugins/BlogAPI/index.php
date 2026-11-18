@@ -40,13 +40,13 @@ function BlogAPI_ConfigHandler($plugin)
 	$rsdUrl = htmlspecialchars($hostURL . $blogURL . '/api?rsd', ENT_QUOTES, 'UTF-8');
 	return '<?xml version="1.0" encoding="utf-8"?>'
 		. '<config>'
-		. '<fieldset legend="Open Live Writer 연결 설정 (읽기 전용 — 블로그 URL 에 의해 자동 결정)">'
+		. '<fieldset legend="' . htmlspecialchars(_t('Open Live Writer 연결 설정 (읽기 전용 — 블로그 URL 에 의해 자동 결정)'), ENT_QUOTES, 'UTF-8') . '">'
 		. '</fieldset>'
-		. '<fieldset legend="API 주소 : ' . $apiUrl . '">'
+		. '<fieldset legend="' . htmlspecialchars(_t('API 주소'), ENT_QUOTES, 'UTF-8') . ' : ' . $apiUrl . '">'
 		. '</fieldset>'
-		. '<fieldset legend="RSD 주소 : ' . $rsdUrl . '">'
+		. '<fieldset legend="' . htmlspecialchars(_t('RSD 주소'), ENT_QUOTES, 'UTF-8') . ' : ' . $rsdUrl . '">'
 		. '</fieldset>'
-		. '<fieldset legend="블로그 종류 : Movable Type API 또는 Metaweblog API / 사용자명·비밀번호 : 블로그 관리자 계정">'
+		. '<fieldset legend="' . htmlspecialchars(_t('블로그 종류 : Movable Type API 또는 Metaweblog API / 사용자명·비밀번호 : 블로그 관리자 계정'), ENT_QUOTES, 'UTF-8') . '">'
 		. '</fieldset>'
 		. '</config>';
 }

@@ -8,7 +8,9 @@ if(!empty($suri['value'])) {
 }
 list($comments, $paging) = getCommentsWithPagingForGuestbook($blogid, $suri['page'], $skinSetting['commentsOnGuestbook']);
 notifyComment();
+fireEvent('OBStart');	// Textcube-NG: archive·entry·cover 처리기와 같이 화면 출력 앞뒤로 OBStart·OBEnd 를 낸다(SearchOptimizer 가 스킨의 description 메타 중복을 뺀다)(r3-5)
 require ROOT . '/interface/common/blog/begin.php';
 require ROOT . '/interface/common/blog/guestbook.php';
 require ROOT . '/interface/common/blog/end.php';
+fireEvent('OBEnd');	// (r3-5)
 ?>

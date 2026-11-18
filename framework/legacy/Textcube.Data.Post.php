@@ -335,7 +335,7 @@ class Post {
 			$query->setAttribute('slogan', $checkSlogan, true);
 			if (!POD::queryExistence(
 				"SELECT id FROM {$database['prefix']}Entries " 
-				. "WHERE blogid = ".$this->blogid." AND id <> {$this->id} AND slogan ='{$checkSlogan}'")
+				. "WHERE blogid = ".$this->blogid." AND id <> {$this->id} AND slogan ='".POD::escapeString($checkSlogan)."'")	// Textcube-NG: slogan 은 validateSlogan()·makeSlogan() 을 거쳐 따옴표·역슬래시가 없지만, SQL 줄에서도 POD::escapeString() 으로 감싼다(심층 방어). 위 setAttribute(…, true) 의 escape 는 UPDATE 쪽이라 이중 escape 가 아니다(r3-29 R-503)
 				) 
 			{
 				if (!$query->update())
@@ -523,6 +523,7 @@ class Post {
 	}
 	
 	function makeSlogan($title) {
+		$title = str_replace("\xC2\xB7", '-', $title);	// Textcube-NG: 가운뎃점(·, U+00B7)을 '-' 로(getSlogan 과 같은 규칙)(r3-20)
 		$slogan = preg_replace('/-+/', ' ', $title);
 		$slogan = preg_replace('/[!-\/:-@\[-\^`{-~]+/', '', $slogan);
 		$slogan = preg_replace('/\s+/', '-', $slogan);
@@ -535,7 +536,8 @@ class Post {
 	}
 	
 	function makePassword($plain = null) {
-		return $plain ? md5($plain) : md5(microtime());
+		// [보안] 원본 기본값 md5(microtime()) 은 저장 시각으로 추정 가능 → CSPRNG 128비트(같은 32자리 16진 형식)
+		return $plain ? md5($plain) : bin2hex(random_bytes(16));
 	}
 	
 	function nextEntryId($id = 0) {

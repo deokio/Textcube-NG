@@ -372,19 +372,11 @@ if(isMoz) {
 }
 
 function createHttp() {
+	// Textcube-NG: IE 전용 ActiveXObject(MSXML2.XMLHTTP) 대체 경로를 지움(r3-31 R-429 B). XMLHttpRequest 를 만들 수 없으면 원래처럼 null 을 돌려준다
 	try {
 		return new XMLHttpRequest();
 	}
 	catch (e) {
-		var objectNames = ["MSXML2.XMLHTTP.5.0", "MSXML2.XMLHTTP.4.0", "MSXML2.XMLHTTP.3.0", "MSXML2.XMLHTTP", "Microsoft.XMLHTTP"];
-		for (var i = 0; i < objectNames.length; i ++) {
-			try {
-				return new ActiveXObject(objectNames[i]);
-				break;
-			}
-			catch (e) {
-			}
-		}
 		return null;
 	}
 }
@@ -768,11 +760,8 @@ function getEmbedCode(movie,width,height,id,bg,FlashVars,menu, transparent, qual
 			version = '7,0,0,0';
 		}
 
-		if(STD.isIE) {
-			return '<object classid="clsid:d27cdb6e-ae6d-11cf-96b8-444553540000" codebase="http://fpdownload.macromedia.com/pub/shockwave/cabs/flash/swflash.cab#version='+version+'" width="'+width+'" height="'+height+'" '+_id+' align="middle"><param name="movie" value="'+movie+'" />'+_allowScriptAccess_object+_FlashVars_object+_menu_object+_quality_object+_bgcolor_object+_transparent_object+'</object>';
-		} else {
-			return '<embed '+_id+' type="application/x-shockwave-flash" pluginspage="http://www.macromedia.com/go/getflashplayer" src="'+movie+'"'+' width="'+width+'"'+' height="'+height+'"'+_allowScriptAccess_embed+_FlashVars_embed+_menu_embed+_quality_embed+_bgcolor_embed+_transparent_embed+'/>'
-		}
+		// Textcube-NG: IE 전용 Flash ActiveX(clsid) object 분기를 지움(r3-31 R-429 B). 모든 브라우저에 원래 IE 밖 분기의 embed 를 돌려준다
+		return '<embed '+_id+' type="application/x-shockwave-flash" pluginspage="http://www.macromedia.com/go/getflashplayer" src="'+movie+'"'+' width="'+width+'"'+' height="'+height+'"'+_allowScriptAccess_embed+_FlashVars_embed+_menu_embed+_quality_embed+_bgcolor_embed+_transparent_embed+'/>'
 	} catch(e) {
 		return false;
 	}
@@ -1036,9 +1025,20 @@ function addComment(caller, entryId) {
 	var oForm = findFormObject(caller);
 	if (!oForm)
 		return false;
-	if( oForm.comment_type != undefined &&
-		oForm.comment_type[0].checked && oForm.comment_type[0].value == 'openid' ) {
-		return addCommentWithOpenIDAuth(oForm, entryId);
+	if( oForm.comment_type != undefined ) {
+		// Textcube-NG: 첫 라디오가 아니라 고른 라디오의 값으로 판정한다 — 소셜 계정으로 글쓰기 줄(value=social)이 앞에 올 수 있다(r3-41)
+		var commentTypes = (oForm.comment_type.length != undefined) ? oForm.comment_type : [oForm.comment_type];
+		var commentType = null;
+		for (var i = 0; i < commentTypes.length; i++) {
+			if (commentTypes[i].checked) { commentType = commentTypes[i]; break; }
+		}
+		if( commentType != null && commentType.value == 'openid' ) {
+			return addCommentWithOpenIDAuth(oForm, entryId);
+		}
+		if( commentType != null && commentType.value == 'social' && commentType.getAttribute('data-tc-social') != 'ok' ) {
+			alert(commentType.getAttribute('data-tc-social-msg') || 'Please sign in with a social account.');
+			return false;
+		}
 	}
 	var formData = $(oForm).serializeArray();
 	formData.push({name: 'key', value: commentKey});
@@ -1365,10 +1365,9 @@ function deleteTrackback(id, entryId) {
 		alert(messages.operationFailed);
 		return;
 	}
-	if (!confirm(messages.confirmTrackbackDelete))
-		return;
+	tcConfirm(messages.confirmTrackbackDelete, function () {	// Textcube-NG: 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396)
 
-	var request = new HTTPRequest("GET", blogURL + "/trackback/delete/" + id);
+	var request = new HTTPRequest("POST", blogURL + "/trackback/delete/" + id);
 	request.onSuccess = function() {
 		document.getElementById('entry' + entryId + 'Trackback').innerHTML = this.getText("/response/trackbackList");
 		document.getElementById('entry' + entryId + 'Trackback').style.display = "block";
@@ -1385,30 +1384,107 @@ function deleteTrackback(id, entryId) {
 		alert(messages.operationFailed);
 	};
 	request.send();
+	});
 }
 
 function changeVisibility(id, visibility) {
 	if (!doesHaveOwnership)
 		return;
-	var request = new HTTPRequest("GET", blogURL + "/owner/entry/visibility/" + id + "?visibility=" + visibility);
+	var request = new HTTPRequest("POST", blogURL + "/owner/entry/visibility/" + id);
 	request.onSuccess = function() {
 		window.location.reload();
 	};
-	request.send();
+	request.send("visibility=" + visibility);
 }
 
 function deleteEntry(id) {
 	if (!doesHaveOwnership)
 		return;
-	if (!confirm(messages.confirmEntryDelete))
-		return;
-	var request = new HTTPRequest("GET", blogURL + "/owner/entry/delete/" + id);
+	tcConfirm(messages.confirmEntryDelete, function () {	// Textcube-NG: 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396)
+	var request = new HTTPRequest("POST", blogURL + "/owner/entry/delete/" + id);
 	var redirectedURL = blogURL;
 	if ((blogURL == null) || (blogURL.length <= 0)) redirectedURL = "/";
 	request.onSuccess = function() {
 		window.location.href = redirectedURL;
 	};
 	request.send();
+	});
+}
+
+/// Textcube-NG: 브라우저 confirm() 대신 페이지 맨 위 안내 줄에 메시지와 [확인]/[취소]를 보인다(r3-17, R-396).
+/// 메시지는 textContent 로 넣는다(HTML 로 해석하지 않음). [확인]은 줄을 닫고 onOk 를, [취소]는 줄을 닫고 onCancel(있을 때만)을 부른다.
+/// confirm() 과 달리 기다리지 않으므로, 부르는 쪽은 확인 뒤 동작을 onOk 로 넘기고 곧바로 돌아간다(R-395 tcCheckupNotice 와 같은 모양).
+function tcConfirm(msg, onOk, onCancel) {
+	var old = document.getElementById("tc-confirm-notice");
+	if (old && old.parentNode) old.parentNode.removeChild(old);
+	var bar = document.createElement("div");
+	bar.id = "tc-confirm-notice";
+	bar.setAttribute("role", "alert");
+	bar.style.cssText = "position:relative;z-index:1000;padding:8px 12px;background:#fff8d6;border-bottom:1px solid #e0c96a;color:#333;font-size:12px;line-height:1.6;text-align:center;";
+	var text = document.createElement("span");
+	text.style.whiteSpace = "pre-line";
+	text.textContent = String(msg);
+	bar.appendChild(text);
+	var addButton = function (label, cb) {
+		var b = document.createElement("button");
+		b.type = "button";
+		b.style.cssText = "margin-left:8px;";
+		b.textContent = label;
+		b.onclick = function () {
+			if (bar.parentNode) bar.parentNode.removeChild(bar);
+			if (typeof(cb) == "function") cb();
+			return false;
+		};
+		bar.appendChild(b);
+		return b;
+	};
+	var ok = addButton((typeof(_t) == "function") ? _t("확인") : "확인", onOk);
+	addButton((typeof(_t) == "function") ? _t("취소") : "취소", onCancel);
+	document.body.insertBefore(bar, document.body.firstChild);
+	if (bar.scrollIntoView) bar.scrollIntoView(); else window.scrollTo(0, 0);
+	try { ok.focus(); } catch (e) { }
+}
+
+/// Textcube-NG: 상태를 바꾸는 링크·이동을 POST 로 보낸다(v3.148). url 의 쿼리를 hidden 필드로 옮긴(params 가 덮어씀)
+/// 숨은 폼을 만들어 target(없으면 이 창)으로 제출한다. CSRF 토큰은 EAF4.js 의 form.submit 래퍼가 붙인다.
+/// 링크에서는 onclick="return postNavigate(this.href);" 로 쓴다(항상 false — 기본 GET 이동을 막음).
+function postNavigate(url, params, target) {
+	var decode = function(s) {
+		s = s.replace(/\+/g, " ");
+		try { return decodeURIComponent(s); } catch (e) { return s; }
+	};
+	var action = String(url), fields = {}, name, i;
+	if (action.indexOf("#") >= 0) action = action.substring(0, action.indexOf("#"));
+	if (action.indexOf("?") >= 0) {
+		var pairs = action.substring(action.indexOf("?") + 1).split("&");
+		action = action.substring(0, action.indexOf("?"));
+		for (i = 0; i < pairs.length; i++) {
+			if (pairs[i] == "") continue;
+			var eq = pairs[i].indexOf("=");
+			if (eq < 0) fields[decode(pairs[i])] = "";
+			else fields[decode(pairs[i].substring(0, eq))] = decode(pairs[i].substring(eq + 1));
+		}
+	}
+	if (params) {
+		for (name in params)
+			if (Object.prototype.hasOwnProperty.call(params, name)) fields[name] = String(params[name]);
+	}
+	var form = document.createElement("form");
+	form.setAttribute("method", "post");
+	form.setAttribute("action", action);
+	if (target) form.setAttribute("target", target);
+	form.style.display = "none";
+	for (name in fields) {
+		if (!Object.prototype.hasOwnProperty.call(fields, name)) continue;
+		var input = document.createElement("input");
+		input.setAttribute("type", "hidden");
+		input.setAttribute("name", name);
+		input.setAttribute("value", fields[name]);
+		form.appendChild(input);
+	}
+	document.body.appendChild(form);
+	HTMLFormElement.prototype.submit.call(form);	// 필드 이름이 submit 이어도 가려지지 않게
+	return false;
 }
 
 function reloadEntry(id) {

@@ -2,6 +2,15 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
+#[AllowDynamicProperties]
 class UserInfo {
 
 	function __construct() {
@@ -52,7 +61,7 @@ class UserInfo {
 			return $this->_error('query generate error');		
 		if (!$query->insert())
 			return $this->_error('insert');
-		$this->id = $query->id;
+		$this->id = null;	// Textcube-NG: DBModel::$id 는 protected 라 읽으면 Error, insert/update 뒤 값은 항상 null 이므로 같은 값을 둠(r3-30 R-510)
 		
 		$this->password = null;
 		return true;
@@ -66,7 +75,7 @@ class UserInfo {
 			return $this->_error('query generate error');		
 		if (!$query->update())
 			return $this->_error('update');
-		$this->id = $query->id;
+		$this->id = null;	// Textcube-NG: DBModel::$id 는 protected 라 읽으면 Error, insert/update 뒤 값은 항상 null 이므로 같은 값을 둠(r3-30 R-510)
 		
 		$this->password = null;
 		return true;
@@ -127,12 +136,13 @@ class UserInfo {
 	function _buildQuery() {
 		$query = DBModel::getInstance();
 		$query->reset('Users');
-		$query->setQualifier('userid', getUserId());
+		// Textcube-NG: setQualifier() 의 둘째 인자는 조건이다. 원본은 조건을 빼고 값만 넘겨 값이 조건 자리로 밀리고 userid 값은 NULL 이 됐다. 아래 setQualifier 에 'equals' 를 넣는다(r3-29 R-479)
+		$query->setQualifier('userid', 'equals', getUserId());
 		
 		if (isset($this->userid)) {
 			if (!Validator::number($this->userid, 1))
 				return $this->_error('userid');
-			$query->setQualifier('userid', $this->userid);
+			$query->setQualifier('userid', 'equals', $this->userid);
 		}
 		
 		if (isset($this->loginid)) {

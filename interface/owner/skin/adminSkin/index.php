@@ -78,11 +78,9 @@ foreach(new DirectoryIterator(ROOT.'/skin/admin/') as $skinFile) {
 											PM.showMessage("<?php echo _t('성공적으로 변경했습니다.');?>", "center", "bottom");
 											document.getElementById('currentPreview').innerHTML = document.getElementById('preview_'+name).innerHTML;
 											document.getElementById('currentInfo').innerHTML = document.getElementById('info_'+name).innerHTML;
-											if(confirm("<?php echo _t('변경한 관리 패널 스킨으로 현재 페이지를 다시 불러오시겠습니까?');?>")) {
+											tcConfirm("<?php echo _t('변경한 관리 패널 스킨으로 현재 페이지를 다시 불러오시겠습니까?');?>", function () {	// Textcube-NG: 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396)
 												window.location.reload();
-											} else {
-												return;
-											}
+											});
 										}
 										request.onError = function() {
 											msg = this.getText("/response/msg");

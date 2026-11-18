@@ -8,12 +8,12 @@ window.GMapTool_insertMap = function() {
 
 window.GMapTool_attachLocation = function() {
 	if (plugin.gmap.isLocationAttached) {
-		if (confirm(_t('첨부된 위치 정보를 제거하시겠습니까?'))) {
+		tcConfirm(_t('첨부된 위치 정보를 제거하시겠습니까?'), function () {	// Textcube-NG: 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396)
 			$('input[name=latitude]').val('');
 			$('input[name=longitude]').val('');
 			plugin.gmap.isLocationAttached = false;
 			$('#googlemap-attachLocation').text(_t('현재 위치 첨부하기'));
-		}
+		});
 	} else {
 		if (navigator.geolocation) {
 			var offset = $('#googlemap-attachLocation').offset();

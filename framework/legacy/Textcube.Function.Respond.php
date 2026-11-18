@@ -2,8 +2,17 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 class Respond {
 	static function ResultPage($errorResult) {
+		$GLOBALS['__preventSqlLogDump'] = true;
 		if (is_array($errorResult) && count($errorResult) < 2) {
 			$errorResult = array_shift($errorResult);
 		}
@@ -24,6 +33,7 @@ class Respond {
 	}
 
 	static function PrintResult($result, $useCDATA=true) {
+		$GLOBALS['__preventSqlLogDump'] = true;
 		header('Content-Type: text/xml; charset=utf-8');
 		$xml = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n";
 		$xml .= "<response>\n";
@@ -165,7 +175,7 @@ class Respond {
 	}
 
 	static function escapeJSInAttribute($str) {
-		return htmlspecialchars(str_replace(array('\\', '\r', '\n', '\''), array('\\\\', '\\r', '\\n', '\\\''), $str));
+		return htmlspecialchars(str_replace(array('\\', "\r", "\n", '\''), array('\\\\', '\\r', '\\n', '\\\''), $str));
 	}
 
 	static function escapeCData($str) {

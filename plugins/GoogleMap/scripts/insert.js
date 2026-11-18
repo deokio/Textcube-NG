@@ -78,7 +78,7 @@ function queryLocation() {
 	closeQueryResult();
 	plugin.gmap.geocoder.geocode({'address': q}, function(results, status) {
 		if (status == google.maps.GeocoderStatus.ZERO_RESULTS) {
-			$('<div id="queryResult">검색 결과가 없습니다.</div>').insertAfter('#GoogleMapPreview');
+			$('<div id="queryResult">' + plugin.gmap.escapeHTML(_t('검색 결과가 없습니다.')) + '</div>').insertAfter('#GoogleMapPreview');
 		} else if (status == google.maps.GeocoderStatus.OK) {
 			$('<div id="queryResult"><ol></ol></div>').insertAfter('#GoogleMapPreview');
 			for (var i = 0; i < results.length; i++) {
@@ -87,7 +87,7 @@ function queryLocation() {
 				var address = '', j;
 				for (j = 0; j < results[i].address_components.length; j++)
 					address += results[i].address_components[j].long_name + ' ';
-				$('<li><a href="#" onclick="map.panTo(new google.maps.LatLng('+position.lat()+','+position.lng()+'))">'+address.trim()+'</a></li>').appendTo('#queryResult ol');
+				$('<li><a href="#" onclick="map.panTo(new google.maps.LatLng('+position.lat()+','+position.lng()+'))">'+plugin.gmap.escapeHTML(address.trim())+'</a></li>').appendTo('#queryResult ol');
 				map.setCenter(position);
 				map.setZoom(15);
 				var marker = new google.maps.Marker({
@@ -96,7 +96,7 @@ function queryLocation() {
 					'icon': icon_blue
 				});
 				var info = new google.maps.InfoWindow({
-					'content': '<div class="queryMarkerInfo"><p><address>'+address+'</address></p><p><a href="#" onclick="convertToUserMarker(\''+id+'\')">마커 고정시키기</a></p></div>'
+					'content': '<div class="queryMarkerInfo"><p><address>'+plugin.gmap.escapeHTML(address)+'</address></p><p><a href="#" onclick="convertToUserMarker('+plugin.gmap.escapeHTML(JSON.stringify(String(id)))+')">' + plugin.gmap.escapeHTML(_t('마커 고정시키기')) + '</a></p></div>'
 				});
 				google.maps.event.addListener(marker, 'click', function() {
 					plugin.gmap.closeActiveInfoWindow();
@@ -112,13 +112,13 @@ function queryLocation() {
 				};
 			}
 		} else {
-			$('<div id="queryResult">오류가 발생하였습니다. (' + status + ')</div>').insertAfter('#GoogleMapPreview');
+			$('<div id="queryResult">' + plugin.gmap.escapeHTML(_t('오류가 발생하였습니다. (%1)').replace('%1', function() { return status; })) + '</div>').insertAfter('#GoogleMapPreview');
 		}
 		var $container = $(map.getDiv());
 		var pos = $container.offset();
 		// TODO: get the height of the whole document in a cross-browsing way
 		var from_bottom = document.body.scrollHeight - (pos.top + $container.height());
-		$('<div style="text-align:right"><a href="#" class="ui-action" onclick="closeQueryResult();return false;">닫기</a></div>').appendTo('#queryResult');
+		$('<div style="text-align:right"><a href="#" class="ui-action" onclick="closeQueryResult();return false;">' + plugin.gmap.escapeHTML(_t('닫기')) + '</a></div>').appendTo('#queryResult');
 		$('#queryResult').css({'z-index':100000, bottom:(from_bottom + 40)+'px', left:(pos.left + 60)+'px'}).fadeIn(400);
 	});
 }
@@ -211,9 +211,10 @@ function GMarker_onClick(e) {
 	plugin.gmap.closeActiveInfoWindow();
 	var um = findUserMarker(this);
 	var form_str = '<div class="GMapInfo">';
-	form_str += '<p><label for="info_title">제목 : </label><input id="info_title" type="text" value="'+um.title+'" /></p>';
-	form_str += '<p><label for="info_desc">설명 : </label><textarea id="info_desc" rows="3" cols="30">'+um.desc+'</textarea></p>';
-	form_str += '<div style="text-align:right"><a href="javascript:void(0);" onclick="removeUserMarker(\''+um.id+'\');">삭제하기</div></div>';
+	form_str += '<p><label for="info_title">' + plugin.gmap.escapeHTML(_t('제목 : ')) + '</label><input id="info_title" type="text" value="'+plugin.gmap.escapeHTML(um.title)+'" /></p>';
+	form_str += '<p><label for="info_desc">' + plugin.gmap.escapeHTML(_t('설명 : ')) + '</label><textarea id="info_desc" rows="3" cols="30">'+plugin.gmap.escapeHTML(um.desc)+'</textarea></p>';
+	// Textcube-NG: 삭제 링크의 빠진 a 닫는 태그를 넣는다(v3.191)
+	form_str += '<div style="text-align:right"><a href="javascript:void(0);" onclick="removeUserMarker('+plugin.gmap.escapeHTML(JSON.stringify(String(um.id)))+');">' + plugin.gmap.escapeHTML(_t('삭제하기')) + '</a></div></div>';
 	um.info.setContent(form_str);
 	um.info.open(map, um.marker);
 	plugin.gmap.activeInfoWindow = um.info;

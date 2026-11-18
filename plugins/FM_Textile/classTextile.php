@@ -227,6 +227,7 @@ class Textile
     var $url_schemes = array();
     var $glyph = array();
     var $hu = '';
+    var $imageDeadline = null;	// Textcube-NG: fImage 원격 크기 조회의 글 하나 전체 시간 상한(v3.156)
     
     var $ver = '2.0.0';
     var $rev = '$Rev: 216 $';
@@ -663,7 +664,7 @@ class Textile
 // -------------------------------------------------------------
     function span($text)
     {
-        $qtags = array('\*\*','\*','\?\?','-','__','_','%','\+','~','\^');
+        $qtags = array('\*\*','\*','\?\?','\-','__','_','%','\+','~','\^');
         $pnct = ".,\"'?!;:";
 
         foreach($qtags as $f) {
@@ -780,7 +781,7 @@ class Textile
         $parts = parse_url($url);
         if ((empty($parts['scheme']) or @$parts['scheme'] == 'http') and
              empty($parts['host']) and
-             preg_match('/^\w/', @$parts['path']))
+             preg_match('/^\w/', $parts['path'] ?? '')) // Textcube-NG: @ 대신 ?? 로 path 없음 처리(r3-8)
             $url = $this->hu.$url;
         if ($this->restricted and !empty($parts['scheme']) and
               !in_array($parts['scheme'], $this->url_schemes))
@@ -814,7 +815,7 @@ class Textile
         $atts .= ($algn != '')  ? ' align="' . $this->iAlign($algn) . '"' : '';
         $atts .= (isset($m[4])) ? ' title="' . $m[4] . '"' : '';
         $atts .= (isset($m[4])) ? ' alt="'   . $m[4] . '"' : ' alt=""';
-        $size = @getimagesize($url);
+        $size = $this->imageSize($url);
         if ($size) $atts .= " $size[3]";
 
         $href = (isset($m[5])) ? $this->checkRefs($m[5]) : '';
@@ -829,6 +830,34 @@ class Textile
         );
 
         return join('',$out);
+    }
+
+// -------------------------------------------------------------
+    // Textcube-NG: 원본은 본문 이미지 주소를 getimagesize() 로 바로 열어 서버 안쪽 주소·임의 포트·스트림 래퍼(php7.4 phar:// 역직렬화 포함)로
+    // 요청하고 크기·시간 제한이 없었다. 자기 블로그 첨부는 첨부 폴더 파일로, 그 밖의 http/https 는 get_remotefile()(v3.141 — 80/443·공인 IPv4·
+    // 리다이렉트 3회·1MB·10초)로 받아 크기를 읽고, 다른 형식(상대 주소 포함)은 조회하지 않는다(v3.156)
+    function imageSize($url)
+    {
+        if (!is_string($url)) return false;
+        global $serviceURL;
+        if (is_string($serviceURL) && $serviceURL !== '' && function_exists('getBlogId') && defined('__TEXTCUBE_ATTACH_DIR__')) {
+            // Textcube-NG: 서비스 주소가 //host 이면 화면은 //host…, 피드는 스킴을 붙인 주소가 온다 — 두 형태 모두 자기 블로그 첨부로 보고, 원격 조회 조건(http/https)은 로컬 판정 뒤에 둔다(r3-34)
+            foreach (array_unique(array($serviceURL, URL::toAbsolute($serviceURL))) as $_base) {
+                $prefix = $_base . '/attach/' . getBlogId() . '/';
+                if (strncmp($url, $prefix, strlen($prefix)) === 0) {
+                    $name = substr($url, strlen($prefix));
+                    if (!preg_match('/^[A-Za-z0-9_-][A-Za-z0-9._-]*\z/', $name) || strpos($name, '..') !== false) return false;
+                    return @getimagesize(__TEXTCUBE_ATTACH_DIR__ . '/' . getBlogId() . '/' . $name);
+                }
+            }
+        }
+        if (!preg_match('!^https?://!i', $url)) return false;
+        if (!function_exists('get_remotefile')) requireLibrary('function/xml');
+        if ($this->imageDeadline === null) $this->imageDeadline = microtime(true) + 10;
+        if (microtime(true) >= $this->imageDeadline) return false;
+        $file = get_remotefile($url, '', 0, $this->imageDeadline);
+        if (!is_array($file) || !isset($file[1]) || $file[1] === '') return false;
+        return @getimagesizefromstring($file[1]);
     }
 
 // -------------------------------------------------------------
@@ -950,8 +979,8 @@ class Textile
 // -------------------------------------------------------------
     function footnoteRef($text)
     {
-        return preg_replace('/\b\[([0-9]+)\](\s)?/Ue',
-            '$this->footnoteID(\'\1\',\'\2\')', $text);
+        return preg_replace_callback('/\b\[([0-9]+)\](\s)?/U',
+            function ($m) { return $this->footnoteID($m[1], isset($m[2]) ? $m[2] : ''); }, $text);
     }
 
 // -------------------------------------------------------------

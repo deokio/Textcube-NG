@@ -18,10 +18,16 @@ plugin.gmap = {
 	normalizeAddress: function(address) {
 		return address.split('/').join(' ');
 	},
+	// 위치·글 제목·마커 제목/설명(텍스트)을 info window HTML 에 넣기 전에 escape (원본은 그대로 넣어 HTML 로 해석됨)
+	escapeHTML: function(text) {
+		return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+	},
 	sendCache: function(original_path, path, lat, lng) {
+		// 블로그 주소(blogURL) 기준으로 보낸다(같은 플러그인 editor.js 의 /plugin/GMapCustomInsert/ 와 같은 방식). 원본의 servicePath 기준 주소는
+		// path 모드에서 첫 경로(plugin)가 블로그 이름으로 해석되어 이 블로그의 /plugin/GMapCache/ 에 닿지 않았다. 캐시 기록은 같은 블로그에서 보낸 요청만 받는다(requireStrictRoute).
 		jQuery.ajax({
 			'type': 'POST',
-			'url': servicePath + '/plugin/GMapCache/',
+			'url': blogURL + '/plugin/GMapCache/',
 			'data': {
 				'original_path': original_path,
 				'path': path,
@@ -108,12 +114,13 @@ function GMap_addLocationMarkDirect(gmap, location_info, title, link, point, bou
  * @param Object locative	특정 위치에 대한 Marker 및 관련 정보와 엔트리들에 대한 정보를 담은 오브젝트
  */
 function GMap_buildLocationInfoHTML(locative) {
-	var html = '<div class="GMapInfo" style="text-align:left"><h4>' + locative.address_parts[locative.address_parts.length - 1] + '에 얽힌 이야기</h4><ul>';
+	var esc = plugin.gmap.escapeHTML;
+	var html = '<div class="GMapInfo" style="text-align:left"><h4>' + _t('%1에 얽힌 이야기').replace('%1', function() { return esc(locative.address_parts[locative.address_parts.length - 1]); }) + '</h4><ul>';
 	var i;
 	for (i = 0; i < locative.entries.length; i++) {
-		html += '<li><a href="'+locative.entries[i].link+'">'+locative.entries[i].title+'</a></li>';
+		html += '<li><a href="'+esc(locative.entries[i].link)+'">'+esc(locative.entries[i].title)+'</a></li>';
 	}
-	html += '</ul><address>'+locative.address+'</address></div>';
+	html += '</ul><address>'+esc(locative.address)+'</address></div>';
 	return html;
 }
 
@@ -124,16 +131,17 @@ function GMap_findLocationCallback(results, status, gmap, location_info, title, 
 	if (status == google.maps.GeocoderStatus.ZERO_RESULTS) {
 		var new_path_parts = location_info.path.split('/').slice(0,-1);
 		if (new_path_parts.length < 2) {
-			// give up search...
-			plugin.gmap.sendCache(location_info.original_path, location_info.path, null, null);
-			if (process_count != undefined)
+			// give up search... 캐시에 기록하지 않고(빈 좌표는 서버가 기록하지 않음) 기본 좌표(서울시청, 지역로그에서 설정)에 표시
+			if (plugin.gmap.fallbackLocation)
+				GMap_addLocationMarkDirect(gmap, {'address': plugin.gmap.normalizeAddress(location_info.original_path), 'path': location_info.original_path, 'original_path': location_info.original_path}, title, link, plugin.gmap.fallbackLocation, boundary, locations, false);
+			else if (process_count != undefined)
 				process_count++;
 		} else {
 			// recursive reducing
 			var new_address = new_path_parts.join(' ');
 			var new_path = new_path_parts.join('/');
 			if (new_path[0] != '/') new_path = '/' + new_path;
-			geocoder.geocode({
+			plugin.gmap.geocoder.geocode({
 				'address': new_address
 			}, function(results, status) {
 				GMap_findLocationCallback(results, status, gmap, {'address': new_address, 'path': new_path, 'original_path': location_info.original_path}, title, link, boundary, locations);
@@ -170,7 +178,7 @@ function GMap_createMap(container, options) {
 			});
 			if (um.title.trim() != '') {
 				var info = new google.maps.InfoWindow({
-					'content': '<div class="GMapInfo"><h4>'+um.title+'</h4><p>'+um.desc+'</p></div>'
+					'content': '<div class="GMapInfo"><h4>'+plugin.gmap.escapeHTML(um.title)+'</h4><p>'+plugin.gmap.escapeHTML(um.desc)+'</p></div>'
 				});
 				google.maps.event.addListener(marker, 'click', function() {
 					plugin.gmap.closeActiveInfoWindow();

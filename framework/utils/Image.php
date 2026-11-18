@@ -26,6 +26,13 @@ class Utils_Image extends Singleton {
 		if (empty($this->imageFile) || !file_exists($this->imageFile))
 			return false;
 		
+		// Textcube-NG: 폭·높이가 1 미만이면(예: 4096x10 이미지를 폭 100 으로 줄이면 높이 0) imagecreatetruecolor() 가
+		//   PHP 8 에서 ValueError 를 던지므로 만들기 전에 false 를 돌려준다. 호출자(getImageResizer)는 false 면 원본 URL 로 되돌아간다(r3-24, R-443)
+		$width = (int)$width;
+		$height = (int)$height;
+		if ($width < 1 || $height < 1)
+			return false;
+
 		// create an image device as image format.
 		switch ($this->getImageType($this->imageFile)) {
 			case "gif":
@@ -56,6 +63,23 @@ class Utils_Image extends Singleton {
 					return false;
 				}
 				break;
+			// Textcube-NG: webp·avif 는 GD 에 읽기 함수가 있을 때만(PHP 7.4 GD 에는 avif 가 없다)(r3-20)
+			case "webp":
+				if (function_exists('imagecreatefromwebp')) {
+					$originImageDevice = imagecreatefromwebp($this->imageFile);
+					if ($originImageDevice === false) return false;
+				} else {
+					return false;
+				}
+				break;
+			case "avif":
+				if (function_exists('imagecreatefromavif')) {
+					$originImageDevice = imagecreatefromavif($this->imageFile);
+					if ($originImageDevice === false) return false;
+				} else {
+					return false;
+				}
+				break;
 			case "xpm":
 				if (imagetypes() & IMG_XPM) {
 					$originImageDevice = imagecreatefromxpm($this->imageFile);
@@ -80,7 +104,6 @@ class Utils_Image extends Singleton {
 		$temp = imagecolorallocate($this->resultImageDevice, $this->bgColorBy16['R'], $this->bgColorBy16['G'], $this->bgColorBy16['B']);
 		imagefilledrectangle($this->resultImageDevice, 0, 0, $width, $height, $temp);
 		imagecopyresampled($this->resultImageDevice, $originImageDevice, 0, 0, 0, 0, $width, $height, imagesx($originImageDevice), imagesy($originImageDevice));
-		imagedestroy($originImageDevice);
 		//$this->resultImageDevice = fireEvent('AfterResizeImage', $this->resultImageDevice, $this);
 		
 		return true;
@@ -291,10 +314,8 @@ class Utils_Image extends Singleton {
 			else
 				imagecopy($this->resultImageDevice, $tempWaterMarkDevice, $xPosition, $yPosition, 0, 0, $waterMarkWidth, $waterMarkHeight);
 			
-			imagedestroy($tempWaterMarkDevice);
 		}
 		
-		imagedestroy($waterMarkDevice);
 		return true;
 	}
 	
@@ -312,6 +333,11 @@ class Utils_Image extends Singleton {
 	}
 	
 	function cropRectBySize($width, $height, $align='center', $valign='middle') {
+		// Textcube-NG: 폭·높이가 1 미만이면 imagecreatetruecolor() 의 ValueError(PHP 8) 대신 false(r3-24, R-443)
+		$width = (int)$width;
+		$height = (int)$height;
+		if ($width < 1 || $height < 1)
+			return false;
 		switch ($align) {
 			case 'left':
 				$srcX = 0;
@@ -364,6 +390,19 @@ class Utils_Image extends Singleton {
 				break;
 			case "wbmp":
 				imagewbmp($this->resultImageDevice, $fileName);
+				break;
+			// Textcube-NG: webp·avif 는 GD 에 쓰기 함수가 없으면 jpeg 로 쓴다(아래 default 와 같은 품질)(r3-20)
+			case "webp":
+				if (function_exists('imagewebp'))
+					imagewebp($this->resultImageDevice, $fileName);
+				else
+					imagejpeg($this->resultImageDevice, $fileName, 80);
+				break;
+			case "avif":
+				if (function_exists('imageavif'))
+					imageavif($this->resultImageDevice, $fileName);
+				else
+					imagejpeg($this->resultImageDevice, $fileName, 80);
 				break;
 			case "jpg":
 			default:
@@ -505,6 +544,13 @@ class Utils_Image extends Singleton {
 				case IMAGETYPE_XBM:
 					$extension = 'xbm';
 					break;
+				// Textcube-NG: webp(IMAGETYPE_WEBP, PHP 7.1+)·avif(IMAGETYPE_AVIF, PHP 8.1+ — 없으면 맞지 않는 -1)(r3-20)
+				case IMAGETYPE_WEBP:
+					$extension = 'webp';
+					break;
+				case (defined('IMAGETYPE_AVIF') ? constant('IMAGETYPE_AVIF') : -1):
+					$extension = 'avif';
+					break;
 				default:
 					$extension = false;
 			}
@@ -526,7 +572,8 @@ class Utils_Image extends Singleton {
 		if (is_null($blogid)) $blogid = getBlogId();
 
 		$result = $temp = array();
-		if (preg_match_all('/\[##_(1R|1L|1C|2C|3C|iMazing|Gallery)\|[^|]*\.(gif|jpg|jpeg|png|GIF|JPG|JPEG|PNG)\|(.[^\[]*)_##\]/mi', $content, $matches)) {
+		// Textcube-NG: avif 치환자도 받는다(r3-20)
+		if (preg_match_all('/\[##_(1R|1L|1C|2C|3C|iMazing|Gallery)\|[^|]*\.(gif|jpg|jpeg|png|webp|avif|GIF|JPG|JPEG|PNG|WEBP|AVIF)\|(.[^\[]*)_##\]/mi', $content, $matches)) {
 			foreach ($matches[0] as $image) {
 				$split = explode("|", $image);
 				if (!in_array($split[1], $temp)) $temp[] = $split[1];
@@ -541,6 +588,8 @@ class Utils_Image extends Singleton {
 		foreach($temp as $filename) {
 			if (preg_match('/(.+)\.w(\d{1,})\-h(\d{1,})\.(.+)/', $filename, $matches))
 				$filename = $matches[1].'.'.$matches[4];
+			// Textcube-NG: 첨부 폴더 밖·폴더 자체(빈 값·.·..·경로 구분자·제어 문자)는 첨부 파일 이름으로 보지 않는다. webp 치환자도 받는다(r3-3)
+			if ($filename === '' || $filename === '.' || $filename === '..' || preg_match('/[\x00-\x1F\x7F\/\\\\]/', $filename)) continue;
 
 			if (file_exists(__TEXTCUBE_ATTACH_DIR__."/{$blogid}/{$filename}") && !in_array($filename, $result))
 				$result[] = $filename;
@@ -575,6 +624,11 @@ class Utils_Image extends Singleton {
 		$originHeight = $imageInfo[1];
 
 		if (!extension_loaded('gd')) return array($originURL, $originWidth, $originHeight, $originSrc);
+		// Textcube-NG: 가로·세로가 0 이면(avif 등) 아래 크기 나눗셈을 하지 않도록, Attachment::IMAGE_MAX_DIMENSION(4096, D2 업로드 거부 기준)을 넘으면
+		//   GD 메모리를 쓰지 않도록 GD 로 열지 않고 원본을 쓴다. 업로드는 Attachment::classifyUpload 가 거부하지만 이전 첨부·백업 가져오기 첨부는 남을 수 있다(r3-20)
+		if ($originWidth <= 0 || $originHeight <= 0) return array($originURL, $originWidth, $originHeight, $originSrc);
+		if (defined('Attachment::IMAGE_MAX_DIMENSION') && ($originWidth > Attachment::IMAGE_MAX_DIMENSION || $originHeight > Attachment::IMAGE_MAX_DIMENSION))
+			return array($originURL, $originWidth, $originHeight, $originSrc);
 
 		if (!is_dir(__TEXTCUBE_CACHE_DIR__."/thumbnail")) {
 			@mkdir(__TEXTCUBE_CACHE_DIR__."/thumbnail");

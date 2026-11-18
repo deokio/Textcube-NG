@@ -87,14 +87,15 @@ function uploadImage(frm, type) {
 		frm.submit();
 		frm.imageRemove.disabled = false;
 	}else{
-		if(confirm(_t('정말 삭제하시겠습니까?'))){
+		tcConfirm(_t('정말 삭제하시겠습니까?'), function () {	// Textcube-NG: 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396)
 			frm.submit();
 			frm.imageRemove.disabled = true;
 			frm.imageRemove.checked = false;
-		}else{
+			frm.reset();
+		}, function () {
 			frm.imageRemove.checked = false;
-			return false;
-		}
+		});
+		return false;
 	}
 	frm.reset();
 }
@@ -111,10 +112,10 @@ function setStyleSave() {
 
 		var request = new HTTPRequest("POST", blogURL + "/plugin/teamContentsSave/");
 		request.onSuccess = function () {
-			PM.showMessage("필명 스타일이 저장 되었습니다.", "center", "bottom");
+			PM.showMessage(_t('필명 스타일이 저장 되었습니다.'), "center", "bottom");
 		}
 		request.onError = function() {
-			PM.showErrorMessage("저장하지 못했습니다. 다시 시도 해주세요.", "center", "bottom");
+			PM.showErrorMessage(_t('저장하지 못했습니다. 다시 시도 해주세요.'), "center", "bottom");
 		}
 		request.send(queryString);
 	} catch(e) {}
@@ -127,10 +128,10 @@ function setProfileSave() {
 
 		var request = new HTTPRequest("POST", blogURL + "/plugin/teamContentsSave/");
 		request.onSuccess = function () {
-			PM.showMessage("프로필 설명이 저장 되었습니다.", "center", "bottom");
+			PM.showMessage(_t('프로필 설명이 저장 되었습니다.'), "center", "bottom");
 		}
 		request.onError = function() {
-			PM.showErrorMessage("저장하지 못했습니다. 다시 시도 해주세요.", "center", "bottom");
+			PM.showErrorMessage(_t('저장하지 못했습니다. 다시 시도 해주세요.'), "center", "bottom");
 		}
 		request.send(queryString);
 	} catch(e) {}

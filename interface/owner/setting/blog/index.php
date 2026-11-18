@@ -2,6 +2,14 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 require ROOT . '/library/preprocessor.php';
 require ROOT . '/interface/common/owner/header.php';
 ?>
@@ -109,9 +117,16 @@ if ($service['type'] != 'single') {
 									newDefaultDomain = document.getElementById('multi-form').defaultDomain[0].checked ? 0 : 1;
 								
 									if(primaryDomain != newPrimaryDomain || secondaryDomain != newSecondaryDomain || defaultDomain != newDefaultDomain) {
+										var domainPassword = document.getElementById('domainConfirmativePassword');	// Textcube-NG: 비밀번호 재확인(v3.149)
+										if (domainPassword.value == '') {
+											alert("<?php echo _t('비밀번호를 입력해 주십시오.');?>");
+											domainPassword.focus();
+											return;
+										}
 										var request = new HTTPRequest("POST", "<?php echo $blogURL;?>/owner/setting/domain/set/");
 										request.onSuccess = function() {
 											PM.showMessage("<?php echo _t('저장되었습니다');?>", "center", "bottom");
+											domainPassword.value = '';
 //alert(newDefaultDomain);
 //alert(newSecondaryDomain);
 //alert(secondaryDomain);
@@ -129,7 +144,11 @@ if ($service['type'] != 'single') {
 										}
 										request.onError = function() {
 											var msg = '';
+											domainPassword.value = '';
 											switch(parseInt(this.getText("/response/error"))) {
+												case 9:
+													msg = "<?php echo _t('비밀번호가 일치하지 않습니다.');?>";
+													break;
 												case 1:
 													msg = "<?php echo _t('기본 블로그 도메인을 변경하지 못했습니다');?>";
 													break;
@@ -167,13 +186,19 @@ if ($service['type'] != 'single') {
 											}
 											alert(msg);
 										}
-										request.send("defaultDomain=" + newDefaultDomain + "&primaryDomain=" + encodeURIComponent(newPrimaryDomain) + "&secondaryDomain=" + encodeURIComponent(newSecondaryDomain));
+										request.send("defaultDomain=" + newDefaultDomain + "&primaryDomain=" + encodeURIComponent(newPrimaryDomain) + "&secondaryDomain=" + encodeURIComponent(newSecondaryDomain) + "&confirmativePassword=" + encodeURIComponent(domainPassword.value));
 									}
 <?php
 	} else if ($service['type'] == 'path') {
 ?>
 									newPathDomain = document.getElementById('multi-form').pathDomain.value;
 									if(pathDomain != newPathDomain) {
+										var domainPassword = document.getElementById('domainConfirmativePassword');	// Textcube-NG: 비밀번호 재확인(v3.149)
+										if (domainPassword.value == '') {
+											alert("<?php echo _t('비밀번호를 입력해 주십시오.');?>");
+											domainPassword.focus();
+											return;
+										}
 										var request = new HTTPRequest("POST", "<?php echo $blogURL;?>/owner/setting/domain/set/");
 										request.onSuccess = function() {
 											PM.showMessage("<?php echo _t('저장되었습니다');?>", "center", "bottom");
@@ -183,7 +208,11 @@ if ($service['type'] != 'single') {
 										}
 										request.onError = function() {
 											var msg = '';
+											domainPassword.value = '';
 											switch(parseInt(this.getText("/response/error"))) {
+												case 9:
+													msg = "<?php echo _t('비밀번호가 일치하지 않습니다.');?>";
+													break;
 												case 1:
 													msg = "<?php echo _t('블로그 주소를 변경하지 못했습니다');?>";
 													break;
@@ -217,7 +246,7 @@ if ($service['type'] != 'single') {
 											}
 											alert(msg);
 										}
-										request.send("defaultDomain=0&primaryDomain=" + encodeURIComponent(newPathDomain) + "&secondaryDomain=");
+										request.send("defaultDomain=0&primaryDomain=" + encodeURIComponent(newPathDomain) + "&secondaryDomain=&confirmativePassword=" + encodeURIComponent(domainPassword.value));
 									}
 
 <?php
@@ -245,7 +274,8 @@ if ($service['type'] != 'single') {
 								var publishWholeOnRSS     = "<?php echo $blog['publishWholeOnRSS'];?>";
 								var allowCommentGuestbook = <?php echo $blog['allowWriteDblCommentOnGuestbook'];?>;
 								var blogVisibility        = <?php echo $blog['visibility'];?>;
-								var frontPage             = <?php echo $blog['frontpage'];?>;
+								var tagsOnTagPage         = "<?php echo getTagsOnTagPage($blogid);?>";
+								var frontPage             = <?php echo json_encode((string)$blog['frontpage']);?>; // Textcube-NG: JS 문자열로 출력(r3-8)
 
 
 								function setFrontpage() {
@@ -311,7 +341,7 @@ if ($service['type'] != 'single') {
 
 									isAllowCommentGuestbook = document.getElementById('allowCommentGuestbook').checked ? 1 : 0;
 									if ( isAllowCommentGuestbook != allowCommentGuestbook) {
-										var request = new HTTPRequest("GET", "<?php echo $blogURL;?>/owner/setting/blog/guestbook/?comment="+isAllowCommentGuestbook+"&write=1");
+										var request = new HTTPRequest("POST", "<?php echo $blogURL;?>/owner/setting/blog/guestbook/");
 										request.onSuccess = function() {
 											allowCommentGuestbook = isAllowCommentGuestbook;
 											PM.showMessage("<?php echo _t('저장되었습니다');?>", "center", "bottom");
@@ -319,7 +349,21 @@ if ($service['type'] != 'single') {
 										request.onError = function() {
 											alert("<?php echo _t('실패했습니다.');?>");
 										}
-										request.send();
+										request.send("comment="+isAllowCommentGuestbook+"&write=1");
+									}
+
+									// Textcube-NG: 태그 목록 개수(v3.136) — 바뀐 경우에만 저장
+									var newTagsOnTagPage = document.getElementById('tagsOnTagPage').value;
+									if (newTagsOnTagPage != tagsOnTagPage) {
+										var requestTagPage = new HTTPRequest("POST", "<?php echo $blogURL;?>/owner/setting/blog/tagpage/");
+										requestTagPage.onSuccess = function() {
+											tagsOnTagPage = newTagsOnTagPage;
+											PM.showMessage("<?php echo _t('저장되었습니다');?>", "center", "bottom");
+										}
+										requestTagPage.onError = function() {
+											PM.showErrorMessage("<?php echo _t('태그 목록 개수를 변경할 수 없습니다.');?>", "center", "bottom");
+										}
+										requestTagPage.send("tagsOnTagPage=" + encodeURIComponent(newTagsOnTagPage));
 									}
 
 									var visibilityPostParams = {};
@@ -342,6 +386,8 @@ if($service['allowBlogVisibilitySetting']){
 									else acceptComments = 1;
 									if(document.getElementById('acceptTrackback').checked) acceptTrackbacks = 0;
 									else acceptTrackbacks = 1;
+									if(document.getElementById('acceptNotifiedComment').checked) acceptNotifiedComments = 0;
+									else acceptNotifiedComments = 1;
 									
 									var request2 = new HTTPRequest("POST", "<?php echo $blogURL;?>/owner/setting/blog/visibility/");
 									request2.onSuccess = function() {
@@ -353,7 +399,8 @@ if($service['allowBlogVisibilitySetting']){
 									visibilityPostParams = jQuery.extend({}, visibilityPostParams, {
 										'useiPhoneUI': newUseiPhoneUI,
 										'acceptComments': acceptComments,
-										'acceptTrackbacks': acceptTrackbacks
+										'acceptTrackbacks': acceptTrackbacks,
+										'acceptNotifiedComments': acceptNotifiedComments
 									});
 									request2.send(jQuery.param(visibilityPostParams));
 
@@ -382,7 +429,7 @@ if($service['allowBlogVisibilitySetting']){
 									errorType = "";
 
 									if (document.getElementById('language-form').timezone.value != timezone) {
-										var request = new HTTPRequest("GET", "<?php echo $blogURL;?>/owner/setting/blog/timezone?timezone=" + encodeURIComponent(document.getElementById('language-form').timezone.value));
+										var request = new HTTPRequest("POST", "<?php echo $blogURL;?>/owner/setting/blog/timezone");
 										request.onSuccess = function() {
 											timezone = document.getElementById('language-form').timezone.value;
 											PM.showMessage("<?php echo _t('저장되었습니다');?>", "center", "bottom");
@@ -393,13 +440,13 @@ if($service['allowBlogVisibilitySetting']){
 											else
 												errorType = "timezone";
 										}
-										request.send();
+										request.send("timezone=" + encodeURIComponent(document.getElementById('language-form').timezone.value));
 									}
 
 									if (document.getElementById('language-form').adminLanguage.value != language || document.getElementById('language-form').blogLanguage.value != skinLanguage) {
 										var needRefresh = false;
 										if (document.getElementById('language-form').adminLanguage.value != language) needRefresh = true;
-										var request = new HTTPRequest("GET", "<?php echo $blogURL;?>/owner/setting/blog/language?language=" + encodeURIComponent(document.getElementById('language-form').adminLanguage.value) + "&blogLanguage=" + encodeURIComponent(document.getElementById('language-form').blogLanguage.value));
+										var request = new HTTPRequest("POST", "<?php echo $blogURL;?>/owner/setting/blog/language");
 										request.onSuccess = function() {
 											language = document.getElementById('language-form').adminLanguage.value;
 											skinLanguage = document.getElementById('language-form').blogLanguage.value;
@@ -411,7 +458,7 @@ if($service['allowBlogVisibilitySetting']){
 										request.onError = function() {
 											errorType = "language";
 										}
-										request.send();
+										request.send("language=" + encodeURIComponent(document.getElementById('language-form').adminLanguage.value) + "&blogLanguage=" + encodeURIComponent(document.getElementById('language-form').blogLanguage.value));
 									}
 									
 									if (errorType == "language")
@@ -477,6 +524,10 @@ if ($service['type'] != 'single') {
 <?php
 	}
 ?>
+										<dl id="blog-address-password-line" class="line">
+											<dt><label for="domainConfirmativePassword"><?php echo _t('현재 비밀번호');?></label></dt>
+											<dd><input type="password" id="domainConfirmativePassword" class="input-text" value="" /></dd>
+										</dl>
 									</fieldset>
 									<div class="button-box">
 										<input type="submit" class="save-button input-button" value="<?php echo _t('저장하기');?>" onclick="setDomains(); return false;" />
@@ -501,18 +552,25 @@ if ($service['type'] != 'single') {
 												var oTag = new Tag(document.getElementById("blog-tag"), "<?php echo $blog['language'];?>", <?php echo isset($service['disableEolinSuggestion']) && $service['disableEolinSuggestion'] ? 'true' : 'false';?>);
 												oTag.setInputClassName("input-tag");
 <?php
+		/* [보안] Textcube-NG: 전문가 태그를 <script> 안의 JS 문자열로 출력할 때 addslashes 대신 json_encode(JSON_HEX_*) — 글 편집 화면 태그·지역(v3.135)과 같은 방식.
+		   addslashes 는 '</script>'·줄바꿈을 막지 못해, 저장된 태그로 설정 화면에 스크립트를 넣거나 화면 스크립트를 깨뜨릴 수 있었다.
+		   <, >, &, ', " 는 \uXXXX 로 바뀐다(PHP 7.2+)(r3-7, 503-8) */
+		$tcJsString = function ($value) {
+			$s = json_encode((string)$value, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+			return ($s === false) ? '""' : $s;
+		};
 		$tags = array();
 		$blogTags = getBlogTags($blogid);
 		if(!empty($blogTags)) {
 			$blogTags = explode(',',$blogTags);
 			foreach ($blogTags as $tag) {
 				array_push($tags, $tag);
-				echo 'oTag.setValue("' . addslashes($tag) . '");';
+				echo 'oTag.setValue(' . $tcJsString($tag) . ');';
 			}
 		}
 ?>
 											} catch(e) {
-												document.getElementById("tag").innerHTML = '<input type="text" class="input-text" name="blog-tag" value="<?php echo addslashes(str_replace('"', '&quot;', implode(', ', $tags)));?>" /><br /><?php echo _t('태그 입력 스크립트를 사용할 수 없습니다. 콤마(,)로 구분된 태그를 직접 입력해 주십시오.(예: 텍스트큐브, BLOG, 테스트)');?>';
+												document.getElementById("tag").innerHTML = '<input type="text" class="input-text" name="blog-tag" value="' + <?php echo $tcJsString(htmlspecialchars(implode(', ', $tags), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'));?> + '" /><br /><?php echo _t('태그 입력 스크립트를 사용할 수 없습니다. 콤마(,)로 구분된 태그를 직접 입력해 주십시오.(예: 텍스트큐브, BLOG, 테스트)');?>';
 											}
 										//]]>
 									</script> 									
@@ -738,6 +796,31 @@ for ($i = 5; $i <= 30; $i += 5) {
 												<input type="radio" id="useTSlogan0" class="radio" name="useTSlogan"<?php echo ($blog['useSloganOnTag'] ? '' : ' checked="checked"');?> /><label for="useTSlogan0"><span class="text"><?php echo _t('숫자를 사용합니다.');?> <samp><?php echo _f('(예: %1/tag/101)', link_cut(getBlogURL()));?></samp></span></label>
 											</dd>
 										</dl>
+										<dl id="tag-page-count-line" class="line">
+											<dt><span class="label"><?php echo _t('태그 목록 개수');?></span></dt>
+											<dd>
+												<?php echo getArrayValue(explode('%1', _t('태그 목록 페이지와 태그 관리 화면에 태그를 최대 %1 개까지 표시합니다.')), 0);?>
+												<select id="tagsOnTagPage" name="tagsOnTagPage">
+<?php
+/* Textcube-NG: 태그 목록 개수(v3.136) — 2000(기본)·5000·10000·20000·50000 가운데 서비스 상한 이하인 값, 서비스 상한, 현재 값 */
+$tagsOnTagPageMax = getMaxTagsOnTagPage();
+$tagsOnTagPageCurrent = getTagsOnTagPage($blogid);
+$tagsOnTagPageOptions = array($tagsOnTagPageMax, $tagsOnTagPageCurrent);
+foreach (array(2000, 5000, 10000, 20000, 50000) as $i) {
+	if ($i <= $tagsOnTagPageMax)
+		$tagsOnTagPageOptions[] = $i;
+}
+$tagsOnTagPageOptions = array_unique($tagsOnTagPageOptions);
+sort($tagsOnTagPageOptions);
+foreach ($tagsOnTagPageOptions as $i) {
+?>
+													<option value="<?php echo $i;?>"<?php echo ($i == $tagsOnTagPageCurrent ? ' selected="selected"' : '');?>><?php echo $i;?></option>
+<?php
+}
+?>
+												</select><?php echo getArrayValue(explode('%1', _t('태그 목록 페이지와 태그 관리 화면에 태그를 최대 %1 개까지 표시합니다.')), 1);?>
+											</dd>
+										</dl>
 <?php
 if($service['allowBlogVisibilitySetting']){
 ?>
@@ -777,18 +860,20 @@ if( $openidlogodisplay ) {
 	$openidlogodisplay = "";
 }
 
-$acceptComments = Setting::getBlogSettingGlobal( "acceptComments", 0 );
+$acceptComments = Setting::getBlogSettingGlobal( "acceptComments", 1 );	// Textcube-NG: 설정 행이 없을 때의 기본값을 화면(library/view/view.php)·설치 값과 같은 1(허용)로 맞춘다(원본 0, r3-15)
 if( $acceptComments ) {
 	$acceptComments = "";
 } else {
 	$acceptComments = "checked='checked'";
 }
-$acceptTrackbacks = Setting::getBlogSettingGlobal( "acceptTrackbacks", 0 );
+$acceptTrackbacks = Setting::getBlogSettingGlobal( "acceptTrackbacks", 1 );	// Textcube-NG: 설정 행이 없을 때의 기본값을 화면(library/view/view.php)·설치 값과 같은 1(허용)로 맞춘다(원본 0, r3-15)
 if( $acceptTrackbacks ) {
 	$acceptTrackbacks = "";
 } else {
 	$acceptTrackbacks = "checked='checked'";
 }
+// Textcube-NG: 댓글 알리미 받기(acceptNotifiedComments, 기본 1 = 받음). 체크하면 받지 않는다(r3-3)
+$acceptNotifiedComments = Setting::getBlogSettingGlobal("acceptNotifiedComments", 1) ? "" : "checked='checked'";
 
 ?>
 										<dl id="comment-authority-line" class="line">
@@ -809,7 +894,10 @@ if( $acceptTrackbacks ) {
 												<label for="acceptComment"><?php echo _t('블로그의 모든 글에 댓글및 방명록을 달 수 없도록 합니다.'); ?></label>
 												<br />
 												<input id="acceptTrackback" type="checkbox" name="acceptTrackbacks" <?php echo $acceptTrackbacks;?> />
-												<label for="acceptTrackbacks"><?php echo _t('블로그의 모든 글에 트랙백 및 핑백을 보낼 수 없도록 합니다.') ?></label>
+												<label for="acceptTrackback"><?php echo _t('블로그의 모든 글에 트랙백 및 핑백을 보낼 수 없도록 합니다.') ?></label>
+												<br />
+												<input id="acceptNotifiedComment" type="checkbox" name="acceptNotifiedComments" <?php echo $acceptNotifiedComments;?> />
+												<label for="acceptNotifiedComment"><?php echo _t('다른 블로그에서 보내는 댓글 알리미를 받지 않습니다.'); ?></label>
 											</dd>
 										</dl>
 																				

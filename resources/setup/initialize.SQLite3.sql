@@ -111,7 +111,7 @@ CREATE TABLE [##_dbPrefix_##]CommentsNotifiedQueue (
   written integer NOT NULL default 0,
   PRIMARY KEY  (blogid, id)
 ) [##_charset_##];
-CREATE UNIQUE INDEX [##_dbPrefix_##]CommentsNotifiedQueue_commentid_idx ON [##_dbPrefix_##]CommentsNotifiedQueue (commentid);
+CREATE UNIQUE INDEX [##_dbPrefix_##]CommentsNotifiedQueue_commentid_idx ON [##_dbPrefix_##]CommentsNotifiedQueue (blogid, commentid);
 CREATE TABLE [##_dbPrefix_##]CommentsNotifiedSiteInfo (
   id integer NOT NULL,
   title varchar(255) NOT NULL default '',
@@ -152,7 +152,7 @@ CREATE TABLE [##_dbPrefix_##]Entries (
   comments integer NOT NULL default 0,
   trackbacks integer NOT NULL default 0,
   pingbacks integer NOT NULL default 0,
-  PRIMARY KEY (blogid, id, draft, category, published)
+  PRIMARY KEY (blogid, id, draft)
 ) [##_charset_##];
 CREATE INDEX [##_dbPrefix_##]Entries_visibility_idx ON [##_dbPrefix_##]Entries (visibility);
 CREATE INDEX [##_dbPrefix_##]Entries_userid_idx ON [##_dbPrefix_##]Entries (userid);
@@ -355,6 +355,7 @@ CREATE TABLE [##_dbPrefix_##]Sessions (
   PRIMARY KEY  (id,address)
 ) [##_charset_##];
 CREATE INDEX [##_dbPrefix_##]Sessions_updated_idx ON [##_dbPrefix_##]Sessions (updated);
+CREATE INDEX [##_dbPrefix_##]Sessions_address_idx ON [##_dbPrefix_##]Sessions (address);
 CREATE TABLE [##_dbPrefix_##]SkinSettings (
   blogid integer NOT NULL default 0,
   name varchar(32) NOT NULL default '',
@@ -421,7 +422,7 @@ CREATE INDEX [##_dbPrefix_##]TrashRemoteResponses_blogid_isfiltered_written_idx 
 CREATE TABLE [##_dbPrefix_##]Users (
   userid integer NOT NULL default 1,
   loginid varchar(64) NOT NULL default '',
-  password varchar(32) default NULL,
+  password varchar(255) default NULL,
   name varchar(32) NOT NULL default '',
   created integer NOT NULL default 0,
   lastlogin integer NOT NULL default 0,

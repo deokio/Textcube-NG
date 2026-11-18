@@ -7,7 +7,7 @@
 			<div id="layout-footer">
 				<div id="login-information"><?php echo _f('%1 로 로그인','<strong>'.htmlspecialchars($writer).'</strong>');?></div>
 				<address><?php echo TEXTCUBE_COPYRIGHT;?></address>
-				<div id="version"><?php echo TEXTCUBE_NAME;?> <?php echo TEXTCUBE_VERSION;?></div>
+				<div id="version"><?php echo TEXTCUBE_NAME;?> <?php echo TEXTCUBE_VERSION;?> (NG <?php echo TEXTCUBE_NG_VERSION;?>)</div>
 			</div>
 		</div>
 	</div>
@@ -130,7 +130,9 @@ if (Acl::check('group.creators')) {
 }
 ?>
 					case 191: //?
-						MOOdalBox.open("<?php echo $defaultURL."/owner/help/?subject=".$blogMenu['topMenu'].'_'.$blogMenu['contentMenu']."&lang=".$blog['language'];?>","","500 300");
+						// Textcube-NG: Shift+/(?) 일 때만 연다(/ 단독은 무시). MOOdalBox 를 싣지 않는 화면(글쓰기·수정)에서는 열지 않는다(ReferenceError 방지)(v3.192)
+						if (oEvent.shiftKey && typeof MOOdalBox != 'undefined')
+							MOOdalBox.open("<?php echo $defaultURL."/owner/help/?subject=".$blogMenu['topMenu'].'_'.$blogMenu['contentMenu']."&lang=".$blog['language'];?>","","500 300");
 						break;
 					default:
 				}

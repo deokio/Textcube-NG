@@ -2,6 +2,14 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 $IV = array(
 	'GET' => array(
 		'category' => array('string', 'mandatory' => false),
@@ -18,6 +26,9 @@ $IV = array(
 require ROOT . '/library/preprocessor.php';
 require ROOT . '/interface/common/owner/header.php';
 //fireEvent('Cron10m',null,null);
+// Textcube-NG: category 는 아래 인라인 JS(getMoreContent·writeLine)에 그대로 출력되므로 public/private 만 받는다(updateCategory 와 같은 값, 그 밖은 '전체') — 반사 XSS 방지(v3.163)
+if(isset($_GET['category']) && !in_array($_GET['category'], array('public','private'), true)) unset($_GET['category']);
+if(isset($_POST['category']) && !in_array($_POST['category'], array('public','private'), true)) unset($_POST['category']);
 if(isset($_GET['category'])) $_POST['category'] = $_GET['category'];
 
 if(isset($_POST['search'])) $searchKeyword = $_POST['search'];
@@ -147,15 +158,20 @@ EOS
 								return true;							
 							}
 							
+							var lineWriting = false;	// Textcube-NG: 저장 중 다시 누르면 무시 — 진행 메시지 두 번 표시·같은 초 저장 실패 방지(v3.163)
 							function writeLine() {
+								if(lineWriting) return false;
 								contentForm = document.getElementById("line-write");
 								content = contentForm.value;
-								if(content.length > 511) {
-									alert("<php echo _t('작성된 라인의 길이가 너무 깁니다.');?>");
+								// Textcube-NG: 서버(Line::validate)는 UTF-8 512바이트로 자르므로 글자 수가 아닌 UTF-8 바이트 수로 셈(v3.163)
+								if(encodeURIComponent(content).replace(/%[0-9A-F]{2}/g, "x").length > 511) {
+									alert("<?php echo _t('작성된 라인의 길이가 너무 깁니다.');?>");
 									return false;
 								}
+								lineWriting = true;
 								var request = new HTTPRequest("POST","<?php echo $blogURL;?>/line/");
 								request.onSuccess = function () {
+									lineWriting = false;
 									PM.removeRequest(this);
 									PM.showMessage("<?php echo _t('새 라인을 저장했습니다.');?>", "center", "bottom");
 									getMoreContent(1,1,"top");
@@ -163,11 +179,12 @@ EOS
 									Icontent.value = '<?php echo _t('내용을 입력하세요');?>';
 								}
 								request.onError = function () {
+									lineWriting = false;
 									PM.removeRequest(this);
 									alert("<?php echo _t('라인을 저장할 수 없었습니다.');?>");
 								}
 								PM.addRequest(request, "<?php echo _t('라인을 저장하고 있습니다.');?>");
-								request.send("content="+content+"&category=<?php echo $conditions['category'];?>&mode=ajax");				
+								request.send("content="+encodeURIComponent(content)+"&category=<?php echo isset($conditions['category']) ? $conditions['category'] : '';?>&mode=ajax");				
 							}
 							//]]>
 						</script>

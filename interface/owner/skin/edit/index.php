@@ -45,8 +45,20 @@ require ROOT . '/interface/common/owner/header.php';
 							//<![CDATA[
 								var skinHTMLSaved = true;
 								var skinStyleSaved = true;
+								// PHP port(Textcube-NG): r3-12 저장 요청이 끝날 때까지(성공·실패) 저장 버튼(input.save-button)을 막고 다시 저장하지 않는다. 저장 버튼을 연타해 저장과
+								// 편집기 전용 CSS 다시 만들기가 겹치지 않게 한다(사용자 결정 11-08 ②)
+								var skinSaveBusy = false;
+								function skinSaveLock(on) {
+									var list = document.querySelectorAll('input.save-button'), i;
+									skinSaveBusy = on;
+									for (i = 0; i < list.length; i++) list[i].disabled = on;
+								}
 								
 								function setSkin(mode) {
+									if (skinSaveBusy) {	// PHP port(Textcube-NG): r3-12 앞 저장이 끝나지 않음(false 를 돌려줌)
+										alert('<?php echo _t('저장하고 있습니다. 잠시 뒤 다시 시도해 주십시오.');?>');
+										return false;
+									}
 									var skin = document.getElementById(mode);
 									var file = document.getElementById(mode + 'FileName');
 									var skinData = '';
@@ -60,11 +72,13 @@ require ROOT . '/interface/common/owner/header.php';
 												saveSkinCode(mode,skinData,file);
 											}
 											request.onError = function() {
+												skinSaveLock(false);
 												if (this.getText("/response/msg"))
 													alert(this.getText("/response/msg"));
 												else
 													alert('<?php echo _t('실패했습니다.');?>');
 											}
+											skinSaveLock(true);
 											request.send('skinCode='+encodeURIComponent(skinCode)
 												+'&currentTag='+encodeURIComponent(currentTag)
 												+'&currentCode='+encodeURIComponent(currentCode)
@@ -78,6 +92,7 @@ require ROOT . '/interface/common/owner/header.php';
 								function saveSkinCode(mode,skinData,file) {
 									var request = new HTTPRequest("POST", "<?php echo $blogURL;?>/owner/skin/edit/skin/");
 									request.onSuccess = function() {
+										skinSaveLock(false);
 										PM.showMessage("<?php echo _t('저장되었습니다');?>", "center", "bottom");
 										
 										if (mode == 'skin') {
@@ -90,11 +105,13 @@ require ROOT . '/interface/common/owner/header.php';
 										}
 									}
 									request.onError = function() {
+										skinSaveLock(false);
 										if (this.getText("/response/msg"))
 											alert(this.getText("/response/msg"));
 										else
 											alert('<?php echo _t('실패했습니다.');?>');
 									}
+									skinSaveLock(true);
 									request.send('mode='+mode+'&body='+encodeURIComponent(skinData)+'&file='+ file.value);									
 								}
 								var currentTag = 'all';
@@ -146,8 +163,11 @@ if (count($styleFileList) > 0 && !empty($currentStyleFile) && file_exists(__TEXT
 								documentIcons['css_on'].src = '<?php echo $serviceURL . $adminSkinSetting['skin'];?>/image/img_css_document_on.gif';
 								
 								function changeCSSFile(obj, file) {
-									if (skinStyleSaved == false && confirm("<?php echo _t('변경된 스타일이 아직 저장되지 않았습니다.\n저장하시겠습니까?');?>"))
-										setSkin('style');
+									if (skinStyleSaved == false && confirm("<?php echo _t('변경된 스타일이 아직 저장되지 않았습니다.\n저장하시겠습니까?');?>")) {
+										// PHP port(Textcube-NG): r3-12 앞 저장이 끝나지 않아 저장하지 못했으면 파일을 바꾸지 않는다(바꾸면 고친 내용을 잃음, 사용자 결정 11-08 ②)
+										if (setSkin('style') === false)
+											return;
+									}
 									
 									var request = new HTTPRequest("POST", "<?php echo $blogURL;?>/owner/skin/edit/loadCSS/");
 									request.onSuccess = function() {

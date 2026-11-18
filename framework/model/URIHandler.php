@@ -2,6 +2,14 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 
 class URIError extends Exception {};
 
@@ -21,6 +29,18 @@ final class Model_URIHandler extends Singleton
 
 	public function URIParser() { $this->__URIParser();}
 	public function VariableParser() { $this->__URIvariableParser();}
+	// Textcube-NG: 이 요청이 https 인지 — 신뢰 프록시 플러그인 판정(proxy.scheme), config.php trustedProxies 접속의 X-Forwarded-Proto,
+	// 그 밖에는 서버 변수(HTTPS·REQUEST_SCHEME)만 본다. VariableParser 의 uri.service 스킴 판정(v3.151)과 HSTS(preprocessor)가 함께 쓴다(r3-20)
+	public function isSecureRequest() {
+		$xfp = '';
+		if ($this->context->getProperty('proxy.trusted') === true)
+			$xfp = (string)$this->context->getProperty('proxy.scheme');
+		else if (defined('__TEXTCUBE_TRUSTED_PEER__') && isset($_SERVER['HTTP_X_FORWARDED_PROTO']))
+			$xfp = strtolower(trim($_SERVER['HTTP_X_FORWARDED_PROTO']));
+		if ($xfp === 'https' || $xfp === 'http') return $xfp === 'https';
+		if (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') return true;
+		return isset($_SERVER['REQUEST_SCHEME']) && $_SERVER['REQUEST_SCHEME'] === 'https';
+	}
 
 	private function __URIInterpreter() {
 		$dispatcher = Dispatcher::getInstance();
@@ -42,6 +62,27 @@ final class Model_URIHandler extends Singleton
 				$url = $matches[3];
 			else
 				Respond::NotFoundPage();
+		}
+		// Textcube-NG: Host 헤더 검사 — single·path 형식에서 Host 가 domain·hostAliases 와 다르면 hostMismatchBehavior 에 따라 '404' 는
+		// 찾을 수 없음, 'redirect' 는 GET·HEAD 를 domain 주소로 302(그 밖의 요청은 지금처럼 처리). '' 는 지금처럼 처리한다(v3.205)
+		$hostMismatchBehavior = $this->context->getProperty('hostMismatchBehavior');
+		if (($hostMismatchBehavior === 'redirect' || $hostMismatchBehavior === '404')
+			&& ($this->context->getProperty('type') == 'single' || $this->context->getProperty('type') == 'path') && (string)$this->context->getProperty('domain') !== '') {
+			$hostAliases = $this->context->getProperty('hostAliases');
+			if (!is_array($hostAliases)) $hostAliases = array();
+			$requestPort = (string)$this->context->getProperty('port');
+			if ($_SERVER['HTTP_HOST'] !== (string)$this->context->getProperty('domain')
+				&& !in_array($_SERVER['HTTP_HOST'], $hostAliases, true)
+				&& !in_array($_SERVER['HTTP_HOST'] . ($requestPort !== '' ? ':' . $requestPort : ''), $hostAliases, true)) {
+				if ($hostMismatchBehavior === '404') Respond::NotFoundPage();
+				$requestMethod = isset($_SERVER['REQUEST_METHOD']) ? strtoupper((string)$_SERVER['REQUEST_METHOD']) : '';
+				if ($requestMethod === 'GET' || $requestMethod === 'HEAD') {
+					$requestURI = isset($_SERVER['REQUEST_URI']) ? (string)$_SERVER['REQUEST_URI'] : '';
+					if ($requestURI === '' || $requestURI[0] !== '/') $requestURI = $this->context->getProperty('path') . '/';
+					header('Location: ' . ($this->context->getProperty('service.useSSL', false) ? 'https://' : 'http://') . $this->context->getProperty('domain') . ($requestPort !== '' ? ':' . $requestPort : '') . $requestURI, true, 302);
+					exit;
+				}
+			}
 		}
 		if ($this->context->getProperty('type') == 'single') {
 			$this->blogid = $defaultblogid;
@@ -65,7 +106,8 @@ final class Model_URIHandler extends Singleton
 					if ($this->blogid === null) $this->blogid = $defaultblogid;
 				} else {
 					$domain = explode('.', $_SERVER['HTTP_HOST'], 2);
-					if ($domain[1] == $this->context->getProperty('domain')) {
+					// Textcube-NG: 점이 없는 Host(빈 값 포함)는 $domain[1] 이 없어 PHP 8 경고가 났다. 원본과 같은 null 비교(v3.140)
+					if ((isset($domain[1]) ? $domain[1] : null) == $this->context->getProperty('domain')) {
 						$this->blogid = $this->__getBlogIdByName($domain[0]);
 						if ($this->blogid === null)
 							$this->blogid = $this->__getBlogIdBySecondaryDomain($_SERVER['HTTP_HOST']);
@@ -112,6 +154,9 @@ final class Model_URIHandler extends Singleton
 						exit;
 					}
 					// Priority 4: fallback — serve default blog at root (original behavior)
+					$this->blogid = $defaultblogid;
+				} else if (isset($this->uri['interfacePath']) && $this->uri['interfacePath'] === 'interface/freeSlogan.php' && Dispatcher::isHostRootFreeSloganFile(isset($this->uri['input']) ? $this->uri['input'] : null)) {
+					// Textcube-NG: path 모드 호스트 루트의 robots.txt·llms.txt(Dispatcher 가 등록 페이지 처리기로 넘긴 요청)는 블로그 이름이 없으므로 기본 블로그의 등록 페이지로 본다(r3-5)
 					$this->blogid = $defaultblogid;
 				} else if (preg_match('@^/+([^/]+)(.*)$@', $url, $matches)) {
 					$this->blogid = $this->__getBlogIdByName(strtok($matches[1],'?'));
@@ -189,16 +234,9 @@ final class Model_URIHandler extends Singleton
 			$this->uri['service'] = $this->context->getProperty('service.serviceURL');
 		}
 		if (!isset($this->uri['service'])) {
-			$xfp = isset($_SERVER['HTTP_X_FORWARDED_PROTO']) ? strtolower(trim($_SERVER['HTTP_X_FORWARDED_PROTO'])) : '';
-			if ($xfp === 'https' || $xfp === 'http') {
-				$proto = $xfp;
-			} elseif (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
-				$proto = 'https';
-			} elseif (isset($_SERVER['REQUEST_SCHEME']) && $_SERVER['REQUEST_SCHEME'] === 'https') {
-				$proto = 'https';
-			} else {
-				$proto = 'http';
-			}
+			/* [보안] X-Forwarded-Proto 를 모든 연결에서 믿어 방문자가 서비스 주소의 스킴을 바꿀 수 있었다 → 신뢰 프록시 플러그인이
+			   신뢰한 연결은 그 판정(proxy.scheme), config.php trustedProxies 에 속한 연결은 이 헤더, 그 밖의 연결은 무시 (v3.151) */
+			$proto = ($this->context->getProperty('service.useSSL', false) || $this->isSecureRequest()) ? 'https' : 'http';	// Textcube-NG: useSSL=true 면 https 고정(원본 130-132 행과 같음, r3-35), 아니면 isSecureRequest() 판정(HSTS 와 같은 규칙, r3-20)
 			$this->uri['service'] = $proto . '://' . $_SERVER['HTTP_HOST'] . (!is_null($this->context->getProperty('service.port')) ? ':' . $this->context->getProperty('service.port') : '') . $this->context->getProperty('service.path');
 		}
 		$this->context->useNamespace('service');
@@ -256,6 +294,21 @@ final class Model_URIHandler extends Singleton
 				$this->uri['service'] = $canonicalProto . $canonicalHost . $portStr . $this->context->getProperty('service.path');
 			}
 		}
+		// Textcube-NG: Host 헤더 검사 — 요청 Host·포트가 설정(domain·블로그 주소·hostAliases, config.php 포트)과 같은지(uri.isRegisteredOrigin).
+		// 다르면 페이지 캐시를 쓰지 않는다(Needlworks.Cache.PageCache)(v3.205)
+		$hostAliases = $this->context->getProperty('hostAliases');
+		if (!is_array($hostAliases)) $hostAliases = array();
+		$serviceDomain = (string)$this->context->getProperty('domain');
+		if ($this->context->getProperty('service.type') == 'domain')
+			$isRegisteredHost = empty($this->uri['isHostMismatch']) && ($_SERVER['HTTP_HOST'] === $serviceDomain
+				|| (isset($blog['name']) && $_SERVER['HTTP_HOST'] === $blog['name'] . '.' . $serviceDomain)
+				|| (!empty($blog['secondaryDomain']) && $_SERVER['HTTP_HOST'] === $blog['secondaryDomain']));
+		else
+			$isRegisteredHost = ($_SERVER['HTTP_HOST'] === $serviceDomain);
+		$isRegisteredHost = $isRegisteredHost || in_array($_SERVER['HTTP_HOST'], $hostAliases, true);
+		$requestPort = (string)$this->context->getProperty('port');
+		$this->uri['isRegisteredOrigin'] = ($isRegisteredHost && $requestPort === (string)$this->context->getProperty('configuredPort'))
+			|| in_array($_SERVER['HTTP_HOST'] . ($requestPort !== '' ? ':' . $requestPort : ''), $hostAliases, true);
 		$this->uri['blog'] = $this->uri['path'].$this->__getFancyURLpostfix();
 		$this->uri['folder'] = rtrim($this->uri['blog'] . $suri['directive'], '/');
 		$this->uri['permalink'] = rtrim($this->uri['default'].rtrim($this->suri['directive'],'/').(empty($this->suri['id']) ? '/'.URL::encode($this->suri['value']) : '/'.$this->suri['id']),'/');
@@ -297,7 +350,12 @@ final class Model_URIHandler extends Singleton
 	}
 
 	private function __getBlogIdBySecondaryDomain($domain) {
- 		return POD::queryCell("SELECT blogid FROM {$this->context->getProperty('database.prefix')}BlogSettings WHERE name = 'secondaryDomain' AND (value = '$domain' OR  value = '" . (substr($domain, 0, 4) == 'www.' ? substr($domain, 4) : 'www.' . $domain) ."')");
+		// Host 헤더 값 → escape 필수. setQualifierSet 은 같은 컬럼을 컬럼명 키로 덮어쓰므로 hasoneof(IN) 사용
+		$query = DBModel::getInstance();
+		$query->reset('BlogSettings');
+		$query->setQualifier('name', 'equals', 'secondaryDomain', true);
+		$query->setQualifier('value', 'hasoneof', array($domain, (substr($domain, 0, 4) == 'www.' ? substr($domain, 4) : 'www.' . $domain)), true);
+		return $query->getCell('blogid');
 	}
 
 	private function __getFancyURLpostfix() {

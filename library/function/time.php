@@ -2,8 +2,19 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 
 function checkPeriod($period) {
+	// Textcube-NG: PHP 8.0 부터 is_numeric() 이 끝 공백("202 ")도 숫자로 받는다(Saner numeric strings) — 원본(PHP 5~7.4)처럼 끝 공백이 있으면 false(v3.182)
+	if (is_string($period) && rtrim($period, " \t\n\r\v\f") !== $period)
+		return false;
 	if (is_numeric($period)) {
 		$year = 0;
 		$month = 1;
@@ -36,10 +47,13 @@ function timeInterval($start, $current) {
 	} else if (31104000 <= $interval) {
 		return ceil($interval / 60 / 60 / 24 / 30 / 12) . _text('년');
 	}
-	return ceil($interval / 60 / 60 / 24 / 30 / 12 / 100) . _test('세기');
+	return ceil($interval / 60 / 60 / 24 / 30 / 12 / 100) . _text('세기');
 }
 
 function getTimeFromPeriod($period) {
+	// Textcube-NG: PHP 8.0 부터 is_numeric() 이 끝 공백("202 ")도 숫자로 받는다(Saner numeric strings) — 원본(PHP 5~7.4)처럼 끝 공백이 있으면 false(v3.182)
+	if (is_string($period) && rtrim($period, " \t\n\r\v\f") !== $period)
+		return false;
 	if (is_numeric($period)) {
 		$year = 0;
 		$month = 1;

@@ -2,6 +2,14 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 require ROOT . '/library/preprocessor.php';
 $backup = null;
 if (file_exists(__TEXTCUBE_CACHE_DIR__."/backup/$blogid.xml.gz"))
@@ -15,11 +23,35 @@ if (isset($checkFunction)) unset($checkFunction);
 ?>
 						<script type="text/javascript">
 							//<![CDATA[
+								function tcCheckupNotice(msg, url, label, note) {	// Textcube-NG: 점검 안내를 브라우저 confirm 대신 페이지 위 안내 줄로 보인다(r3-16, R-395)
+									var bar = document.getElementById("tc-checkup-notice");
+									if (!bar) {
+										bar = document.createElement("div");
+										bar.id = "tc-checkup-notice";
+										bar.setAttribute("role", "alert");
+										bar.style.cssText = "position:relative;z-index:1000;padding:8px 12px;background:#fff8d6;border-bottom:1px solid #e0c96a;color:#333;font-size:12px;line-height:1.6;text-align:center;";
+										bar.appendChild(document.createElement("span"));
+										var go = document.createElement("a");
+										go.style.cssText = "margin-left:10px;font-weight:bold;";
+										bar.appendChild(go);
+										var later = document.createElement("button");
+										later.type = "button";
+										later.style.cssText = "margin-left:8px;";
+										later.appendChild(document.createTextNode("<?php echo _t('나중에');?>"));
+										later.onclick = function () { bar.style.display = "none"; };
+										bar.appendChild(later);
+										document.body.insertBefore(bar, document.body.firstChild);
+									}
+									bar.childNodes[0].textContent = note ? msg + " " + note : msg;
+									bar.childNodes[1].href = url;
+									bar.childNodes[1].textContent = label;
+									bar.style.display = "";
+								}
 								function checkForceTextcubeVersion() {
-									if (confirm("<?php echo _t('텍스트큐브 시스템 점검이 필요합니다. 지금 점검하시겠습니까?');?>"))
-										window.location.href = "<?php echo $blogURL;?>/checkup";
-									else
-										alert("<?php echo _t('점검 없이 이 기능을 사용할 수 없습니다.');?>");
+									tcCheckupNotice("<?php echo _t('텍스트큐브 시스템 점검이 필요합니다. 지금 점검하시겠습니까?');?>", "<?php echo $blogURL;?>/checkup", "<?php echo _t('지금 점검');?>", "<?php echo _t('점검 없이 이 기능을 사용할 수 없습니다.');?>");	// Textcube-NG: confirm·alert 대신 안내 줄(r3-16, R-395)
+									var tcBar = document.getElementById("tc-checkup-notice");	// 가져오기 버튼은 본문 중간에 있으므로 맨 위 안내 줄이 보이게 한다(리뷰 ①)
+									if (tcBar && tcBar.scrollIntoView) tcBar.scrollIntoView(); else window.scrollTo(0, 0);
+									return false;
 								}
 							//]]>
 						</script>
@@ -31,21 +63,19 @@ if (!file_exists(__TEXTCUBE_CACHE_DIR__.'/CHECKUP')) {
 							//<![CDATA[
 								window.addEventListener("load", checkTextcubeVersion, false);
 								function checkTextcubeVersion() {
-									if (confirm("<?php echo _t('버전업 체크를 위한 파일을 생성합니다. 지금 생성하시겠습니까?');?>"))
-										window.location.href = "<?php echo $blogURL;?>/checkup";
+									tcCheckupNotice("<?php echo _t('버전업 체크를 위한 파일을 생성합니다. 지금 생성하시겠습니까?');?>", "<?php echo $blogURL;?>/checkup", "<?php echo _t('지금 생성');?>");	// Textcube-NG: confirm 대신 안내 줄(r3-16, R-395)
 								}
 							//]]>
 						</script>
 <?php
 	$checkFunction = 'checkForceTextcubeVersion();';
-} else if (file_get_contents(__TEXTCUBE_CACHE_DIR__.'/CHECKUP') != TEXTCUBE_VERSION) {
+} else if (!Checkup::isCurrent()) {	// PHP port: NG 점검 표시(2행) 포함 비교(Checkup, Textcube.Core.php)
 ?>
 						<script type="text/javascript">
 							//<![CDATA[
 								window.addEventListener("load", checkTextcubeVersion, false);
 								function checkTextcubeVersion() {
-									if (confirm("<?php echo _t('텍스트큐브 시스템 점검이 필요합니다. 지금 점검하시겠습니까?');?>"))
-										window.location.href = "<?php echo $blogURL;?>/checkup";
+									tcCheckupNotice("<?php echo _t('텍스트큐브 시스템 점검이 필요합니다. 지금 점검하시겠습니까?');?>", "<?php echo $blogURL;?>/checkup", "<?php echo _t('지금 점검');?>");	// Textcube-NG: confirm 대신 안내 줄(r3-16, R-395)
 								}
 							//]]>
 						</script>
@@ -123,7 +153,7 @@ if (false) forceCheckBlog('');
 								}
 								
 								function importData() {
-									if(confirm("<?php echo _t('일반적으로 복원시 기존의 데이터를 덮어씁니다. \n덮어쓰지 않고 백업파일을 추가하기 위해서는 백업파일을 열어 migrational=false 를 migrational=true로 바꾸셔야 합니다. 확인하신 후에 진행하시기 바랍니다.\n계속 하시겠습니까?');?>")!=1) return null;
+									tcConfirm("<?php echo _t('일반적으로 복원시 기존의 데이터를 덮어씁니다. \n덮어쓰지 않고 백업파일을 추가하기 위해서는 백업파일을 열어 migrational=false 를 migrational=true로 바꾸셔야 합니다. 확인하신 후에 진행하시기 바랍니다.\n계속 하시겠습니까?');?>", function () {	// Textcube-NG: 확인창을 페이지 위 안내 줄의 [확인]/[취소]로 바꿈(r3-17, R-396)
 									
 									var dataImporter = document.getElementById("dataImporter");
 									if (document.getElementById("importFromUploaded").checked) {
@@ -149,6 +179,8 @@ if (false) forceCheckBlog('');
 									document.getElementById("progressText").innerHTML = '<?php echo _t('백업파일을 올리고 있습니다.');?>';
 									PM.showPanel("progressDialog");
 									dataImporter.submit();
+									});
+									return null;
 								}
 								
 								function removeData() {
@@ -202,7 +234,7 @@ if (false) forceCheckBlog('');
 								</p>
 							</div>
 							
-							<form id="dataCorrector" method="get" action="<?php echo $blogURL;?>/owner/data/correct" target="blackhole"></form>
+							<form id="dataCorrector" method="post" action="<?php echo $blogURL;?>/owner/data/correct" target="blackhole"></form>
 							
 							<div id="correctingDataDialog" class="system-dialog" style="position: absolute; display: none; z-index: 110;">
 								<h3 id="correctingDataDialogTitle"></h3>
@@ -230,7 +262,7 @@ if(Acl::check("group.creators")) {
 								</p>
 							</div>
 							
-							<form id="dataOptimizer" method="get" action="<?php echo $blogURL;?>/owner/data/optimize" target="blackhole"></form>
+							<form id="dataOptimizer" method="post" action="<?php echo $blogURL;?>/owner/data/optimize" target="blackhole"></form>
 							
 							<div id="optimizingDataDialog" class="system-dialog" style="position: absolute; display: none; z-index: 110;">
 								<h3 id="optimizingDataDialogTitle"></h3>

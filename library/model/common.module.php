@@ -79,7 +79,30 @@ function getEntryFormatterInfo($id) {
 function formatContent($blogid, $id, $content, $formatter, $keywords = array(), $useAbsolutePath = false) {
 	$info = getFormatterInfo($formatter);
 	$func = (isset($info['formatfunc']) ? $info['formatfunc'] : 'FM_default_format');
-	return $func($blogid, $id, $content, $keywords, $useAbsolutePath);
+	$languageDomain = null;
+	if (isset($info['plugin'])) {
+		$pluginPath = ROOT . '/plugins/' . $info['plugin'];
+		if (is_dir($pluginPath . '/locale/')) {
+			$locale = Locales::getInstance();
+			$languageDomain = $locale->domain;
+			// Textcube-NG: setDirectory() 로 플러그인 locale 폴더로 바꾼 directory 가 그대로 남아, 이후 다른 domain 의 set() 이
+			// 플러그인 폴더에서 locale 파일을 찾았다. domain 과 함께 directory 도 저장해 finally 에서 되돌린다(v3.188)
+			$languageDirectory = $locale->directory;
+			if (file_exists($pluginPath . '/locale/' . $locale->defaultLanguage . '.php')) {
+				$locale->setDirectory($pluginPath . '/locale');
+				$locale->set($locale->defaultLanguage, $info['plugin']);
+				$locale->domain = $info['plugin'];
+			}
+		}
+	}
+	try {
+		return $func($blogid, $id, $content, $keywords, $useAbsolutePath);
+	} finally {
+		if (!is_null($languageDomain)) {
+			$locale->domain = $languageDomain;
+			$locale->directory = $languageDirectory;
+		}
+	}
 }
 
 function summarizeContent($blogid, $id, $content, $formatter, $keywords = array(), $useAbsolutePath = false) {
@@ -87,7 +110,30 @@ function summarizeContent($blogid, $id, $content, $formatter, $keywords = array(
 	$info = getFormatterInfo($formatter);
 	$func = (isset($info['summaryfunc']) ? $info['summaryfunc'] : 'FM_default_summary');
 	// summary function is responsible for shortening the content if needed
-	return $func($blogid, $id, $content, $keywords, $useAbsolutePath);
+	$languageDomain = null;
+	if (isset($info['plugin'])) {
+		$pluginPath = ROOT . '/plugins/' . $info['plugin'];
+		if (is_dir($pluginPath . '/locale/')) {
+			$locale = Locales::getInstance();
+			$languageDomain = $locale->domain;
+			// Textcube-NG: setDirectory() 로 플러그인 locale 폴더로 바꾼 directory 가 그대로 남아, 이후 다른 domain 의 set() 이
+			// 플러그인 폴더에서 locale 파일을 찾았다. domain 과 함께 directory 도 저장해 finally 에서 되돌린다(v3.188)
+			$languageDirectory = $locale->directory;
+			if (file_exists($pluginPath . '/locale/' . $locale->defaultLanguage . '.php')) {
+				$locale->setDirectory($pluginPath . '/locale');
+				$locale->set($locale->defaultLanguage, $info['plugin']);
+				$locale->domain = $info['plugin'];
+			}
+		}
+	}
+	try {
+		return $func($blogid, $id, $content, $keywords, $useAbsolutePath);
+	} finally {
+		if (!is_null($languageDomain)) {
+			$locale->domain = $languageDomain;
+			$locale->directory = $languageDirectory;
+		}
+	}
 }
 
 function FM_default_format($blogid, $id, $content, $keywords = array(), $useAbsolutePath = false) {

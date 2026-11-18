@@ -8,10 +8,11 @@ function escapeSearchString($str) {
 	return is_string($str) ? str_replace('_', '\_', str_replace('%', '\%', POD::escapeString($str, null))) : $str;
 }
 
-function doesExistTable($tablename) {
+// Textcube-NG: $refresh 이면 테이블 목록을 다시 읽는다(같은 요청의 CREATE·DROP 뒤). 대소문자를 무시하면 목록도 소문자로 비교한다 — 원본은 첫 호출의 목록만 써서 CREATE 뒤에도 '없음'(MySQLi 1050 되풀이), 이름만 소문자로 바꿔 SQLite3 에서 늘 false 였다(v3.210)
+function doesExistTable($tablename, $refresh = false) {
 	global $database;
 	static $tables = array();
-	if( empty($tables) ) {
+	if( empty($tables) || $refresh ) {
 		$tables = POD::tableList($database['prefix']);
 	}
 
@@ -24,7 +25,7 @@ function doesExistTable($tablename) {
 		Setting::setServiceSetting('lowercaseTableNames',$dbCaseInsensitive,true);
 	}
 	if($dbCaseInsensitive == 1) $tablename = strtolower($tablename);
-	if( in_array( $tablename, $tables ) ) {
+	if( in_array( $tablename, ($dbCaseInsensitive == 1) ? array_map('strtolower', $tables) : $tables ) ) {
 		return true;
 	}
 	return false;
@@ -37,6 +38,7 @@ class DBModel extends Singleton implements IModel {
 	protected $_relations, $_glues, $_filters, $_order, $_limit, $table, $id, $_querysetCount;
 	protected $_reservedFields, $_reservedFunctions, $_isReserved, $param;
 	protected $context;
+	protected $_setFields = array();	// Textcube-NG: 조건 묶음(setQualifierSet)의 항별 열 이름(순서 번호 → 열 이름, r3-9, 488)
 
 	function __construct($table = null) {
 		$this->context = Model_Context::getInstance();
@@ -55,6 +57,7 @@ class DBModel extends Singleton implements IModel {
 		$this->_qualifiers = array();
 		$this->_relations = array();
 		$this->_glues = array();
+		$this->_setFields = array();
 		$this->_filters = array();
 		$this->_order = array();
 		$this->_limit = array();
@@ -139,6 +142,11 @@ class DBModel extends Singleton implements IModel {
 		return $this;
 	}
 
+	/* Textcube-NG: 조건 묶음의 항을 열 이름이 아니라 순서 번호로 저장한다(열 이름은 _setFields, r3-9, 488). 원본은 열 이름을 키로 저장해
+	   같은 열을 두 번 쓰면 앞 항이 덮어써지고 결합어가 마지막 항 뒤에 붙어 '(value = … OR )' 같은 문법 오류가 났다
+	   (framework/model/URIHandler.php 는 hasoneof 로 우회). 결합어는 앞 항의 번호에 둔다.
+	   결합어는 SQL 에 그대로 들어가므로 AND·OR(대소문자 무관)만 받고, 그 밖의 값이면 인자 개수가 맞지 않을 때와 같이
+	   아무 조건도 더하지 않고 false 를 돌려준다. */
 	public function setQualifierSet() {
 		$nargs = func_num_args();
 		if ($nargs % 2 != 1) return false;
@@ -146,6 +154,8 @@ class DBModel extends Singleton implements IModel {
 		$mqualifier = array();
 		$mrelation = array();
 		$mglue = array();
+		$mfield = array();
+		$index = -1;
 		for($i = 0; $i < $nargs; $i += 1) {
 			if($i % 2 == 0) {
 				$name = $args[$i][0];
@@ -154,10 +164,14 @@ class DBModel extends Singleton implements IModel {
 				if(isset($args[$i][3])) $escape = $args[$i][3];
 				else $escape = null;
 				list($qualifier, $relation) = $this->getQualifierModel($name, $condition, $value, $escape);
-				$mqualifier[$name] = $qualifier;
-				$mrelation[$name] = $relation;
+				$index += 1;
+				$mfield[$index] = $name;
+				$mqualifier[$index] = $qualifier;
+				$mrelation[$index] = $relation;
 			} else {
-				$mglue[$name] = $args[$i];
+				$glue = is_string($args[$i]) ? strtoupper($args[$i]) : '';
+				if ($glue !== 'AND' && $glue !== 'OR') return false;
+				$mglue[$index] = $glue;
 			}
 		}
 		//$this->_qualifiers['QualifierSet'.$this->_querysetCount] = array();
@@ -166,6 +180,7 @@ class DBModel extends Singleton implements IModel {
 		$this->_qualifiers['QualifierSet'.$this->_querysetCount] = $mqualifier;
 		$this->_relations['QualifierSet'.$this->_querysetCount] = $mrelation;
 		$this->_glues['QualifierSet'.$this->_querysetCount] = $mglue;
+		$this->_setFields['QualifierSet'.$this->_querysetCount] = $mfield;
 		$this->_querysetCount += 1;
 		return $this;
 	}
@@ -313,36 +328,43 @@ class DBModel extends Singleton implements IModel {
 	}
 
 	/// To use create() method, $this->structure variable must be defined.
+	/* 원본은 미완성(TO DO): 'CREATE' 뒤에 TABLE 이 없고 필드 사이에 쉼표가 없으며, 형식은 빈 문자열로 fieldType() 을 불러
+	   (항상 null) 비어 있었고, length 는 읽지 않았고, 기본값은 큰따옴표(MySQL 이외에서는 식별자)로 감쌌다 — 어떤 DBMS 에서도 실패.
+	   structure 의 type(어댑터 fieldType() 형식표)·length(varchar/vartext)·isNull·default 로 CREATE TABLE 을 만든다.
+	   필드 이름은 식별자 형식만 받고(예약어는 다른 질의처럼 큰따옴표), 숫자형 기본값은 숫자만, 그 밖의 기본값은 escapeString() 후 작은따옴표.
+	   MySQL·MySQLi 는 설치 화면처럼 DEFAULT CHARSET=utf8. 알 수 없는 형식이면 false. */
 	public function create() {
 		if(!isset($this->structure) || empty($this->structure) || !is_array($this->structure)) return false;
-		/// TO DO : implementing create method by structure
-		$sql = "CREATE ".$this->table." (".CRLF;
-
+		if(empty($this->table)) return false;
+		$fields = array();
 		foreach($this->structure as $field => $attributes) {
-			$sql .= $field;
-			$type = $length = $isNull = $default = "";
-			foreach($attributes as $attr => $value) {
-				if($attr == "type") {	// Type casting
-					$type = POD::fieldType($type);
-				}
-				if($attr == "isNull") {
-					$isNull = $value;
-				}
-				if($attr == "default") {
-					$default = $value;
+			if(!is_string($field) || !preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/', $field) || !is_array($attributes)) return false;
+			$abstractType = isset($attributes['type']) ? $attributes['type'] : '';
+			$type = POD::fieldType($abstractType);	// Type casting
+			if(is_null($type)) return false;
+			if(isset($attributes['length']) && in_array($abstractType, array('varchar', 'vartext'))) {
+				$type .= '('.intval($attributes['length']).')';
+			}
+			$definition = (array_key_exists($field, $this->_isReserved) ? '"'.$field.'"' : $field).' '.$type;
+			if(isset($attributes['default'])) {
+				if(in_array($abstractType, array('integer', 'int', 'timestamp', 'float', 'double'))) {
+					if(!is_numeric($attributes['default'])) return false;
+					$definition .= ' DEFAULT '.($attributes['default'] + 0);
+				} else {
+					$definition .= ' DEFAULT \''.POD::escapeString((string)$attributes['default']).'\'';
 				}
 			}
-			$sql .= ' '.$type.(!empty($length) ? "(".$length.")" : "")
-				.' '.($default ? 'DEFAULT '.(in_array($type, array("integer","timestamp","float")) ? $default : '"'.$default.'"') : "")
-				.' '.($isNull ? "NULL" : "NOT NULL")
-				.CRLF;
+			$definition .= (empty($attributes['isNull']) ? ' NOT NULL' : ' NULL');
+			$fields[] = $definition;
 		}
-		$sql .= ")";
+		$sql = 'CREATE TABLE '.$this->table.' ('.CRLF.implode(','.CRLF, $fields).CRLF.')';
+		if(in_array(POD::dbms(), array('MySQL', 'MySQLi')) && (POD::charset() == 'utf8')) $sql .= ' DEFAULT CHARSET=utf8';
 		return POD::execute($sql);
 	}
 
 	public function discard() {
-		$this->_query = 'DROP '. $this->table;
+		/* 원본은 'DROP '.테이블(TABLE 없음)로 어떤 DBMS 에서도 문법 오류였다. */
+		$this->_query = 'DROP TABLE '. $this->table;
 		if(POD::query($this->_query))
 			return true;
 		return false;
@@ -351,16 +373,18 @@ class DBModel extends Singleton implements IModel {
 	protected function _makeWhereClause() {
 		$clause = '';
 		if (count($this->_qualifiers) == 0) {
-			$clause = '1';
+			$clause = '1=1';	// Textcube-NG: 조건 없음은 참인 식 — '1' 은 PostgreSQL(boolean 아님)·Cubrid(-493)에서 오류(v3.210)
 		} else {
 			foreach ($this->_qualifiers as $name => $value) {
 				if (strpos($name,'QualifierSet') === 0) {
+					// Textcube-NG: 항을 순서 번호로 읽고(열 이름은 _setFields) 항마다 괄호로 감싼다 — ((a = 1) OR (b > 0))(r3-9, 488)
 					$clause .= (strlen($clause) ? ' AND (' : '(');
-					foreach ($value as $qname => $qvalue) {
-						list($qrelations, $qvalue) = $this->_canonicalWhereClause($this->_relations[$name][$qname],$qvalue);
-						$clause .= (array_key_exists($qname, $this->_isReserved) ? '"'.$qname.'"' : $qname) .
-						' '.(is_null($qvalue) ? ' IS NULL' : $qrelations . ' ' . $qvalue)
-						.(isset($this->_glues[$name][$qname]) ? ' '.$this->_glues[$name][$qname].' ' : '');
+					foreach ($value as $qindex => $qvalue) {
+						$qname = $this->_setFields[$name][$qindex];
+						list($qrelations, $qvalue) = $this->_canonicalWhereClause($this->_relations[$name][$qindex],$qvalue);
+						$clause .= '(' . (array_key_exists($qname, $this->_isReserved) ? '"'.$qname.'"' : $qname) .
+						' '.(is_null($qvalue) ? ' IS NULL' : $qrelations . ' ' . $qvalue) . ')'
+						.(isset($this->_glues[$name][$qindex]) ? ' '.$this->_glues[$name][$qindex].' ' : '');
 					}
 
 					$clause .= ')';
@@ -383,9 +407,9 @@ class DBModel extends Singleton implements IModel {
 		if(in_array($relations,array('hasoneof','hasanyof','hasnoneof'))) {
 			switch($relations) {
 				case 'hasoneof':
+				case 'hasanyof':	// Textcube-NG: hasanyof(어느 하나라도 맞음)는 IN 이다. 원본은 NOT IN 쪽에 있었다(코어 호출자 없음, r3-15)
 					$relations = ' IN';
 					break;
-				case 'hasanyof':
 				case 'hasnoneof':
 				default:
 					$relations = ' NOT IN';
@@ -463,7 +487,7 @@ class DBModel extends Singleton implements IModel {
 					$relations = 'LIKE';
 			}
 			if(in_array($name,array('blogid','userid'))) {	// Legacy support for plugins (with string-type blogid)
-				$qualifiers = intval($value);
+				$qualifiers = (is_array($value) && in_array(strtolower($condition),array('hasoneof','hasanyof','hasnoneof'))) ? (empty($value) ? array(0) : array_map('intval', array_values($value))) : intval($value);	// Textcube-NG: blogid·userid 의 hasoneof 류 배열 값은 원소마다 정수로(원본 intval(배열) = 1, r3-3)
 			} else if (in_array(strtolower($condition),array('hasoneof','hasanyof','hasnoneof'))) {
 				if($escape !== false) {
 					$escapedCandidates = array();
@@ -471,7 +495,7 @@ class DBModel extends Singleton implements IModel {
 						foreach ($value as $c) {
 							array_push($escapedCandidates,'\''.POD::escapeString($c).'\'');
 						}
-					} else array_push($escapedCandidates,$value);
+					} else array_push($escapedCandidates,'\''.POD::escapeString((string)$value).'\'');	// Textcube-NG: 배열이 아닌 값도 따옴표로 감싸고 escape(r3-3)
 					$value = $escapedCandidates;
 				}
 				$qualifiers = $value;

@@ -1,45 +1,30 @@
 Textcube-NG: Brand Yourself - Personalized web publishing platform
 ==================================================================
 
-**Version**: `1.10.10+php85.r2`
+**Version**: `1.10.10+php85.r3` · [한국어](./README.ko.md)
 
 > ## ⚠️ Security Notice — Read Before Deployment
 >
-> This fork brings Textcube 1.10.10 to PHP 8.5 compatibility and addresses
-> several security issues, but **one unresolved HIGH-severity item remains**
-> (unsalted MD5 passwords). See [SECURITY.md](./documents/SECURITY.md) for the complete list. Notably:
+> **One HIGH-severity item remains open by default: passwords are stored as unsalted MD5**
+> (kept from upstream for drop-in compatibility with existing Textcube data).
+> To store passwords with `password_hash()`, set `$service['passwordHash']` in `config.php` to
+> `'multi'` (new or changed passwords only) or `'migrate'` (also converts MD5 passwords at login).
+> Accounts stored that way cannot log in to upstream Textcube — read sections 5–6 of
+> [MIGRATION.md](./documents/MIGRATION.md) before moving a database back.
 >
-> - **Passwords are stored as unsalted MD5** (legacy from upstream; intentionally retained for
->   drop-in compatibility with existing Textcube data — naive migration breaks logins for existing users)
-> - Internal queries use string-escaped raw SQL (not prepared statements).
->   SQL injection defense has been **verified by adversarial testing** (no
->   actual vulnerability found); full prepared-statement migration remains a
->   best-practice item, not a vulnerability — see SECURITY.md
->
-> **Not recommended for public-facing production deployment** without
-> additional hardening. Suitable for: local/internal use, archival access
-> to legacy Textcube blogs, development environments, and contributors who
-> can review and patch remaining issues.
+> For a public site, turn on `password_hash()` storage as above and serve the blog over HTTPS.
 >
 > ## ℹ️ Project Status and Provenance
 >
 > This is an **unofficial community fork** of [Textcube](https://github.com/Needlworks/Textcube),
 > originally developed by Needlworks / Tatter Network Foundation (TNF) under GPL.
-> This fork is **not affiliated with or endorsed by Needlworks/TNF**.
+> It is **not affiliated with or endorsed by Needlworks/TNF**.
 >
-> The PHP 7.4 → 8.5 port consists **predominantly of mechanical migrations**
-> following PHP upgrade documentation (PHP4 constructor removal, dynamic
-> property declarations, mysqli OO migration, deprecated function replacement,
-> etc.), and was **performed with the assistance of an AI coding assistant
-> (Anthropic Claude) under human review**.
->
-> Because the bulk of changes are deterministic transformations dictated by
-> PHP migration guides, the maintainer **asserts no additional copyright over
-> these modifications**. The original Needlworks/TNF copyright on the
-> underlying codebase is preserved in all source file headers as required by GPL.
->
-> See [NOTICE](./NOTICE), [CHANGELOG.md](./documents/CHANGELOG.md), and the staged
-> changelog files for the full modification history.
+> The port consists predominantly of mechanical migrations following PHP upgrade documentation,
+> **performed with the assistance of an AI coding assistant (Anthropic Claude) under human review**.
+> The maintainer **asserts no additional copyright over these modifications**; the original
+> Needlworks/TNF copyright is preserved in all source file headers as required by GPL.
+> See [NOTICE](./documents/NOTICE).
 
 ## DESCRIPTION
 
@@ -59,72 +44,57 @@ Textcube is based on online publishing platform 'Tattertools,' started by JH in 
 
 ## Textcube-NG
 
-Textcube-NG is a community-maintained continuation of Textcube 1.10.10, porting the codebase
-from PHP 5.6 (the last version supported by upstream) to PHP 8.5.
-
-### PHP Version Compatibility
-
-The primary target is **PHP 8.5**, but the same codebase also runs on PHP 8.4 —
-both have been verified with the full test suite. Separate release packages are provided for
-each supported version:
-
-| Release package | PHP target | Test result |
-|-----------------|------------|-------------|
-| `php7.4-Textcube-1.10.10` | PHP 7.4 | 44/44 PASS |
-| `php8.2-Textcube-1.10.10` | PHP 8.2 | 33/33 PASS |
-| `php8.4-Textcube-1.10.10` | PHP 8.4 | 33/33 PASS |
-| `Textcube-NG-1.10.10+php85.r2` *(this release)* | PHP 8.5 | 33/33 PASS |
-
-The PHP 8.4 and PHP 8.5 packages share the same codebase — the PHP 8.5 target required
-no additional PHP code changes beyond the PHP 8.4 stage.
-If you are on PHP 8.4, the PHP 8.5 package runs without modification.
+Textcube-NG is a community-maintained continuation of Textcube 1.10.10, porting the codebase from
+PHP 5.6 (the last version supported by upstream) to PHP 8.5. Ports for PHP 7.4, 8.2 and 8.4 are maintained
+alongside this one.
+The PHP 8.4 port and this PHP 8.5 package differ only in handling what PHP 8.5 deprecates. This package uses no
+PHP 8.5-only syntax, so it also runs unmodified on PHP 8.4 (its PDO driver constants use `Pdo\Mysql` and
+`Pdo\Pgsql`, introduced in PHP 8.4).
 
 ### Key Changes from Upstream Textcube 1.10.10
 
-Compared to the upstream release (which last ran on PHP 5.6), Textcube-NG includes:
+- **PHP 8.5 compliance**: deprecated/removed syntax fixed across the codebase (PHP4-style constructors,
+  dynamic properties, `${}` interpolation, `strftime()`, brace array access, mysqli procedural API, etc.).
+- **Security fixes**: see [SECURITY.md](./documents/SECURITY.md) for the items resolved in r1–r3
+  (authorization, CSRF, SQL injection, XSS, SSRF, session handling, upload execution and more).
+- **Libraries**: PHPMailer 5.x → 6.9 (existing mail calls keep working); OpenID 2.0 removed and
+  OpenID Connect added (opt-in, off by default); jpgraph → inline SVG chart; jQuery 3.7.1,
+  jQuery UI 1.13.3, Lodash 4.18.1, TinyMCE 7.9.3, CodeMirror 5.65.21; Dojo and MooTools removed.
+- **DBMS**: MySQL/MariaDB, PostgreSQL, Cubrid and SQLite 3 with native or PDO drivers
+  (`$database['driver'] = 'pdo'`).
 
-- **PHP 8.5 compliance**: All deprecated/removed PHP syntax fixed across the entire codebase —
-  PHP4-style constructors, dynamic property declarations, `${}` string interpolation, `strftime()`,
-  `gmmktime()`, brace array access, mysqli procedural API, and more.
-- **phpmailer 5.x → 6.9.x**: Replaced the bundled phpmailer (incompatible with PHP 8.0+) with
-  phpmailer 6.9.x. A `legacy_shim.php` preserves the existing call interface — no plugin changes needed.
-- **Security fixes**: Privilege guard added to server config and user management endpoints;
-  all `rand()` replaced with `random_int()` (CSPRNG); timing-safe token comparison via `hash_equals()`;
-  prepared statements for key external-input entry points.
-- **memcache PHP 8.5 support**: The official pecl/memcache does not build on PHP 8.5; the
-  [websupport-sk fork](https://github.com/websupport-sk/pecl-memcache) is required and confirmed working.
+Behavior that differs from upstream (schema additions, plugin and extension API, DBMS limits, backup import,
+trusted proxies, OIDC identifiers, etc.) is listed in section 8 of [MIGRATION.md](./documents/MIGRATION.md)
+(Korean). The full modification history is in [CHANGELOG.md](./documents/CHANGELOG.md).
 
-### Drop-in Compatibility
+### Upgrading an Existing Installation
 
-Existing Textcube installations can migrate to Textcube-NG by replacing the PHP files.
-Your existing database, `config.php`, skins, plugins, and uploaded attachments carry over without
-modification. The database schema is unchanged from upstream.
+Existing installations can move to Textcube-NG by replacing the files; the database, `config.php`,
+skins, plugins and attachments carry over. After replacing the files:
 
-See [CHANGELOG.md](./documents/CHANGELOG.md) and the staged changelog files for the
-full modification history.
+1. Run the checkup (`{blog URL}/checkup`). It applies the additive schema changes and adds the
+   `plugins/` and `attach/` execution-blocking rules to an existing `.htaccess`.
+2. Run `php cleanup_legacy_assets.php` in the root from the command line to preview, then `--apply`.
+   It removes files that only older versions had (old static assets, PHPMailer 5.x, the OpenID 2.0
+   library, the jpgraph `plugins/StatGraph/count/` folder). Files whose content was changed are skipped;
+   delete those by hand. The script can be deleted afterwards.
+
+Step-by-step procedures (drop-in, migrating via backup import, moving back to upstream, checklist) are in
+[MIGRATION.md](./documents/MIGRATION.md) (Korean).
 
 ## Security Status (Summary)
 
-| Severity | Open | Notes |
-|----------|------|-------|
-| HIGH     | 1    | MD5 password hashing (intentionally retained) |
-| MEDIUM   | 0    | jpgraph QPL & OpenID 2.0 EOL — both resolved |
-| LOW      | 1    | Outdated static assets (audited; upgrade deferred) |
+| Severity | Open | Item |
+|----------|------|------|
+| HIGH     | 1    | Unsalted MD5 password storage by default (opt-in `password_hash()`) |
+| MEDIUM   | 0    | — |
+| LOW      | 1    | Static asset residual risk (Bootstrap 3.4.1 in two skins is end-of-life; reCAPTCHA and Google Maps scripts cannot carry SRI) |
+| INFO     | 0    | — |
 
-25 issues resolved across all severity levels. See [SECURITY.md](./documents/SECURITY.md) for full details.
-
-Notable open items:
-- MD5 password hashing (no salt) — intentionally retained for drop-in hosting compatibility; migration requires careful strategy (e.g., on-login rehashing) to avoid breaking existing user logins
-- Outdated static assets (jQuery 1.11.2, Lodash 2.4.1, TinyMCE 4.1.10, etc.) — audited (inventory + CVEs documented); upgrade deferred due to behavior-change risk (notably the customized TinyMCE plugins TTMLsupport/codemirror). See SECURITY.md #6.
-
-Resolved in this release (r2):
-- **OpenID 2.0 (EOL) → OpenID Connect (OIDC)** reimplementation with double opt-in (disabled by default); legacy phpopenid (265 files) removed
-- **jpgraph (QPL)** → dependency-free inline SVG chart
-- **Raw SQL SQLi defense** verified by adversarial testing — reclassified from HIGH (prepared-statement full migration remains a best-practice item, not a vulnerability)
+Resolved items, grouped by type and marked as vulnerability patches or newly added defenses, are in
+[SECURITY.md](./documents/SECURITY.md) (Korean).
 
 ## REQUIREMENTS (CURRENT VERSION — PHP 8.5 Port)
-
-Textcube supports various environments. You need at least one webserver supporting PHP and one database engine.
 
 * Web servers (Need at least one environment)
   * Apache 2.4 or above
@@ -134,62 +104,34 @@ Textcube supports various environments. You need at least one webserver supporti
     * with URL Rewrite Module 2.0
 * Language
   * **PHP 8.5**
-    * Required extensions: iconv, GD, mbstring, json, mysqli
-    * (All typically bundled with standard PHP 8.5 distributions)
+    * Required extensions: iconv, GD, mbstring, json, mysqli or pdo_mysql
 * Database Management System (Need at least one environment)
   * **MySQL 5.7.6+ or 8.0+** with UTF-8 character set and collation setting
   * MariaDB 10.2 or above
-  * SQLite 3 (limited feature set; not recommended for production)
-  * *(Cubrid, PostgreSQL: not tested with PHP 8.5 port)*
+  * PostgreSQL, Cubrid, SQLite 3 (with limits; SQLite is not recommended for production —
+    see section 8 of [MIGRATION.md](./documents/MIGRATION.md))
+    * For the Cubrid PHP 8.x modules (native and PDO), see
+      [deokio/php8_cubrid](https://github.com/deokio/php8_cubrid).
 
-For massive service / Heavy load environments
+For massive service / heavy load environments, the following are strongly recommended:
 
 * **OPcache** — built-in since PHP 5.5, replaces APC/XCache (both removed/abandoned)
-* **pecl/memcache** ([websupport-sk fork](https://github.com/websupport-sk/pecl-memcache), PHP 8.5 compatible) with Memcached server — for session storage and query cache
-  * The official pecl/memcache 8.2 does not build on PHP 8.5; use the websupport-sk fork (build from source or install via OS package manager on Debian/Ubuntu).
-  * Enable in `config.php`: `$service['memcached'] = true;`
-  * Configure server: `$memcached['server'] = 'hostname';` / `$memcached['port'] = 11211;`
-
-> **NAT / port-forwarding note**: When `$service['memcached'] = true` on a host behind NAT or
-> port-forwarding (external port differs from internal port), you **must** set `$serviceURL` in
-> `config.php` to the *external* URL (including the external port). Cached skin fragments and feeds
-> bake the service URL at write time and are shared across requests via memcached; without this,
-> the internal hostname/port can leak into responses served to clients on the external URL.
-
-are strongly recommended.
+* **pecl/memcache** with a Memcached server — for session storage and query cache
+  * The official pecl/memcache does not build on PHP 8.5; use the
+    [websupport-sk fork](https://github.com/websupport-sk/pecl-memcache) (confirmed working;
+    build from source or install it with the Debian/Ubuntu package manager).
+  * Enable in `config.php`: `$service['memcached'] = true;` and set
+    `$memcached['server'] = 'hostname';` / `$memcached['port'] = 11211;`.
+  * Behind NAT or port-forwarding, set `$serviceURL` in `config.php` to the *external* URL
+    (including the port). Cached skin fragments and feeds store the service URL and are shared via
+    memcached; otherwise the internal host/port can appear in responses.
 
 ### Tested Environments
 
-The following combinations have been verified via `tc_full_test.sh`:
-
-| PHP    | DB           | Web Server      | Tests      | Status   |
-|--------|--------------|-----------------|------------|----------|
-| 7.4.x  | MySQL 5.7    | Apache 2.4      | 44/44 PASS | Verified |
-| 8.2.x  | MySQL 5.7    | Apache 2.4      | 33/33 PASS | Verified |
-| 8.4.x  | MySQL 5.7    | Apache 2.4      | 33/33 PASS | Verified |
-| 8.5.x  | MySQL 5.7    | Apache 2.4      | 33/33 PASS | Verified |
-
-**Not yet tested with this port**: PostgreSQL, Cubrid, SQLite 3.x, MariaDB,
-IIS, Nginx (configuration documented but untested by current maintainer).
-
-### Test Coverage
-
-**Functional** (`tc_full_test.sh`): setup, authentication, basic CRUD for
-entries/comments/categories, attachment upload, TTXML import/export, RSS/Atom
-feeds, skin rendering, basic plugin loading.
-
-**Security — adversarial** (`_sectest/`): SQL injection (incl. **trackback
-receive**, entry search, user suggest), XSS (reflected / stored / HTML-attribute),
-path traversal / LFI, CSRF (`requireStrictRoute` path-mode), the OIDC engine
-(opt-in gates, JWT/JWKS verification, identity mapping), and the **XMLRPC parser**
-(XXE / external-DTD / billion-laughs). These are adversarial unit/integration
-harnesses that trace generated SQL/output/parser behavior for malicious input.
-
-**Not covered**: OIDC live-provider end-to-end flow (the engine is unit-tested
-above; integration with a real provider is manual), trackback **send** (outbound
-request), **XMLRPC handler authorization paths** (the parser itself is XXE/DoS-tested
-above), individual plugin functionality beyond load, large-scale performance,
-concurrent multi-user scenarios.
+* Full-site tests: PHP 7.4 / 8.2 / 8.4 / 8.5 with MySQL 5.7 and Apache 2.4.
+* Database adapter tests (native and PDO drivers, including malicious-input cases):
+  Cubrid 11.4.6, PostgreSQL 16, MariaDB 11.4, SQLite 3.
+* **Not tested with this port**: IIS, Nginx (configuration is documented but untested).
 
 ## REQUIREMENTS (OLD VERSIONS)
 
@@ -224,59 +166,29 @@ This is apache setting.
         DocumentRoot /var/www/textcube/
         <Directory /var/www/textcube>
             AllowOverride FileInfo
-            Order allow,deny
-            allow from all
+            Require all granted
         </Directory>
     </VirtualHost>
 
-This is nginx setting.
+With Apache + php-fpm (`ProxyPassMatch`), exclude `attach/` from the PHP handler — see section 8 of
+[MIGRATION.md](./documents/MIGRATION.md).
 
-    server {
-       listen  80;
-       server_name example.org *.example.org;
-       root    /var/www/textcube;
-
-       location /  {
-           root    /var/www/textcube;
-           set $rewrite_base '';
-           if (!-f $request_filename) {
-               rewrite ^(thumbnail)/([0-9]+/.+)$ cache/$1/$2;
-           }
-           if ($request_filename ~* ^(cache)+/+(.+[^/])\.(cache|xml|txt|log)$) {
-               return 403;
-           }
-           if (-d $request_filename) {
-               rewrite ^(.+[^/])$ $1/;
-           }
-           rewrite  ^(.*)$ $rewrite_base/rewrite.php last;
-       }
-
-       location ~ \.php$ {
-           fastcgi_pass   127.0.0.1:9000;
-           fastcgi_index  index.php;
-           fastcgi_param  SCRIPT_FILENAME  $document_root$fastcgi_script_name;
-           fastcgi_param  QUERY_STRING     $query_string;
-           fastcgi_param  REQUEST_METHOD   $request_method;
-           fastcgi_param  CONTENT_TYPE     $content_type;
-           fastcgi_param  CONTENT_LENGTH   $content_length;
-           include fastcgi_params;
-       }
-       location ~ /\.ht {
-           deny all;
-       }
-    }
+For nginx, use the rules in [setup_nginx.txt](./documents/setup_nginx.txt). They include the blocks that
+stop PHP files under `plugins/` and `attach/` from running.
 
 If the accessible URL is http://www.example.org, run the installation program by accessing http://www.example.org/setup.php. Follow the setup procedure.
 
 * [Installation (Korean)](http://help.tattertools.com/ko/index.php?title=Getting_Started)
 
-## RUNNING
-
 ## DOCUMENTATION
+
+### THIS PORT
+* [MIGRATION.md](./documents/MIGRATION.md) — upgrading, moving back, behavior differences (Korean)
+* [SECURITY.md](./documents/SECURITY.md) — security status and reporting
+* [CHANGELOG.md](./documents/CHANGELOG.md) — modification history
 
 ### USERS
 * [Shortcuts](https://github.com/Needlworks/Textcube/wiki/shortCutList)
-
 
 ### SPECIFICATIONS AND STRUCTURES
 

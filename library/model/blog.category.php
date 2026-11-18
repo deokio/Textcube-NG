@@ -2,6 +2,14 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 
 // global variables for Category information cache
 global $__gCacheCategoryTree, $__gCacheCategoryRaw, $__gCacheCategoryVisibilityList;
@@ -175,6 +183,14 @@ function getCategoryVisibilityList($blogid, $mode = 'private') {
 		} else {
 			$__gCacheCategoryVisibilityList[$mode] = array();
 		}
+		// Textcube-NG: 비공개 분류(visibility 1)의 하위 분류도 비공개 목록에 넣는다(하위 분류 자신의 visibility 가 2 여도). 이 목록·getPrivateCategoryExclusionQuery 를 쓰는 손님용 분류 화면·글 목록·피드·댓글·첨부·SEO 가 그 글을 내지 않는다.
+		// 분류 자신의 공개 값(c.visibility)만 보던 글 목록(blog.entry.php)·피드(blog.feed.php)·표지 최신 글(MT_Meta_RecentPS_Default, 여러 블로그 표지는 블로그별 목록) 질의에도 이 목록을 더했다(r3-5)
+		if ($visibility == 1 && is_array($__gCacheCategoryRaw)) {
+			foreach ($__gCacheCategoryRaw as $row) {
+				if (isset($row['parent']) && in_array($row['parent'], $__gCacheCategoryVisibilityList[$mode]) && !in_array($row['id'], $__gCacheCategoryVisibilityList[$mode]))
+					array_push($__gCacheCategoryVisibilityList[$mode], $row['id']);
+			}
+		}
 	}
 	return $__gCacheCategoryVisibilityList[$mode];
 }
@@ -219,14 +235,16 @@ function getChildCategoryId($blogid, $id) {
 
 function getNumberChildCategory($id = null) {
 	global $database;
-	$sql = "SELECT * FROM {$database['prefix']}Categories WHERE blogid = ".getBlogId()." AND parent " . ($id === null ? 'IS NULL' : "= $id");
+	// [보안] $id 를 따옴표 없이 SQL 에 넣으므로 정수로 변환
+	$sql = "SELECT * FROM {$database['prefix']}Categories WHERE blogid = ".getBlogId()." AND parent " . ($id === null ? 'IS NULL' : "= " . (int)$id);
 	//$result = POD::queryRow($sql);
 	return POD::queryCell($sql);
 }
 
 function getNumberEntryInCategories($id) {
 	global $database;
-	return POD::queryCell("SELECT COUNT(*) FROM {$database['prefix']}Entries WHERE blogid = ".getBlogId()." AND draft = 0 AND category " . ($id === null ? 'IS NULL' : "= $id"));
+	// [보안] $id 를 따옴표 없이 SQL 에 넣으므로 정수로 변환
+	return POD::queryCell("SELECT COUNT(*) FROM {$database['prefix']}Entries WHERE blogid = ".getBlogId()." AND draft = 0 AND category " . ($id === null ? 'IS NULL' : "= " . (int)$id));
 }
 
 function addCategory($blogid, $parent, $name, $id = null, $priority = null) {
@@ -322,13 +340,13 @@ function modifyCategory($blogid, $id, $name, $bodyid) {
 //		$parentStr = "AND parent = $parentId";
 //	} else
 //		$parentStr = 'AND parent is null';
+	$label = POD::escapeString(UTF8::lessenAsEncoding(empty($label) ? $name : "$label/$name", 255));
 	$name = POD::escapeString(UTF8::lessenAsEncoding($name, 127));
 	$bodyid = POD::escapeString(UTF8::lessenAsEncoding($bodyid, 20));
 	if(POD::queryExistence("SELECT name
 		FROM {$database['prefix']}Categories
 		WHERE blogid = $blogid AND name = '".$name."' AND bodyid = '".$bodyid."'"))
 		return false;
-	$label = POD::escapeString(UTF8::lessenAsEncoding(empty($label) ? $name : "$label/$name", 255));
 	$sql = "SELECT *
 		FROM {$database['prefix']}Categories
 		WHERE blogid = $blogid

@@ -2,11 +2,20 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 
 $ajaxcall= false;
 if (isset($_REQUEST['ajaxcall'])) {
 	$ajaxcall= true;
-	$ajaxmethod = $_REQUEST['ajaxcall'];
+	// [보안] ajaxcall 값은 전송 버튼 onclick 에 출력됨(반사형 XSS) → coverpage.js editCoverpagePlugin() 가 보내는 submitCoverpagePlugin(n,p) 형식만 허용
+	$ajaxmethod = (is_string($_REQUEST['ajaxcall']) && preg_match('/^submitCoverpagePlugin\(\d+,\d+\)\z/', $_REQUEST['ajaxcall'])) ? $_REQUEST['ajaxcall'] : 'return false;';
 }
 
 $IV = array(
@@ -129,10 +138,11 @@ if ($ajaxcall == false) {
 	
 }
 
+// [보안] viewMode 는 $IV 'string'(UTF-8 검사만) — 폼 action 속성에 출력할 때 이스케이프(반사형 XSS)
 $modeParam = !empty($_REQUEST['viewMode']) ? '&' . $_REQUEST['viewMode'] : '';
 
 echo '<h2 class="caption"><span class="main-text">' . $title . '</span></h2>';
-echo '<form action="' . $blogURL . '/owner/skin/coverpage/setPlugin?coverpageNumber=', $coverpageNumber, '&modulePos=', $modulePos, $modeParam, '" method="POST" >';
+echo '<form action="' . $blogURL . '/owner/skin/coverpage/setPlugin?coverpageNumber=', $coverpageNumber, '&modulePos=', $modulePos, htmlspecialchars($modeParam, ENT_QUOTES), '" method="POST" >';
 echo '	<div class="field-box">';
 echo $result;
 echo '	</div>';
@@ -140,7 +150,7 @@ echo '	<div class="button-box">';
 if ($ajaxcall == false) {
 	echo '		<input class="input-button" type="submit" value="' , _t('전송') , '" />';
 } else {
-	echo '		<input class="input-button" type="submit" value="' , _t('전송') , '" onclick="',$ajaxmethod,'; return false" />';
+	echo '		<input class="input-button" type="submit" value="' , _t('전송') , '" onclick="',htmlspecialchars($ajaxmethod, ENT_QUOTES),'; return false" />';
 }
 echo '	</div>';
 echo '</form>';

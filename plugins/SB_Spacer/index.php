@@ -27,7 +27,8 @@ function SB_Spacer($target)
 {
 	global $configVal;
 	$data = Setting::fetchConfigVal($configVal);
-	if(!is_null($data) && array_key_exists('height', $data)){
+	// Textcube-NG: fetchConfigVal() 은 설정이 없으면 false 를 돌려준다. PHP 8 은 array_key_exists() 에 배열이 아닌 값이면 TypeError 를 낸다(PHP 5·7.4 는 경고 뒤 null) — 배열일 때만 읽고 그 밖에는 기본값(R-502)
+	if(is_array($data) && array_key_exists('height', $data)){
 		$height = $data['height'];
 	} else {
 		$height = '20';
@@ -37,7 +38,12 @@ function SB_Spacer($target)
 }
 
 function SB_Spacer_DataSet($data){
-	if(!is_numeric($data['height']) || (int)$data['height'] < 0 || (int)$data['height'] > 2000) return false;
+	// Textcube-NG: r3-42 $data 는 handleDataSet() 이 넘기는 직렬화 문자열(serialize(Setting::fetchConfigXML(...)), 필드 이름 => 문자열|null)이라
+	// $data['height'] 는 PHP 8 에서 TypeError(receiveConfig 500), PHP 7.4 는 첫 글자만 읽어 늘 실패했다. 풀어서 SEC-016 검사(숫자, 0~2000)를 그대로 한다.
+	// allowed_classes => false 로 객체를 만들지 않는다(PHP 7.0+). 배열이 아니거나 height 가 없으면 받지 않는다
+	$config = is_string($data) ? unserialize($data, array('allowed_classes' => false)) : false;
+	if(!is_array($config) || !isset($config['height'])) return false;
+	if(!is_numeric($config['height']) || (int)$config['height'] < 0 || (int)$config['height'] > 2000) return false;
 	return true;
 }
 ?>

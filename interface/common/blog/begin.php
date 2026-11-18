@@ -27,7 +27,7 @@ $context = Model_Context::getInstance();
 $view = $skin->outter;
 $automaticLink = "	<link rel=\"stylesheet\" href=\"".$context->getProperty('service.resourcepath')."/style/system.css\" type=\"text/css\" media=\"screen\" />\n";
 if (!is_null($context->getProperty('uri.permalink',null))) {
-	$canonicalLink = "  <link rel=\"canonical\" href=\"".$context->getProperty('uri.permalink')."\"/>\n";
+	$canonicalLink = "  <link rel=\"canonical\" href=\"".htmlspecialchars($context->getProperty('uri.permalink'))."\"/>\n";
 } else {
 	$canonicalLink = '';
 }
@@ -62,7 +62,11 @@ if(Setting::getBlogSettingGlobal('useiPhoneUI',true) && ($browserUtil->isMobile(
 if($context->getProperty('blog.useBlogIconAsIphoneShortcut') == true && file_exists(__TEXTCUBE_ATTACH_DIR__."/".$context->getProperty('blog.id')."/index.gif")) {
 	dress('SKIN_head_end', '<link rel="apple-touch-icon" href="'.$context->getProperty('uri.default')."/index.gif".'" />'."[##_SKIN_head_end_##]",$view);
 }
-if (defined('__TEXTCUBE_COVER__')) {
+// Textcube-NG: 등록 페이지(interface/freeSlogan.php)가 정한 body id 가 있으면 다른 판정보다 먼저 쓴다(미디어로그 페이지 tt-body-media).
+// 값의 형식은 freeSlogan.php 가 검사하고, begin.php 를 부르는 다른 화면은 이 변수를 두지 않는다(r3-13)
+if (isset($freeSloganBodyId) && is_string($freeSloganBodyId) && $freeSloganBodyId !== '') {
+	dress('body_id',$freeSloganBodyId,$view);
+} else if (defined('__TEXTCUBE_COVER__')) {
 	dress('body_id',"tt-body-cover",$view);
 } else if ($context->getProperty('suri.directive') == '/line') {
 	dress('body_id',"tt-body-line",$view);

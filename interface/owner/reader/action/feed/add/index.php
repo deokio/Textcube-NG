@@ -11,7 +11,7 @@ $IV = array(
 require ROOT . '/library/preprocessor.php';
 requireStrictRoute();
 
-if(strpos($_POST['url'],'http://') !== 0) $_POST['url'] = 'http://'.$_POST['url'];
+if(!preg_match('#^https?://#i', $_POST['url'])) $_POST['url'] = 'http://'.$_POST['url']; // Textcube-NG: https 주소 앞에 http://를 덧붙이지 않음(r3-8)
 $result = array('error' => addFeed(getBlogId(), $_POST['group'], $_POST['url']));
 ob_start();
 printFeeds($blogid, $_POST['group']);

@@ -622,13 +622,14 @@ h3
 
 
 /* upload ---------------------------------------------------------------------------------------*/
+/* Textcube-NG: 원본 규칙으로 복원 — 편집기 없음·위지윅 편집기에서는 첨부 영역이 본문 아래에 보여야 함. 숨김·팝업 위치는 TinyMCE 전용 plugins/ED_tinyMCE/override.css */
 #upload-section
 {
-	display                          : none;
-	top                              : auto !important;
-	bottom                           : 30px !important;
-	margin-top                       : 0 !important;
-	z-index                          : 400 !important;
+	background-color                 : #FFF;
+	margin                           : 10px auto 10px auto;
+	position                         : relative;
+	width                            : 780px;
+	border: 1px solid #F2F2F2;
 }
 
 #upload-section h3
