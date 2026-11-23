@@ -1,0 +1,20 @@
+@charset "utf-8";
+
+/* Textcube-NG: the mobile admin skin had no setting.css, so the setting pages asked for a missing file and the tag separators and link bullets were not shown.
+   Only the icon rules of canon/setting.css (blog tag comma separator, linked OpenID button bullet) are copied; widths are left to basic.css (r3-16) */
+
+#blog-tag ul li
+{
+	background-image                 : url("./image/comma.gif");
+	background-position              : right 10px;
+	background-repeat                : no-repeat;
+	padding                          : 0 4px 0 0;
+}
+
+#part-openid-linkedopenids dl dd .button
+{
+	background-image                 : url('./image/img_link_bullet.jpg');
+	background-position              : right center;
+	background-repeat                : no-repeat;
+	padding-right                    : 15px;
+}

@@ -1,0 +1,393 @@
+<?php
+/* Subscription statistics plugin for Textcube 1.10
+   ----------------------------------
+   Version 2.5
+   Needlworks development team.
+
+   Creator          : inureyes
+   Maintainer       : gendoh, inureyes, graphittie
+
+   Created at       : 2006.9.21
+   Last modified at : 2015.1.19
+
+ This plugin shows RSS subscription statistics on administration menu.
+ For the detail, visit http://forum.tattersite.com/ko
+
+
+ General Public License
+ http://www.gnu.org/licenses/gpl.html
+
+ This program is free software; you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation; either version 2 of the License, or
+ (at your option) any later version.
+
+*/
+/* Textcube-NG: 직접 SQL(POD 문자열 SQL)을 준비 문장(POD::prepare·bindAndExecute)으로 바꿨다. 값은 SQL 문장과 따로 보낸다(PDO 모드 호환)(v3.211)
+   행은 열 이름 키 배열(fetchAllStmt)이다. 실패하면 원래 POD 함수와 같이 null·false·0을 돌려준다. */
+function PN_Subscription_preparedRows($query, $types, $params) {
+	$stmt = POD::prepare($query);
+	if (!$stmt) return null;
+	$rows = call_user_func_array(array('POD', 'bindAndExecute'), array_merge(array($stmt, $types), $params)) ? POD::fetchAllStmt($stmt) : null;
+	$stmt->close();
+	return $rows;
+}
+
+function PN_Subscription_preparedCell($query, $types, $params) {
+	$rows = PN_Subscription_preparedRows($query, $types, $params);
+	if (empty($rows)) return null;
+	$row = array_values($rows[0]);
+	return $row[0];
+}
+
+// Paging::fetch()와 같은 계산(url·prefix는 기본값). COUNT와 목록 질의를 모두 준비 문장으로 보낸다. ? 자리는 FROM … ORDER BY 사이에만 둔다
+function PN_Subscription_preparedPaging($sql, $types, $params, $page, $count) {
+	$context = Model_Context::getInstance();
+	$paging = array('url' => $context->getProperty('uri.folder'), 'prefix' => '?page=', 'postfix' => '', 'onclick' => null);
+	if (empty($sql))
+		return array(array(), $paging);
+	if (preg_match('/\s(FROM.*)(ORDER BY.*)$/si', $sql, $matches))
+		$from = $matches[1];
+	else
+		return array(array(), $paging);
+	$paging['total'] = PN_Subscription_preparedCell("SELECT COUNT(*) $from", $types, $params);
+	if ($paging['total'] === null)
+		return array(array(), $paging);
+	$count = (int)$count;
+	if ($count < 1) $count = 1;
+	$paging['pages'] = intval(ceil($paging['total'] / $count));
+	$paging['page'] = is_numeric($page) ? $page : 1;
+	if ($paging['page'] > $paging['pages']) {
+		$paging['page'] = $paging['pages'];
+		if ($paging['pages'] > 0)
+			$paging['prev'] = $paging['pages'] - 1;
+	}
+	if ($paging['page'] > 1)
+		$paging['prev'] = $paging['page'] - 1;
+	if ($paging['page'] < $paging['pages'])
+		$paging['next'] = $paging['page'] + 1;
+	$offset = ($paging['page'] - 1) * $count;
+	if ($offset < 0) $offset = 0;
+	return array(PN_Subscription_preparedRows("$sql LIMIT $count OFFSET $offset", $types, $params), $paging);
+}
+
+function PN_Subscription_preparedCount($query, $types, $params) {
+	$stmt = POD::prepare($query);
+	if (!$stmt) return 0;
+	$count = call_user_func_array(array('POD', 'bindAndExecute'), array_merge(array($stmt, $types), $params)) ? (int)$stmt->affected_rows : 0;
+	$stmt->close();
+	return $count;
+}
+
+function PN_Subscription_Default()
+{
+	global $pluginMenuURL, $pluginSelfParam, $totalSubscribers, $updatedSubscribers;
+
+	$blogid = getBlogId();
+	$temp = getSubscriptionStatistics($blogid);
+	$aggregatorInfo = organizeAggregatorInfo($temp);
+	Setting::setBlogSetting('SubscriberCount',$totalSubscribers);
+
+?>
+						<script type="text/javascript">
+							//<![CDATA[
+								window.addEventListener("load", execLoadFunction, false);
+
+								function execLoadFunction() {
+									//removeItselfById('log-pages-submit');
+								}
+							//]]>
+						</script>
+						<div id="part-statistics-total" class="part">
+							<h2 class="caption"><span class="main-text"><?php echo _t("전체 피드 통계");?></span></h2>
+							<dl class="data-inbox">
+								<dt class="number"><span class="text"><?php echo _t("전체 구독자수");?></span></dt>
+								<dd class="number"><span class="text"><?php echo _f("%1 명",$totalSubscribers);?></span></dd>
+								<dt class="aggregator"><span class="text"><?php echo _t("구독기");?></span></dt>
+								<dd class="aggregator"><span class="text"><?php echo _f("%1 종류의 구독기 및 크롤러가 구독중입니다.",sizeof($aggregatorInfo));?></span></dd>
+								<dt class="lastRSSupdate"><span class="text"><?php echo _t("최종 RSS 갱신일");?></span></dt>
+								<dd class="lastRSSupdate"><span class="text"><?php echo Setting::getBlogSetting('LatestRSSrefresh',null)!==null ? Timestamp::format5(Setting::getBlogSetting('LatestRSSrefresh',null)) : _t('정보가 갱신되지 않았습니다');?></span></dd>
+								<dt class="updatedAggregators"><span class="text"><?php echo _t("이후 갱신된 RSS 구독기");?></span></dt>
+								<dd class="updatedAggregators"><span class="text"><?php echo $updatedSubscribers;?></span></dd>
+							</dl>
+						</div>
+
+						<hr class="hidden" />
+
+						<div id="part-statistics-rank" class="part">
+							<h2 class="caption"><span class="main-text"><?php echo _t("피드 구독 순위");?></span></h2>
+							<div class="main-explain-box">
+								<p class="explain">
+									<?php echo _t("크롤러에 구독자 수 정보를 넣지 않는 웹 RSS 리더의 경우 정상적인 구독자수를 판별할 수 없습니다.");?><br />
+									<?php echo _t("강조 표시된 구독기는 검색 엔진 및 메타 프로그램을 의미합니다.");?>
+								</p>
+							</div>
+							<table class="data-inbox" cellspacing="0" cellpadding="0">
+								<thead>
+									<tr>
+										<th class="rank"><span class="text"><?php echo _t("순위");?></span></th>
+										<th class="aggregator"><span class="text"><?php echo _t("구독기");?></span></th>
+										<th class="count"><span class="text"><?php echo _t("구독자 수");?></span></th>
+										<th class="subscribed"><span class="text"><?php echo _t("구독 시작일");?></span></th>
+										<th class="referred"><span class="text"><?php echo _t("최근 구독일");?></span></th>
+									</tr>
+								</thead>
+								<tbody>
+<?php
+	$i = 0;
+	foreach ($aggregatorInfo as $agent => $info) {
+		$className = ($i % 2) == 1 ? 'even-line' : 'odd-line';
+		$className .= ($i == sizeof($aggregatorInfo) - 1) ? ' last-line' : '';
+?>
+									<tr class="<?php echo $className;?> inactive-class" onmouseover="rolloverClass(this, 'over')" onmouseout="rolloverClass(this, 'out')">
+										<td class="rank"><?php echo $i + 1;?></td>
+										<td class="aggregator"><?php
+		if($info['isRobot'])
+			echo '<span class="robot">'.htmlspecialchars($agent, ENT_QUOTES, 'UTF-8').'</span>';
+		else echo htmlspecialchars($agent, ENT_QUOTES, 'UTF-8');
+?></td>
+										<td class="count"><?php echo _f("%1명",$info["subscribers"]);?></td>
+										<td class="subscribed"><?php echo Timestamp::formatDate($info["subscribed"]);?></td>
+										<td class="referred"><?php echo Timestamp::formatDate($info["referred"]);?></td>
+									</tr>
+<?php
+		$i++;
+	}
+?>
+								</tbody>
+							</table>
+						</div>
+
+						<div class="clear"></div>
+<?php
+}
+
+function getAggregatorName($useragent)
+{
+	if($useragent=='') return _t('알 수 없는 구독기');
+	$agentPattern = array(
+		'HanRSS' => _t('한RSS'),
+		'Sage' => _t('Sage (Firefox 확장)'),
+		'Feedly' => _t('Feedly'),
+		'Chrome' => _t('구글 크롬'),
+		'Safari' => _t('사파리'),
+		'tt-rss' => _t('Tiny Tiny RSS'),
+		'FlipboardRSS' => _t('Flipboard'),
+		'NewsGatorOnline' => _t('NewsGator'),
+		'NewsLife' => _t('NewsLife'),
+		'Google Desktop' => _t('구글 데스크탑'),
+		'RSSOwl' => _t('RSS Owl'),
+		'Eolin' => _t('태터툴즈 리더'),
+		'Textcube' => _t('텍스트큐브 리더'),
+		'NetNewsWire' => _t('NetNewsWire'),
+		'Feedfetcher-Google' => _t('구글 feedfetcher'),
+		'RssBandit' => _t('RSS Bandit'),
+		'Yahoo! Slurp' => _t('Yahoo! Slurp'),
+		'Mozilla/4.0 (compatible; MSIE 7.0' => _t('MS 익스플로러 7'),
+		'FeedDemon' => _t('FeedDemon'),
+		'UniversalFeedParser' => _t('Universal Feed Parser'),
+		'nhn/1noon' => _t('첫눈'),
+		'MSIE 6.0' => _t('MS 익스플로러 6'),
+		'YeonMo' => _t('연모'),
+		'RMOM' => _t('요즘'),
+		'msnbot' => _t('MSN 검색엔진'),
+		'FeedOnFeeds' => _t('Feed On Feeds Personal aggregator'),
+		'Technoratibot' => _t('테크노라티'),
+		'sproose' => _t('sproose 봇'),
+		'Thunderbird' => _t('Mozilla Thunderbird'),
+		'Bloglines' => _t('Bloglines'),
+		'NaverBot' => _t('네이버 검색로봇'),
+		'DAUM RSS Robot' => _t('다음 RSS 검색로봇'),
+		'Googlebot' => _t('구글 검색로봇'),
+		'TechnoratiSnoop' => _t('테크노라티 피드 로봇'),
+		'CazoodleBot' => _t('CazoodleBot'),
+		'Snapbot' => _t('Snapbot (snap.com 서비스용)'),
+		'Netvibes' => _t('Netvibes'),
+		'SharpReader' => _t('Sharp Reader'),
+		'BlogBridge' => _t('Blog Bridge'),
+		'Firefox' => _t('Firefox 라이브북마크'),
+		'Fastladder' => _t('Fastladder'),
+		'Allblog.net' => _t('올블로그 피드 로봇'),
+		'UCLA CS Dept' => _t('연구용 로봇 (UCLA 컴퓨터공학과)'),
+		'Windows-RSS-Platform/1.0 (MSIE 7.0' => _t('윈도우 비스타 RSS 개짓'),
+		'HTTPClientBox' => _t('HTTPClientBox'),
+		'ONNET-OPENAPI' => _t('온네트 API 로봇'),
+		'S20 Wing' => _t('날개 피드 로봇'),
+		'FeedBurner' => _t('FeedBurner 피드 로봇'),
+		'xMind' => _t('크로스마인드(xMind) 검색 로봇'),
+		'openmaru feed aggregator' => _t('Openmaru Feed Aggregator'),
+		'ColFeed' => _t('콜콜넷 피드 로봇')
+	);
+	$declinePattern = array(
+		//법칙이 있으면 사용하겠는데, 제멋대로다...
+		'Mozilla/4.0 (compatible; MSIE 5.01; Windows NT 5.0)'=>'Internet Explorer 5.01',
+		'Mozilla/4.0 (compatible; MS; Windows NT 5.0'=>'Internet Explorer',
+		'Mozilla/4.0 (compatible;MSIE 5.5; Windows NT 5.0'=>'Internet Explorer'
+	);
+	foreach ($agentPattern as $agentName => $realname)
+		if(strpos($useragent,$agentName)!==false) return $realname;
+	foreach ($declinePattern as $agentName => $realname)
+		if(strpos($useragent,$agentName)!==false) return false;
+	return $useragent;
+}
+
+function getNumberOfSubscribers($useragent)
+{
+	$agentPattern = array(
+		'Bloglines' => 'subscribers',
+		'HanRSS' => ' subscribers',
+		'Feedfetcher-Google' => 'subscribers',
+		'Netvibes' => 'subscribers',
+		'NewsGatorOnline' => 'subscribers',
+		'Fastladder' => 'subscribers'
+	);
+	foreach ($agentPattern as $agentName => $keyword)
+		if(preg_match('/([0-9]+)\s*'.$keyword.'/',$useragent,$matches)) return $matches[1];
+	return 1;
+}
+
+function robotChecker($useragent)
+{
+	$robotPattern = array(
+		'Googlebot' => 1,
+		'NaverBot' => 1,
+		'TechnoratiSnoop' => 1,
+		'Allblog.net' => 1,
+		'CazoodleBot' => 1,
+		'nhn/1noon' => 1,
+		'Feedfetcher-Google' => 1,
+		'Yahoo! Slurp' => 1,
+		'RMOM' => 1,
+		'msnbot' => 1,
+		'Technoratibot' => 1,
+		'sproose' => 1,
+		'CazoodleBot' => 1,
+		'ONNET-OPENAPI' => 1,
+		'UCLA CS Dept' => 1,
+		'Snapbot' => 1,
+		'DAUM RSS Robot' => 1,
+		'RMOM' => 1,
+		'S20 Wing' => 1,
+		'FeedBurner' => 1,
+		'xMind' => 1,
+		'openmaru feed aggregator' => 1,
+		'ColFeed' => 1
+	);
+	foreach ($robotPattern as $agentName => $isRobot)
+		if((strpos($useragent,$agentName)!==false)&&($isRobot)) return true;
+	return false;
+}
+
+function organizeAggregatorInfo($info)
+{
+	global $totalSubscribers, $updatedSubscribers;
+	$aggregatorInfo = array();
+	$totalSubscribers = 0;
+	$updatedSubscribers = 0;
+	$latestUpdatedTime = Setting::getBlogSetting('LatestRSSrefresh',null);
+	for ($i=0; $i<sizeof($info); $i++) {
+		$record = $info[$i];
+		$aggregatorName = getAggregatorName($record['useragent']);
+		if(!$aggregatorName) continue;
+		$subscribers = getNumberOfSubscribers($record['useragent']);
+		$startDate = $record['subscribed'];
+		$referred = $record['referred'];
+		if(time()- $referred > 604800) continue;
+		if(array_key_exists($aggregatorName,$aggregatorInfo)) {
+			if(($subscribers > $aggregatorInfo[$aggregatorName]['subscribers'])&&($subscribers!==1)) {
+				$totalSubscribers -= $aggregatorInfo[$aggregatorName]['subscribers'];
+				$totalSubscribers += $subscribers;
+				if(isset($latestUpdatedTime) && $latestUpdatedTime - $referred < 0) {
+					$updatedSubscribers -=$aggregatorInfo[$aggregatorName]['subscribers'];
+					$updatedSubscribers += $subscribers;
+				}
+				$aggregatorInfo[$aggregatorName]['subscribers'] = $subscribers;
+			} else if($subscribers==1) {
+				$aggregatorInfo[$aggregatorName]['subscribers'] += $subscribers;
+				$totalSubscribers += $subscribers;
+				if(isset($latestUpdatedTime) && $latestUpdatedTime - $referred < 0) {
+					$updatedSubscribers += $subscribers;
+				}
+			}
+
+			if($aggregatorInfo[$aggregatorName]['subscribed'] > $startDate)
+				$aggregatorInfo[$aggregatorName]['subscribed'] = $startDate;
+			if($aggregatorInfo[$aggregatorName]['referred'] < $referred)
+				$aggregatorInfo[$aggregatorName]['referred'] = $referred;
+		}
+		else {
+			$aggregatorInfo[$aggregatorName]['subscribers'] = $subscribers;
+			$aggregatorInfo[$aggregatorName]['subscribed'] = $startDate;
+			$aggregatorInfo[$aggregatorName]['referred'] = $referred;
+			$totalSubscribers += $subscribers;
+		}
+		$aggregatorInfo[$aggregatorName]['isRobot'] = robotChecker($record['useragent']);
+	}
+	arsort($aggregatorInfo);
+	return $aggregatorInfo;
+}
+
+function organizeRobotInfo($info)
+{
+}
+
+function getSubscriptionStatistics($blogid) {
+	$pool = DBModel::getInstance();
+	$pool->reset("SubscriptionStatistics");
+	$pool->setQualifier("blogid","eq",$blogid);
+	$pool->setOrder("referred","desc");
+	if ($result = $pool->getAll("ip, host, useragent, subscribed, referred")) {
+		return $result;
+	}
+	return array();
+}
+
+function getSubscriptionLogsWithPage($page, $count) {
+	global $database;
+	$blogid = getBlogId();
+	requireComponent( "Textcube.Model.Paging");
+	return PN_Subscription_preparedPaging("SELECT ip, host, useragent, referred FROM {$database['prefix']}SubscriptionLogs WHERE blogid = ? ORDER BY referred DESC", 'i', array((int)$blogid), $page, $count);
+}
+
+function getSubscriptionLogs() {
+	$blogid = getBlogId();
+	$pool = DBModel::getInstance();
+	$pool->reset("SubscriptionLogs");
+	$pool->setProperty("blogid","eq",$blogid);
+	$pool->setOrder("referred","desc");
+	$pool->setLimit(1000);
+	return $pool->getAll("ip, host, useragent, referred");
+}
+
+function updateSubscriptionStatistics($target, $mother) {
+	global $database, $blogURL;
+	$blogid = getBlogId();
+	$period = Timestamp::getDate();
+	requireComponent('Textcube.Data.Filter');
+	if (Filter::isFiltered('ip', $_SERVER['REMOTE_ADDR']))
+		return;
+	// Textcube-NG: 값은 준비 문장으로 따로 보내므로 escapeString을 쓰지 않는다(v3.211)
+	$ip = $_SERVER['REMOTE_ADDR'];
+	$host = isset($_SERVER['REMOTE_HOST']) ? $_SERVER['REMOTE_HOST'] : '';
+	$useragent = isset($_SERVER['HTTP_USER_AGENT']) ? $_SERVER['HTTP_USER_AGENT'] : '';
+	PN_Subscription_preparedCount("INSERT INTO {$database['prefix']}SubscriptionLogs values(?, ?, ?, ?, UNIX_TIMESTAMP())", 'isss', array($blogid, $ip, $host, $useragent));
+	PN_Subscription_preparedCount("DELETE FROM {$database['prefix']}SubscriptionLogs WHERE referred < UNIX_TIMESTAMP() - 604800", '', array());
+	if (!PN_Subscription_preparedCount("UPDATE {$database['prefix']}SubscriptionStatistics SET referred = UNIX_TIMESTAMP() WHERE blogid = ? AND ip = ? AND host = ? AND useragent = ?", 'isss', array($blogid, $ip, $host, $useragent)))
+		PN_Subscription_preparedCount("INSERT INTO {$database['prefix']}SubscriptionStatistics VALUES (?, ?, ?, ?, UNIX_TIMESTAMP(),UNIX_TIMESTAMP())", 'isss', array($blogid, $ip, $host, $useragent));
+	return $target;
+}
+
+function PN_Subscription_setTime($target) {
+	Setting::setBlogSetting('LatestRSSrefresh',time());
+	return true;
+}
+
+function PN_Subscription_Sidebar($target) {
+	$count = Setting::getBlogSetting('SubscriberCount',null);
+	$text = '<div class="SubscriptionPanel" style="text-align:center">';
+	if($count===null) $text .= _t('구독 정보 갱신이 필요합니다');
+	else $text .= _f('%1 명이 RSS를 구독하고 있습니다.',$count);
+	$text .= '</div>';
+	return $text;
+}
+?>

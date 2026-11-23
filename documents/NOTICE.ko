@@ -1,0 +1,65 @@
+Textcube-NG — PHP 5.5 ~ 7.3 레거시판 (커뮤니티 포크)
+=====================================================
+
+이 소프트웨어는 다음 개발자가 제작한 Textcube의 포크입니다:
+
+    Copyright (c) 2004-2016, Needlworks / Tatter Network Foundation (TNF)
+    2006년 GPL 라이선스로 공개됨.
+    업스트림: https://github.com/Needlworks/Textcube
+
+모든 업스트림 소스 파일에 대한 원본 Needlworks/TNF 저작권은 GPL 요건에 따라
+각 파일 헤더에 변경 없이 그대로 보존되어 있습니다.
+
+------------------------------------------------------------------------
+
+포크 수정 사항 (PHP 5.6 → 7.4 이식본을 PHP 5.5 ~ 7.3 에서 돌도록 낮춤,
+의존성 업데이트 및 제거, 문서화, 보안 강화 — EOL OpenID 2.0 스택을
+대체하는 OpenID Connect 재구현 포함): 2026, @deokio.
+
+수정의 성격:
+
+  이식 작업은 주로 공식 PHP 업그레이드 문서
+  (https://www.php.net/migration70, .../migration71, .../migration72,
+  .../migration73, .../migration74)를 따른 기계적 마이그레이션으로
+  구성되며, 이 판은 그 결과 코드를 PHP 5.5 ~ 7.3 에서 돌 수 있게
+  유지합니다. 구체적으로:
+
+    - PHP4 방식 생성자를 __construct 방식으로 교체
+    - mysqli 절차적 API → 객체지향 API (1:1 대응)
+    - 공식 PHP 마이그레이션 가이드에 따른 deprecated 함수 교체
+    - PHP 5.5 보다 새로운 문법(null 병합, 가변 인자, 타입 지정 속성)을
+      PHP 5.5 형태로 다시 쓰고, PHP 5.5·5.6 에 없는 API(random_bytes,
+      random_int, hash_equals, TLS 스트림 옵션, 안전한 역직렬화)는
+      호환 함수로 대신
+
+  이러한 기계적 변환은 누가 수행하든 실질적으로 동일한 결과를 산출하며,
+  독창적 창작물로 인정되지 않습니다.
+
+  보안 강화의 일환으로 일부 컴포넌트는 새로 작성되었습니다 — 특히 EOL
+  OpenID 2.0 구현을 대체하는 의존성 없는 OpenID Connect(OIDC) 클라이언트
+  (framework/legacy/Textcube.Control.OIDC.php)와 번들 phpopenid 라이브러리
+  제거가 이에 해당합니다. 이렇게 새로 작성된 컴포넌트도 프로젝트의 나머지와
+  동일하게 GPL 하에 제공됩니다.
+
+  이 작업은 AI 코딩 어시스턴트(Anthropic Claude)의 지원을 받아
+  사람의 검토 하에 수행되었습니다. 관리자는 기계적 마이그레이션 변경
+  사항 자체에 대해 추가적인 저작권을 주장하지 않습니다.
+
+  이 수정 사항들에 대해 추가적인 저작권은 주장되지 않습니다.
+  모든 수정 사항은 업스트림과 동일하게 GNU General Public License
+  하에 제공됩니다.
+
+------------------------------------------------------------------------
+
+이 포크는 독립적인 커뮤니티 연속 프로젝트이며, Needlworks 또는
+Tatter Network Foundation과 제휴, 승인, 또는 후원 관계에 있지 않습니다.
+
+"Textcube"라는 명칭은 이 포크가 파생된 업스트림 코드베이스를
+식별하기 위한 서술적 목적(지명적 공정 사용)으로만 사용됩니다.
+"Textcube" 명칭에 대한 상표권은 해당 권리자에게 있습니다.
+
+업스트림으로부터의 변경 사항 전체 목록은 다음을 참조하십시오:
+  - documents/CHANGELOG.md             (개정이력, r1~r4)
+  - documents/SECURITY.md              (보안 현황 및 잔존 이슈)
+
+원본 LICENSE (GPL)은 /documents/LICENSE 및 /LICENSE에 보존되어 있습니다.

@@ -1,0 +1,36 @@
+<?php
+/// Korean is the default source language; entries are identity (kept for reference).
+//$__text["%1 (으)로 로그인"] = "";
+//$__text["%1 계정으로 작성하였습니다"] = "";
+//$__text["관리자 계정과 연결된 소셜 계정"] = "";
+//$__text["%1 계정으로 로그인됨"] = "";
+//$__text["로그아웃"] = "";
+//$__text["소셜 로그인 — 기본 비활성. 사용할 프로바이더만 활성으로 바꾸고 Client ID/Secret 을 입력하세요. Redirect URI(콜백): %1 — 이 주소를 각 프로바이더 개발자콘솔에 등록하세요."] = "";
+//$__text["%1 활성화"] = "";
+//$__text["비활성 (기본)"] = "";
+//$__text["활성"] = "";
+//$__text["%1 개발자콘솔의 앱 키(REST API 키 / Client ID)."] = "";
+//$__text["%1 Client Secret. (네이버=Client Secret, 카카오=보안 Client Secret, 페이스북=앱 시크릿)"] = "";
+//$__text["Kakao Developers에서 앱을 만들고 카카오 로그인과 OpenID Connect를 켜세요. 이 플러그인은 카카오 로그인(OAuth 2.0 + OpenID Connect)의 ID 토큰으로 사용자를 확인하고, ID 토큰이 없을 때만 사용자 정보 가져오기 API v2(/v2/user/me)를 씁니다. 카카오 로그인에는 따로 고를 API 버전이 없습니다. 위의 Redirect URI를 카카오 로그인의 Redirect URI에 등록하세요. 동의 항목: 닉네임, 카카오계정(이메일) — 이메일은 앱 설정에 따라 별도 권한이 필요할 수 있습니다. 이메일 동의가 없어도 로그인 판정에는 영향이 없습니다(이 플러그인은 이메일을 쓰지 않습니다)."] = "";
+//$__text["Kakao Developers 앱의 REST API 키입니다."] = "";
+//$__text["카카오 로그인 보안 설정에서 만든 Client Secret 코드입니다. 이 플러그인은 Client Secret이 있어야 동작하므로 사용 상태로 두세요."] = "";
+//$__text["네이버 개발자센터에서 애플리케이션을 등록하고 사용 API로 네이버 로그인을 고르세요. 이 플러그인은 네이버 로그인(OAuth 2.0)과 회원 프로필 조회 API v1(/v1/nid/me)을 씁니다. 네이버 로그인에는 따로 고를 API 버전이 없습니다. 제공 정보에서 이메일 주소와 이름(또는 별명)을 고르고, 서비스 URL에 블로그 주소를, Callback URL에 위의 Redirect URI를 넣으세요."] = "";
+//$__text["네이버 개발자센터 애플리케이션 정보의 Client ID입니다."] = "";
+//$__text["네이버 개발자센터 애플리케이션 정보의 Client Secret입니다."] = "";
+//$__text["Meta for Developers에서 앱을 만들고 Facebook 로그인을 추가하세요. 이 플러그인은 Facebook 로그인(OAuth 2.0)과 Graph API의 /me(필드 id, name, email)를 쓰며, 버전은 아래 Graph API 버전 칸의 값을 씁니다. 위의 Redirect URI를 Facebook 로그인 설정의 유효한 OAuth 리디렉션 URI에 등록하세요. 요청 권한: email, public_profile."] = "";
+//$__text["Meta for Developers 앱의 앱 ID입니다."] = "";
+//$__text["Meta for Developers 앱의 앱 시크릿 코드입니다."] = "";
+//$__text["Graph API 버전. 형식은 vN.N(예: %1)입니다. 비우거나 형식이 맞지 않으면 %1을 씁니다. Graph API는 버전마다 사용 기한(만료일)이 있으므로 Meta 개발자 문서의 Graph API 버전 목록(Changelog)에서 만료일을 확인하고, 쓰는 버전이 만료되기 전에 새 버전으로 바꾸세요."] = "";
+//$__text["Graph API 버전"] = "";
+//$__text["댓글·방명록 입력 폼"] = "";
+//$__text["소셜 로그인 버튼 자동 표시"] = "";
+//$__text["표시 (기본)"] = "";
+//$__text["표시하지 않음"] = "";
+//$__text["활성화한 공급자의 로그인 버튼을 댓글·방명록의 방문자 입력 칸 위에 자동으로 넣습니다. 소셜 계정으로 로그인한 방문자에게는 로그인 상태와 로그아웃 링크를 보여 줍니다. 스킨에 소셜 로그인 치환자를 따로 넣어 쓰고 있다면 버튼이 두 번 나오지 않도록 표시하지 않음으로 바꾸세요."] = "";
+//$__text["소셜 계정으로 로그인 후 댓글 쓰기"] = "";
+//$__text["소셜 계정으로 로그인 후 방명록 쓰기"] = "";
+//$__text["소셜 계정으로 로그인"] = "";
+//$__text["소셜 계정으로 글쓰기"] = "";
+//$__text["소셜 계정으로 로그인해 주십시오."] = "";
+//$__text["이름/비밀번호로 글쓰기"] = "";
+?>

@@ -1,0 +1,879 @@
+@charset "utf-8";
+
+/* Common ****************************************************************************************/
+
+/* Textcube-NG: smaller space above button boxes, same as the mail host panel (r3-4) */
+.button-box
+{
+	border-top: 1px solid #ddd !important;
+	margin-top: 10px;
+	padding-top: 15px;
+}
+
+.button-box .input-button
+{
+	height                           : 2.5em;
+    line-height                      : 2.5em;
+    vertical-align                   : middle;
+    margin-bottom                    : 10px;
+}
+
+.warning
+{
+	color                            : #FF3333;
+}
+
+fieldset
+{
+	background-image                 : none;
+	border-bottom                    : none !important;
+	border-top                       : none !important;
+	margin                           : 0;
+}
+
+dl
+{
+	border-top                       : 1px solid #FFFFFF;
+	border-bottom                    : 1px solid #FFFFFF;
+}
+
+dl dt
+{
+	padding                          : 5px 3px 0 3px;
+	text-align                       : right;
+	width                            : 210px;
+}
+
+dl dd
+{
+	line-height                      : 1.2em;
+	margin-left                      : 230px;
+	padding                          : 7px 3px 4px 3px;
+}
+
+/* Blog ******************************************************************************************/
+
+/* create new blog */
+#part-create-newblog fieldset
+{
+	background-image: none;
+	border: none;
+	margin-bottom: 15px;
+}
+
+#part-create-newblog fieldset dl
+{
+	padding-top: 10px;
+	text-align: center;
+}
+
+#part-create-newblog fieldset dl dt
+{
+	display: inline;
+	line-height: 15px;
+	position: static;
+	float: none;	/* Textcube-NG: keep each label on the same line as its input - basic.css dl dt floats with clear:left since r3-1 (R-164), which pushed every label and input onto a line of its own (r3-14) */
+	clear: none;
+}
+
+#part-create-newblog fieldset dl dd
+{
+	display: inline;
+	line-height: 15px;
+	margin: 0 10px 0 5px;
+	width: auto;
+}
+
+#part-create-newblog .button-box
+{
+	margin-bottom: 30px;
+}
+
+/* blog list */
+#part-blog-list .message
+{
+	color: #f00;
+	margin-bottom: 10px;
+	text-align: center;
+}
+
+/* blog in detail */
+#part-blog-about
+{
+	background-image                 : url("./image/logo_textcube_full.png");
+	background-position              : 140px 70px;
+	background-repeat                : no-repeat;
+	padding-bottom: 50px;
+}
+
+#team-blog-about h3
+{
+	font-family                      : Tahoma, "Lucida Grande", Verdana, sans-serif;
+	padding-top                      : 55px;
+	margin                           : 30px 0 5px 360px;
+	text-align                       : center;
+	width                            : 435px;
+}
+
+#team-blog-about .main-explain-box
+{
+	margin-left                      : 360px;
+	padding                          : 0;
+	width                            : 435px;
+}
+
+#team-blog-about .main-explain-box p
+{
+	border                           : 1px solid #ddd;
+	display                          : block;
+	margin-top                       : 20px;
+	padding                          : 10px;
+	text-align                       : center;
+}
+
+#team-blog-about h3 em, #team-blog-about .main-explain-box p em
+{
+	font-style: italic;
+}
+
+#part-blog-about ul
+{
+	list-style-type: disc;
+	margin-left: 400px;
+}
+
+#part-blog-about ul li
+{
+	list-style-type: disc;
+}
+
+#part-blog-about ul li em
+{
+	color: #f00;
+}
+
+#part-blog-about .container h4
+{
+	margin: 0 0 5px 13px;
+}
+
+#team-member-list
+{
+	margin: 50px auto 0 auto;
+	width: 700px;
+}
+
+#team-member-list h4
+{
+	font-size: 1em;
+}
+
+#team-member-list table
+{
+	width: 700px;
+}
+
+#team-new-member
+{
+	margin: 20px auto 0 auto;
+	width: 700px;
+}
+
+#team-new-member h4, #team-new-member dl dt
+{
+	display: none;
+}
+
+#team-new-member dl dd
+{
+	margin-left: 0;
+	text-align: center;
+}
+
+#team-owner-password
+{
+	margin: 20px auto 0 auto;	/* Textcube-NG: the current-password box added to the owner change form in v3.149 had no rule and sat at the left edge; it now takes the width and centring of #team-new-member below it (r3-16) */
+	width: 700px;
+	text-align: center;
+}
+
+/* User ******************************************************************************************/
+
+/* create new user */
+#part-create-newuser fieldset
+{
+	background-image: none;
+	border: none;
+	margin-bottom: 15px;
+}
+
+#part-create-newuser fieldset dl
+{
+	padding-top: 10px;
+	text-align: center;
+}
+
+#part-create-newuser fieldset dl dt
+{
+	display: inline;
+	line-height: 15px;
+	position: static;
+	float: none;	/* Textcube-NG: keep each label on the same line as its input - basic.css dl dt floats with clear:left since r3-1 (R-164), which pushed every label and input onto a line of its own (r3-14) */
+	clear: none;
+}
+
+#part-create-newuser fieldset dl dd
+{
+	display: inline;
+	line-height: 15px;
+	margin: 0 10px 0 5px;
+	width: auto;
+}
+
+#part-create-newuser .button-box
+{
+	margin-bottom: 30px;
+}
+
+/* user list */
+#part-user-list .message
+{
+	color: #f00;
+	margin-bottom: 10px;
+	text-align: center;
+}
+
+/* user in detail */
+#part-user-about
+{
+	background-image                 : url("./image/logo_textcube_full.png") !important;
+	background-position              : 140px 70px;
+	background-repeat                : no-repeat;
+	padding-bottom: 50px;
+}
+
+#team-user-about h3
+{
+	font-family                      : Tahoma, "Lucida Grande", Verdana, sans-serif;
+	padding-top                      : 55px;
+	margin                           : 30px 0 5px 360px;
+	text-align                       : center;
+	width                            : 435px;
+}
+
+#team-user-about .main-explain-box
+{
+	margin-left                      : 360px;
+	padding                          : 0;
+	width                            : 435px;
+}
+
+#team-user-about .main-explain-box p
+{
+	border                           : 1px solid #ddd;
+	display                          : block;
+	margin-top                       : 20px;
+	padding                          : 10px;
+	text-align                       : center;
+}
+
+#part-user-about ul
+{
+	list-style-type: disc;
+	margin-left: 400px;
+	padding-bottom: 100px;
+}
+
+#part-user-about ul li
+{
+	list-style-type: disc;
+}
+
+#part-user-about ul li em
+{
+	color: #f00;
+}
+
+#part-user-about .container h4
+{
+	margin: 0 0 5px 13px;
+}
+
+#team-joined-list
+{
+	margin: 0 auto;
+	width: 700px;
+}
+
+#team-joined-list h4
+{
+	font-size: 1em;
+}
+
+#team-joined-list table
+{
+	width: 700px;
+}
+
+/* Textcube-NG: temporary password panel of the user detail page - help text, the admin password field and the issue button in their own box, same width as the joined blog list (r3-14) */
+#team-user-token
+{
+	margin: 20px auto 0 auto;
+	width: 700px;
+}
+
+#team-user-token h4
+{
+	font-size: 1em;
+}
+
+#team-user-token p
+{
+	line-height: 1.6em;
+	margin: 0 0 5px 13px;
+}
+
+#team-user-token .token-note
+{
+	color: #666;
+}
+
+#team-user-token .token-form label
+{
+	font-weight: bold;
+	margin-right: 5px;
+}
+
+/* Add Blog ***************************************************************************************/
+#container-add-blog
+{
+	margin-bottom                    : 20px;
+}
+
+/* UserSuggest ************************************************************************************/
+.ctlUserSuggest
+{
+		background-color                 : #FFFFFF;
+		border                           : 1px solid #BBBBBB;
+		font-size                        : 9pt;
+}
+
+.ctlUserSuggest li
+{
+		margin                           : 3px;
+		cursor                           : pointer;
+}
+
+.ctlUserSuggest li.hover
+{
+		background-color                 : #edf !important;
+}
+
+.ctlUserSuggest li.disabled
+{
+		color                            : #777;
+}
+
+/* Textcube-NG: blog suggestion list next to the blog ID fields of the domain routing settings - same look as the user suggestion list (v3.220) */
+#part-control-domainrouting .ng-blog-suggest
+{
+		display                          : inline-block;
+		position                         : relative;
+}
+
+#part-control-domainrouting .ng-blog-suggest .ctlUserSuggest
+{
+		left                             : 0;
+		line-height                      : 1.5em;
+		list-style-type                  : none;
+		margin                           : 0;
+		min-width                        : 100%;
+		padding                          : 0;
+		position                         : absolute;
+		text-align                       : left;
+		top                              : 100%;
+		white-space                      : nowrap;
+		z-index                          : 999;
+}
+
+/* Server ****************************************************************************************/
+
+#part-control-config .section
+{
+	background-color                 : #FFF;
+	font-family                      : Verdana, Arial, Tahoma, "Lucida Grande", sans-serif;
+	margin                           : 20px 0 3px 9px;
+	padding                          : 7px;
+}
+
+#part-control-config .section dl dt
+{
+	background-color                 : #F5F5F5;
+	border-top                       : 1px solid #DDD;
+}
+
+#part-control-config .section dl dd
+{
+	border-top                       : 1px solid #FFF;
+}
+
+#part-control-config .container
+{
+	margin-top                       : 10px;
+}
+
+/* Textcube-NG: help text of the server settings (labels of text inputs and selects, NG key names) sits on the line under its input in small grey text - checkbox captions keep their place next to the checkbox (v3.220); the root redirect URL help uses the same look (r3-4), and so do the domain routing and mail server notes (r3-34) */
+#part-control-config .ng-help,
+#part-control-rootredirect .ng-help,
+#part-control-domainrouting .ng-help,
+#part-control-mailhost .ng-help
+{
+	color                            : #555;
+	display                          : block;
+	font-size                        : 0.9em;
+	line-height                      : 1.5em;
+	padding-bottom                   : 4px;
+}
+
+/* Textcube-NG: server settings - a row that depends on the row above has its input column (dd) indented with a left rule - the dt label is right-aligned, so an indent there does not show; when the prerequisite is off the row is greyed (the dt keeps its colour for contrast on #F5F5F5) (r3-34) */
+#part-control-config dl.ng-dep dd,
+#part-control-pathrouting dl.ng-dep dd,
+#part-control-domainrouting dl.ng-dep dd
+{
+	border-left                      : 2px solid #CCC;
+	margin-left                      : 245px;	/* dl dd above: 230px, plus 15px */
+	padding-left                     : 0.5em;
+}
+
+#part-control-mailhost div.ng-dep
+{
+	border-left                      : 2px solid #CCC;
+	margin-left                      : 1em;
+	padding-left                     : 0.5em;
+}
+
+#part-control-config .ng-off dd,
+#part-control-config .ng-off dd .ng-help,
+#part-control-mailhost .ng-off,
+#part-control-mailhost .ng-off label,
+#part-control-mailhost .ng-off .ng-help
+{
+	color                            : #767676;
+}
+
+#part-control-config .ng-off label,
+#part-control-mailhost .ng-off label
+{
+	cursor                           : default;
+}
+
+/* Textcube-NG: trusted proxies panel (plugin ST_TrustedProxies, control menu) uses the same look as the server settings (v3.206) */
+#part-control-trustedproxies .section
+{
+	background-color                 : #FFF;
+	font-family                      : Verdana, Arial, Tahoma, "Lucida Grande", sans-serif;
+	margin                           : 20px 0 3px 9px;
+	padding                          : 7px;
+}
+
+#part-control-trustedproxies .section dl dt
+{
+	background-color                 : #F5F5F5;
+	border-top                       : 1px solid #DDD;
+}
+
+#part-control-trustedproxies .section dl dd
+{
+	border-top                       : 1px solid #FFF;
+}
+
+#part-control-trustedproxies .container
+{
+	margin-top                       : 10px;
+}
+
+/* Textcube-NG: section titles and help text of the trusted proxies panel - legends are hidden by basic.css, so each section gets a visible h3 title and help text sits under the related setting (v3.218) */
+#part-control-trustedproxies .ng-section-title
+{
+	color                            : #000;
+	font-size                        : 1.1em;
+	margin                           : 20px 0 8px 0;
+}
+
+#part-control-trustedproxies .ng-help
+{
+	color                            : #555;
+	line-height                      : 1.5em;
+	margin                           : 4px 0 10px 100px;
+}
+
+/* Textcube-NG: fit the trusted proxies panel into the screen width - the tables inside .section were 940px wide plus 10px side margins (basic.css .data-inbox) and widened the section and its fieldset past the right edge; inputs and selects stay inside their cells, and long words such as URLs may break (v3.220) */
+#part-control-trustedproxies table.data-inbox
+{
+	margin                           : 2px 0;
+	width                            : 100%;
+}
+
+#part-control-trustedproxies fieldset.container
+{
+	background-image                 : none;
+	min-width                        : 0;
+}
+
+#part-control-trustedproxies table.data-inbox input.input-text,
+#part-control-trustedproxies table.data-inbox textarea,
+#part-control-trustedproxies .section select
+{
+	box-sizing                       : border-box;
+	max-width                        : 100%;
+}
+
+#part-control-trustedproxies .ng-help,
+#part-control-trustedproxies .section dl dd
+{
+	word-wrap                        : break-word;
+	overflow-wrap                    : anywhere;
+}
+
+#part-control-mailhost .button-box
+{
+	border-top                       : 1px solid #DDDDDD;
+	margin                           : 10px 0 20px 0;
+	padding-top                      : 15px;
+}
+
+#part-control-mailhost
+{
+	margin-bottom: 30px;
+}
+
+#part-control-rewrite textarea
+{
+	background-color                 : #FFFFFF;
+	border                           : 1px solid #999999;
+	font-family                      : Courier, 'Courier New', monospace;
+	font-size                        : 12px;
+	height                           : 250px;
+	margin-left                      : 5px !important;
+	padding                          : 0 0 0 2px;
+	width                            : 920px !important;
+}
+
+
+/* Textcube-NG: plugin data management (/control/plugin/table) - same rules as "Data Management" in resources/control/plugin.css, which /control does not load (v3.210) */
+#part-plugin-table-list table thead tr th.delete span
+{
+	display                          : none;
+}
+
+#part-plugin-table-list table tbody tr td.title
+{
+	background-position              : right bottom;
+}
+
+#part-plugin-table-list table tbody tr td.tablename
+{
+	font-family                      : "Courier New", "Courier", monospace;
+	text-align                       : left;
+}
+
+#part-plugin-table-list table tbody tr td.delete
+{
+	width                            : 12px;
+}
+
+/* Textcube-NG: legend under the plugin data management table - a bordered box titled 'Legend' with a two-column [label | meaning] table in place of the help lines (p.ng-help, v3.218); the label cell uses the same classes as the list; side margins match the 940px list table (v3.220) */
+#part-plugin-table-list .ng-legend
+{
+	border                           : 1px solid #D2D2CC;
+	margin                           : 12px 10px 0 10px;
+	padding                          : 8px 10px;
+}
+
+#part-plugin-table-list .ng-legend .ng-legend-title
+{
+	color                            : #333;
+	font-size                        : 1em;
+	margin                           : 0 0 6px 0;
+}
+
+#part-plugin-table-list .ng-legend table.ng-legend-table
+{
+	width                            : 100%;
+}
+
+#part-plugin-table-list .ng-legend table.ng-legend-table th
+{
+	background-color                 : #F3F3F1;
+	border-bottom                    : 1px solid #D2D2CC;
+	border-top                       : 1px solid #D2D2CC;
+	color                            : #333;
+	font-weight                      : normal;
+	padding                          : 4px 8px;
+	text-align                       : left;
+}
+
+#part-plugin-table-list .ng-legend table.ng-legend-table td
+{
+	border-bottom                    : 1px solid #E3E3DE;
+	line-height                      : 1.5em;
+	padding                          : 4px 8px;
+	text-align                       : left;
+	vertical-align                   : top;
+}
+
+#part-plugin-table-list .ng-legend table.ng-legend-table .mark
+{
+	white-space                      : nowrap;
+	width                            : 1%;
+}
+
+/* Textcube-NG: plugin allowlist (/control/plugin) - same look as the server settings, a visible title per section, help text under the settings and the plugin list as a table (v3.218) */
+#part-control-plugin .section
+{
+	background-color                 : #FFF;
+	font-family                      : Verdana, Arial, Tahoma, "Lucida Grande", sans-serif;
+	margin                           : 20px 0 3px 9px;
+	padding                          : 7px;
+}
+
+#part-control-plugin .section dl dt
+{
+	background-color                 : #F5F5F5;
+	border-top                       : 1px solid #DDD;
+}
+
+#part-control-plugin .section dl dd
+{
+	border-top                       : 1px solid #FFF;
+}
+
+#part-control-plugin .container
+{
+	margin-top                       : 10px;
+}
+
+#part-control-plugin .ng-section-title
+{
+	color                            : #000;
+	font-size                        : 1.1em;
+	margin                           : 20px 0 8px 0;
+}
+
+#part-control-plugin .ng-help
+{
+	color                            : #555;
+	line-height                      : 1.5em;
+	margin                           : 4px 0 10px 100px;
+}
+
+#part-control-plugin #plugin-list-container
+{
+	background-image                 : none;
+}
+
+#part-control-plugin #plugin-list-container .ng-help
+{
+	margin                           : 4px 0 4px 0;
+}
+
+#part-control-plugin table.data-inbox
+{
+	margin                           : 2px 0;
+	width                            : 100%;
+}
+
+#part-control-plugin table.data-inbox td.allow
+{
+	width                            : 40px;
+}
+
+#part-control-plugin table.data-inbox td.folder
+{
+	font-family                      : "Courier New", "Courier", monospace;
+	text-align                       : left;
+	white-space                      : nowrap;
+}
+
+#part-control-plugin table.data-inbox td.plugin-title, #part-control-plugin table.data-inbox td.scan
+{
+	text-align                       : left;
+}
+
+/* Textcube-NG: legend of the check results under the plugin list - a bordered box titled 'Legend' with a two-column [label | meaning] table; the label cell uses the same markup and classes as the list (v3.220) */
+#part-control-plugin .ng-legend
+{
+	border                           : 1px solid #D2D2CC;
+	margin                           : 12px 0 4px 0;
+	padding                          : 8px 10px;
+}
+
+#part-control-plugin .ng-legend .ng-legend-title
+{
+	color                            : #333;
+	font-size                        : 1em;
+	margin                           : 0 0 6px 0;
+}
+
+#part-control-plugin .ng-legend table.ng-legend-table
+{
+	width                            : 100%;
+}
+
+#part-control-plugin .ng-legend table.ng-legend-table th
+{
+	background-color                 : #F3F3F1;
+	border-bottom                    : 1px solid #D2D2CC;
+	border-top                       : 1px solid #D2D2CC;
+	color                            : #333;
+	font-weight                      : normal;
+	padding                          : 4px 8px;
+	text-align                       : left;
+}
+
+#part-control-plugin .ng-legend table.ng-legend-table td
+{
+	border-bottom                    : 1px solid #E3E3DE;
+	line-height                      : 1.5em;
+	padding                          : 4px 8px;
+	text-align                       : left;
+	vertical-align                   : top;
+}
+
+#part-control-plugin .ng-legend table.ng-legend-table .mark
+{
+	white-space                      : nowrap;
+	width                            : 1%;
+}
+
+
+
+/* System ****************************************************************************************/
+
+/* general information */
+#part-system-generalinfo
+{
+	margin-bottom: 30px;
+}
+
+#part-system-generalinfo h3
+{
+	color: #000;
+	font-size: 1.2em;
+	margin: 30px 0 10px 10px;
+}
+
+#part-system-generalinfo h4
+{
+	color: #000;
+	font-size: 1.1em;
+	margin: 30px 0 10px 10px;
+}
+
+#part-system-generalinfo table
+{
+	width: 100%;
+}
+
+#part-system-generalinfo table tr th, #part-system-generalinfo table tr td
+{
+	border-bottom: 1px solid #ddd;
+	border-top: 1px solid #ddd;
+}
+
+#part-system-generalinfo table tr th, #part-system-generalinfo table tr td
+{
+	padding: 5px;
+	text-align: left;
+}
+
+#part-system-generalinfo table tbody tr th
+{
+	width: 250px;
+}
+
+/* php information */
+#part-system-phpinfo
+{
+	margin-bottom: 30px;
+}
+
+#part-system-phpinfo h3
+{
+	color: #000;
+	font-size: 1.2em;
+	margin: 30px 0 10px 10px;
+}
+
+#part-system-phpinfo h4
+{
+	color: #000;
+	font-size: 1.1em;
+	margin: 30px 0 0 10px;
+}
+
+#part-system-phpinfo table
+{
+	margin-top: 10px;
+	width: 100%;
+}
+
+#part-system-phpinfo table thead
+{
+	background-color: #efefef;
+}
+
+#part-system-phpinfo table tr th, #part-system-phpinfo table tr td
+{
+	border-bottom: 1px solid #ddd;
+	border-top: 1px solid #ddd;
+}
+
+#part-system-phpinfo table tr th, #part-system-phpinfo table tr td
+{
+	padding: 5px;
+	text-align: left;
+}
+
+#part-system-phpinfo table tbody tr th
+{
+	width: 250px;
+}
+
+#part-system-phpinfo table tr td
+{
+	word-wrap: break-word;
+	overflow-wrap: anywhere;
+}
+
+#part-system-phpinfo form
+{
+	margin-top: -37px;
+	position: relative;
+	right: 10px;
+	text-align: right;
+	z-index: 10;
+}
+
+#part-system-phpinfo form label
+{
+	display: none;
+}
+
+#PHPLogo
+{
+	margin-top: 30px;
+	text-align: center;
+	width: 150px;
+}
+
+#PHPLogo img
+{
+	border: none;
+}
+
+#part-system-phpinfo table tr td img
+{
+	float: left;
+	margin-right: 10px;
+}

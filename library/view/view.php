@@ -1,0 +1,1780 @@
+<?php
+/// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
+/// All rights reserved. Licensed under the GPL.
+/// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 5.5 - 7.3 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
+
+function printHtmlHeader($title = '') {
+?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="ko">
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+	<title><?php echo $title;?></title>
+</head>
+<body>
+<?php
+}
+
+function printHtmlFooter() {
+?>
+</body>
+</html>
+<?php
+}
+
+function dress($tag, $value, & $contents, $useCache = false, $forcePatch = false) {
+	global $__gDressTags;
+	if($useCache == true) {
+		if(strpos($tag, 'sidebar_') !== false ||
+			strpos($tag, 'coverpage_') !== false ||
+			in_array($tag, $__gDressTags) ) {
+			$contents = str_replace("[##_{$tag}_##]", $value, $contents);
+			return true;
+		} else {
+			return false;
+		}
+	} else {
+		if($forcePatch == true) {
+			$contents = str_replace("[##_{$tag}_##]", $value, $contents);
+			return true;
+		} else if (preg_match("@\\[##_{$tag}_##\\]@iU", $contents)) {
+			$contents = str_replace("[##_{$tag}_##]", $value, $contents);
+			return true;
+		} else return false;
+	}
+}
+
+function dressInsertBefore($tag, $value, & $contents, $useCache = false, $forcePatch = false) {
+	global $__gDressTags;
+	if($useCache == true) {
+		if(strpos($tag, 'sidebar_') !== false ||
+			strpos($tag, 'coverpage_') !== false ||
+			in_array($tag, $__gDressTags) ) {
+			$tempContents = preg_split("@\\[##_{$tag}_##\\]@iU", $contents, 2);
+			$contents = $tempContents[0].$value.'[##_'.$tag.'_##]'.$tempContents[1];
+			return true;
+		} else {
+			return false;
+		}
+	} else if (preg_match("@\\[##_{$tag}_##\\]@iU", $contents)) {
+		$tempContents = preg_split("@\\[##_{$tag}_##\\]@iU", $contents, 2);
+		$contents = $tempContents[0].$value.'[##_'.$tag.'_##]'.$tempContents[1];
+		return true;
+	} else {
+		return false;
+	}
+}
+
+function getScriptsOnHead($paging, $entryIds = null) {
+	$context = Model_Context::getInstance();
+	ob_start();
+?>
+<?php /* Textcube-NG: 이식본에서 고친 스크립트(EAF4.js·common3.js·gallery.js·jQuery, v3.147·v3.207)는 externalresources 설정과 관계없이 이 서버의 /resources 에서 읽는다 — 외부 리소스 주소의 원본 스크립트에는 CSRF 토큰 패치가 없다(r3-3) */ ?>
+	<script type="text/javascript" src="<?php echo $context->getProperty('service.path').'/resources';?>/script/jquery/jquery-<?php echo JQUERY_VERSION;?>.js"></script>
+	<script type="text/javascript" src="<?php echo $context->getProperty('service.path').'/resources';?>/script/jquery/jquery.bpopup-<?php echo JQUERY_BPOPUP_VERSION;?>.js?v=<?php echo filemtime(ROOT . '/resources/script/jquery/jquery.bpopup-' . JQUERY_BPOPUP_VERSION . '.js');?>"></script>
+	<script type="text/javascript">jQuery.noConflict();</script>
+
+	<script type="text/javascript" src="<?php echo $context->getProperty('service.path');?>/resources/script/EAF4.js?v=<?php echo filemtime(ROOT . '/resources/script/EAF4.js');?>"></script>
+	<script type="text/javascript" src="<?php echo $context->getProperty('service.path');?>/resources/script/common3.js?v=<?php echo filemtime(ROOT . '/resources/script/common3.js');?>"></script>
+	<script type="text/javascript" src="<?php echo $context->getProperty('service.path');?>/resources/script/gallery.js" ></script>
+	<script type="text/javascript">
+	//<![CDATA[
+<?php
+	// Textcube-NG: servicePath·serviceURL·blogURL 도 json_encode() 로 JS 문자열 escape — 아래 displayMode 등(v3.181)과 같은 방식. 원본처럼 JS 문자열로 나간다(r3-3)
+?>
+		var servicePath = <?php echo jsonEncodeCompat((string)$context->getProperty('service.path'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE) ?: '""';?>;
+		var serviceURL  = <?php echo jsonEncodeCompat((string)$context->getProperty('uri.service'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE) ?: '""';?>;
+		var blogURL = <?php echo jsonEncodeCompat((string)$context->getProperty('uri.blog'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE) ?: '""';?>;
+		var prevURL = "<?php echo isset($paging['prev']) ? escapeJSInCData("{$paging['url']}{$paging['prefix']}{$paging['prev']}{$paging['postfix']}") : '';?>";
+		var nextURL = "<?php echo isset($paging['next']) ? escapeJSInCData("{$paging['url']}{$paging['prefix']}{$paging['next']}{$paging['postfix']}") : '';?>";
+		var commentKey = "<?php echo md5(filemtime(ROOT . '/config.php'));?>";
+		var doesHaveOwnership = <?php echo doesHaveOwnership() ? 'true' : 'false'; ?>;
+<?php
+	if (doesHaveOwnership()) {	// Textcube-NG: 소유자에게만 CSRF 토큰 출력 — 블로그 화면의 관리 동작(XHR)에 EAF4.js 가 붙인다(v3.147)
+?>
+		var csrfToken = "<?php echo getCSRFToken();?>";
+<?php
+	}
+?>
+		var isReaderEnabled = <?php echo ($context->getProperty('service.reader') ? 'true' : 'false'); ?>;
+<?php
+	// Textcube-NG: displayMode·workMode·cookie_prefix 를 같은 블록 messages(v3.167)와 같은 json_encode() 로 JS 문자열 escape — cookie_prefix 는 /control/server 설정값(문자 제한 없음)이라 따옴표·</script> 로 블록이 깨지거나 스크립트가 들어갈 수 있었음. 원본처럼 JS 문자열로 나가도록 (string) 으로 바꿔 넘긴다(v3.181)
+?>
+		var displayMode = <?php echo jsonEncodeCompat((string)$context->getProperty('blog.displaymode','desktop'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE) ?: '""';?>;
+		var workMode = <?php echo jsonEncodeCompat((string)$context->getProperty('blog.workmode','enhanced'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE) ?: '""';?>;
+		var cookie_prefix = <?php echo jsonEncodeCompat((string)$context->getProperty('service.cookie_prefix',''), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE) ?: '""';?>;
+<?php
+	if (!is_null($entryIds)) {
+?>
+		var entryIds = [<?php echo implode(',',$entryIds);?>];
+<?php
+	}
+?>
+		var messages = {
+			"trackbackUrlCopied": <?php echo jsonEncodeCompat(_text('엮인글 주소가 복사되었습니다.'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE) ?: '""';?>,
+			"operationFailed": <?php echo jsonEncodeCompat(_text('실패했습니다.'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE) ?: '""';?>,
+			"confirmTrackbackDelete": <?php echo jsonEncodeCompat(_text('선택된 글걸기를 삭제합니다. 계속 하시겠습니까?'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE) ?: '""';?>,
+			"confirmEntryDelete": <?php echo jsonEncodeCompat(_text('이 글 및 이미지 파일을 완전히 삭제합니다. 계속 하시겠습니까?'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE) ?: '""';?>,
+			"onSaving": <?php echo jsonEncodeCompat(_text('저장하고 있습니다'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE) ?: '""'; echo "\n";?>
+		}
+	//]]>
+	</script>
+<?php
+	$view = ob_get_contents();
+	ob_end_clean();
+	return $view;
+}
+
+function getUpperView() {
+	$context = Model_Context::getInstance();
+	ob_start();
+?>
+	<!--
+		<?php echo TEXTCUBE_NAME." ".TEXTCUBE_VERSION." (NG ".TEXTCUBE_NG_VERSION.")".CRLF;?>
+
+		Homepage: <?php echo TEXTCUBE_HOMEPAGE.CRLF;?>
+		<?php echo TEXTCUBE_COPYRIGHT.CRLF;?>
+	-->
+<?php
+	if (doesHaveOwnership()) {
+?>
+	<script type="text/javascript" src="<?php echo $context->getProperty('service.resourcepath');?>/script/owner.js" ></script>
+<?php
+	}
+?>
+	<script type="text/javascript">
+		//<![CDATA[
+			document.onkeydown = processShortcut;
+		//]]>
+	</script>
+<div id="tcDialog" style="display:none;"></div>
+<?php
+	$view = ob_get_contents();
+	ob_end_clean();
+	return $view;
+}
+
+function getLowerView() {
+	ob_start();
+	$view = ob_get_contents();
+	ob_end_clean();
+	return $view;
+}
+
+function getScriptsOnFoot() {
+	$context = Model_Context::getInstance();
+	ob_start();
+    if (($context->getProperty('service.reader') != false) && (time() - Setting::getServiceSetting('lastFeedUpdate', 0, true) > 180)) {
+?>
+	<script type="text/javascript">
+		//<![CDATA[
+			updateFeed();
+		//]]>
+	</script>
+<?php
+		$view = ob_get_contents();
+		ob_end_clean();
+		return $view;
+	} else return '';
+}
+
+function getTrackbacksView($entry, $skin, $accepttrackback) {
+	global $suri, $defaultURL, $skinSetting, $blogURL, $service, $blog;
+	requireModel('blog.response.remote');
+	requireLibrary('blog.skin');
+
+	$trackbacksContainer = $skin->trackbackContainer;
+	$trackbacksView = '';
+	$trackbacks = getTrackbacks($entry['id']);
+	foreach ($trackbacks as $trackback) {
+		$trackbackView = $skin->trackback;
+		dress('tb_rep_title', htmlspecialchars(fireEvent('ViewTrackbackTitle', $trackback['subject'], array($trackback['id'], $trackback['url'])), ENT_QUOTES | ENT_SUBSTITUTE), $trackbackView);
+		dress('tb_rep_site', htmlspecialchars($trackback['site'], ENT_QUOTES | ENT_SUBSTITUTE), $trackbackView);
+		dress('tb_rep_url', htmlspecialchars($trackback['url'], ENT_QUOTES | ENT_SUBSTITUTE), $trackbackView);
+		dress('tb_rep_desc', htmlspecialchars($trackback['excerpt'], ENT_QUOTES | ENT_SUBSTITUTE), $trackbackView);
+		dress('tb_rep_onclick_delete', "deleteTrackback({$trackback['id']}, {$entry['id']})", $trackbackView);
+		dress('tb_rep_date', fireEvent('ViewTrackbackDate', Timestamp::format5($trackback['written']), $trackback['written']), $trackbackView);
+		if (dress('tb_rep_id', 'trackback' . $trackback['id'] , $trackbackView) == false) {
+			$trackbackView = "<a id=\"trackback{$trackback['id']}\"></a>" . $trackbackView;
+		}
+		$trackbacksView .= $trackbackView;
+	}
+
+	if (count($trackbacks) > 0) {
+		dress('tb_rep', $trackbacksView, $trackbacksContainer);
+	} else {
+		$trackbacksContainer = '';
+	}
+
+	if ($skinSetting['expandTrackback'] == 1 || (($suri['url'] != $blogURL.'/index.php' && $suri['url'] != $service['path'].'/index.php') && ($suri['directive'] == '/' || $suri['directive'] == '/entry') && $suri['value'] != '')) {
+		$style = 'block';
+	} else {
+		$style = 'none';
+	}
+	$trackbacksView = "<div id=\"entry{$entry['id']}Trackback\" style=\"display:$style\">" . str_replace('[##_tb_container_##]', $trackbacksContainer, $skin->trackbacks) . '</div>';
+
+
+	if(Setting::getBlogSettingGlobal('acceptTrackbacks',1) && $accepttrackback) {
+		// Blocked. (Too many encoding issues with various trackback sender.)
+		//$trackbackAddress = $defaultURL."/trackback/".($blog['useSloganOnPost'] ? $entry['slogan'] : $entry['id']);
+		$trackbackAddress = $defaultURL."/trackback/".$entry['id'];
+		dress('tb_address', "<span onclick=\"copyUrl('$trackbackAddress', this)\">$trackbackAddress</span>", $trackbacksView);
+	}
+	else
+		dress('tb_address', _t('이 글에는 트랙백을 보낼 수 없습니다'), $trackbacksView);
+
+	return $trackbacksView;
+}
+
+function getCommentView($entry, $skin, $inputBlock = true, $page = 1, $count = null, $listBlock = true) {
+	global $contentContainer, $skinSetting, $skin;
+	static $dressCommentBlock = false;
+	$context = Model_Context::getInstance();
+	if(is_null($count)) {
+		if($context->getProperty('skin.commentsOnEntry')) {
+			$count = $context->getProperty('skin.commentsOnEntry');
+		} else {
+			$count = 15;
+		}
+	}
+	if(!isset($entry)) $entry['id'] = 0;
+	$blogid = getBlogId();
+	requireModel("common.setting");
+	requireModel("blog.entry");
+	requireModel("blog.comment");
+	requireLibrary('blog.skin');
+	$authorized = doesHaveOwnership();
+	$useAjaxBlock = $context->getProperty('blog.useAjaxComment',true);
+	$useMicroformat = $context->getProperty('blog.useMicroformat',3);
+	$fn = '';
+	$fn_nickname = '';
+	if( $useMicroformat > 1 ) {
+		$fn = 'class="fn url nickname" ';
+		$fn_nickname = 'class="fn nickname" ';
+	}
+	if ($entry['id'] > 0) {
+		$prefix1 = 'rp';
+		$isComment = true;
+	} else {
+		$prefix1 = 'guest';
+		$isComment = false;
+	}
+	$commentView = ($isComment ? $skin->comment : $skin->guest);
+	$commentItemsView = '';
+	if ($listBlock === true) {
+		if ($isComment == false) {
+			global $comments;
+			if(!isset($comments)) {
+				list($comments, $paging) = getCommentsWithPagingForGuestbook($blogid, $context->getProperty('suri.page'), $skinSetting['commentsOnGuestbook']);
+			}
+			foreach ($comments as $key => $value) {
+				if ($value['secret'] == 1) {
+					if (!canReadSecretComment(0, $value)) {	// Textcube-NG: 방명록 비밀 글은 editors 이상·본인·회원 글의 답글(r3-7, 결정 447)
+						if( !doesHaveOpenIDPriv($value) ) {
+							$comments[$key]['name'] = _text('비밀방문자');
+							$comments[$key]['homepage'] = '';
+							$comments[$key]['comment'] = _text('관리자만 볼 수 있는 방명록입니다.');
+						} else {
+							$comments[$key]['name'] = _text('비밀방문자') .' '. $comments[$key]['name'];
+						}
+					}
+				}
+			}
+		} else {
+			if($useAjaxBlock) {
+				list($comments, $paging) = getCommentsWithPagingByEntryId($blogid, $entry['id'], $page, $count,'loadComment','('.$entry['id'].',',',true,true);return false;',null, $context->getProperty('skin.sortCommentsBy','ASC'));
+			} else {
+				$comments = getComments($entry['id'],$context->getProperty('skin.sortCommentsBy','ASC'));
+			}
+		}
+		if(empty($skin->dressCommentBlock)) {
+			if( $dressCommentBlock ) {
+				if($isComment) $skin->commentGuest = $dressCommentBlock;
+				else $skin->guestGuest = $dressCommentBlock;
+			} else {
+				// Textcube-NG: 방문자 입력 블록을 플러그인이 덧붙일 수 있게 ViewCommentGuestForm 이벤트를 부른다(대상=블록, 둘째 인자='rp'|'guest').
+				// CL_SocialLogin 이 이 블록 앞에 방문자용 소셜 로그인 버튼을 넣는다(r3-39)
+				if($isComment) $dressCommentBlock = $skin->commentGuest = fireEvent( 'ViewCommentGuestForm', addOpenIDPannel( $skin->commentGuest, 'rp' ), 'rp' );
+				else $dressCommentBlock = $skin->guestGuest = fireEvent( 'ViewCommentGuestForm', addOpenIDPannel( $skin->guestGuest, 'guest' ), 'guest' );
+			}
+			$skin->dressCommentBlock = true;
+		}
+		/// Dressing comments
+		foreach ($comments as $commentItem) {
+			$commentItemView = ($isComment ? $skin->commentItem : $skin->guestItem);
+			$commentSubItemsView = '';
+			$subComments = getCommentComments($commentItem['id'],$commentItem);
+			foreach ($subComments as $commentSubItem) {
+				$commentSubItemView = ($isComment ? $skin->commentSubItem : $skin->guestSubItem);
+
+				$commentSubItem['name'] = htmlspecialchars($commentSubItem['name'], ENT_QUOTES | ENT_SUBSTITUTE);
+				$commentSubItem['comment'] = htmlspecialchars($commentSubItem['comment'], ENT_QUOTES | ENT_SUBSTITUTE);
+
+				$rp_class = $prefix1 . '_general';
+				if ($blogid == $commentSubItem['replier'])
+					$rp_class = $prefix1 . '_admin';
+				else if ($commentSubItem['secret'] == 1) {
+					$rp_class = $prefix1 . '_secret';
+					if (canReadSecretComment($entry['id'], $commentSubItem)) {	// Textcube-NG: 비밀 댓글 열람(r3-7, 결정 447)
+						$commentSubItem['comment'] = '<span class="hiddenCommentTag_content">' . _text('[비밀댓글]') . '</span> ' . $commentSubItem['comment'];
+					} else {
+						$rp_class .= ' hiddenComment';
+						$commentSubItem['name'] = '<span class="hiddenCommentTag_name">' . _text('비밀방문자') . '</span>'.(doesHaveOpenIDPriv($commentSubItem)?' '.$commentSubItem['name']:'');
+					}
+				}
+				dress($prefix1 . '_rep_class', $rp_class, $commentSubItemView);
+
+				if (dress($prefix1 . '_rep_id',($entry['id'] == 0 ? 'guestbook' : 'comment') . $commentSubItem['id'], $commentSubItemView) == false) {
+					$commentSubItemView = "<a id=\"comment{$commentSubItem['id']}\"></a>" . $commentSubItemView;
+				}
+				if (empty($commentSubItem['homepage']) ||
+					(($commentSubItem['secret'] == 1) && !canReadSecretComment($entry['id'], $commentSubItem))) {
+					dress($prefix1 . '_rep_name', fireEvent(($isComment ? 'ViewCommenter' : 'ViewGuestCommenter'), "<span $fn_nickname>".$commentSubItem['name']."</span>", $commentSubItem), $commentSubItemView);
+				} else {
+					dress($prefix1 . '_rep_name', fireEvent(($isComment ? 'ViewCommenter' : 'ViewGuestCommenter'), '<a '.$fn.'rel="external nofollow" href="' . htmlspecialchars(addProtocolSense($commentSubItem['homepage']), ENT_QUOTES | ENT_SUBSTITUTE) . '" onclick="return openLinkInNewWindow(this)">' . $commentSubItem['name'] . '</a>', $commentSubItem), $commentSubItemView);
+				}
+				$contentContainer["{$prefix1}_{$commentSubItem['id']}"] = fireEvent(($isComment ? 'ViewCommentContent' : 'ViewGuestCommentContent'), nl2br(addLinkSense($commentSubItem['comment'], ' onclick="return openLinkInNewWindow(this)"')), $commentSubItem);
+				dress($prefix1 . '_rep_desc', setTempTag("{$prefix1}_{$commentSubItem['id']}"), $commentSubItemView);
+				dress($prefix1 . '_rep_date', fireEvent(($isComment ? 'ViewCommentDate' : 'ViewGuestCommentDate'), Timestamp::format5($commentSubItem['written']), $commentSubItem['written']), $commentSubItemView);
+				dress($prefix1 . '_rep_link',$context->getProperty('uri.blog')."/".($entry['id'] == 0 ? "guestbook/{$commentItem['id']}#guestbook{$commentSubItem['id']}" : ($context->getProperty('blog.useSloganOnPost') ? "entry/".URL::encode($entry['slogan'],$context->getProperty('service.useEncodedURL')) : $entry['id'])."#comment{$commentSubItem['id']}"), $commentSubItemView);
+				dress($prefix1 . '_rep_onclick_delete', "deleteComment({$commentSubItem['id']}); return false;", $commentSubItemView);
+
+				$commentSubItemsView .= $commentSubItemView;
+			}
+			$commentSubContainer = ($isComment ? $skin->commentSubContainer : $skin->guestSubContainer);
+			dress(($isComment ? 'rp2_rep' : 'guest_reply_rep'), $commentSubItemsView, $commentSubContainer);
+			if (count($subComments) > 0) {
+				dress(($isComment ? 'rp2_container' : 'guest_reply_container'), $commentSubContainer, $commentItemView);
+			}
+
+			$commentItem['name'] = htmlspecialchars($commentItem['name'], ENT_QUOTES | ENT_SUBSTITUTE);
+			$commentItem['comment'] = htmlspecialchars($commentItem['comment'], ENT_QUOTES | ENT_SUBSTITUTE);
+
+			$rp_class = $prefix1 . '_general';
+			if ($blogid == $commentItem['replier'])
+				$rp_class = $prefix1 . '_admin';
+			else if ($commentItem['secret'] == 1) {
+				$rp_class = $prefix1 . '_secret';
+				if (canReadSecretComment($entry['id'], $commentItem)) {	// Textcube-NG: 비밀 댓글 열람(r3-7, 결정 447)
+					$commentItem['comment'] = '<span class="hiddenCommentTag_content">' . _text('[비밀댓글]') . '</span> ' . $commentItem['comment'];
+				} else {
+					$rp_class .= ' hiddenComment';
+					$commentItem['name'] = '<span class="hiddenCommentTag_name">' . _text('비밀방문자') . '</span>'.(doesHaveOpenIDPriv($commentItem)?' '.$commentItem['name']:'');
+				}
+			}
+			dress($prefix1 . '_rep_class', $rp_class, $commentItemView);
+			if (dress($prefix1 . '_rep_id', ($entry['id'] == 0 ? 'guestbook' : 'comment') . $commentItem['id'], $commentItemView) == false) {
+				$commentItemView = "<a id=\"comment{$commentItem['id']}\"></a>" . $commentItemView;
+			}
+			if (empty($commentItem['homepage']) ||
+				(($commentItem['secret'] == 1) && !canReadSecretComment($entry['id'], $commentItem))) {
+				dress($prefix1 . '_rep_name', fireEvent(($isComment ? 'ViewCommenter' : 'ViewGuestCommenter'), "<span $fn_nickname>".$commentItem['name']."</span>", $commentItem), $commentItemView);
+			} else {
+				dress($prefix1 . '_rep_name', fireEvent(($isComment ? 'ViewCommenter' : 'ViewGuestCommenter'), '<a '.$fn.'rel="external nofollow" href="' . htmlspecialchars(addProtocolSense($commentItem['homepage']), ENT_QUOTES | ENT_SUBSTITUTE) . '" onclick="return openLinkInNewWindow(this)">' . $commentItem['name'] . '</a>', $commentItem), $commentItemView);
+			}
+			$contentContainer["{$prefix1}_{$commentItem['id']}"] = fireEvent(($isComment ? 'ViewCommentContent' : 'ViewGuestCommentContent'), nl2br(addLinkSense($commentItem['comment'], ' onclick="return openLinkInNewWindow(this)"')), $commentItem);
+			dress($prefix1 . '_rep_desc', setTempTag("{$prefix1}_{$commentItem['id']}"), $commentItemView);
+			dress($prefix1 . '_rep_date', fireEvent(($isComment ? 'ViewCommentDate' : 'ViewGuestCommentDate'), Timestamp::format5($commentItem['written']), $commentItem['written']), $commentItemView);
+			if ((!$context->getProperty('blog.acceptComments',true))||($prefix1 == 'guest' && $authorized != true && $context->getProperty('blog.allowWriteDblCommentOnGuestbook') == 0)) {
+				$doubleCommentPermissionScript = htmlspecialchars('alert(' . jsonEncodeCompat(_text('댓글을 사용할 수 없습니다.'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE) . '); return false;', ENT_QUOTES);	// Textcube-NG: JSON_INVALID_UTF8_SUBSTITUTE(7.2) 대신 jsonEncodeCompat()(00-Compat.php, r4-4)
+			} else {
+				$doubleCommentPermissionScript = '';
+			}
+			dress($prefix1 . '_rep_onclick_reply', $doubleCommentPermissionScript . "commentComment({$commentItem['id']}); return false", $commentItemView);
+			dress($prefix1 . '_rep_onclick_delete', "deleteComment({$commentItem['id']});return false", $commentItemView);
+			dress($prefix1 . '_rep_link',
+				$context->getProperty('uri.blog')."/".($entry['id'] == 0 ? "guestbook/{$commentItem['id']}#guestbook{$commentItem['id']}" :
+				($context->getProperty('blog.useSloganOnPost') ? "entry/".URL::encode($entry['slogan'],$context->getProperty('service.useEncodedURL')) : $entry['id'])."?commentId=".$commentItem['id']."#comment{$commentItem['id']}"), $commentItemView);
+
+			$commentItemsView .= $commentItemView;
+		}
+		/// Merging comments with its paging links.
+		$commentContainer = ($isComment ? $skin->commentContainer : $skin->guestContainer);
+		dress(($isComment ? 'rp_rep' : 'guest_rep'), $commentItemsView, $commentContainer);
+		if (count($comments) > 0) {
+			if($isComment && $useAjaxBlock) {
+				$pagingView = Paging::getPagingView($paging, $skin->paging, $skin->pagingItem, false, 'onclick');
+			} else $pagingView = '';
+			dress($prefix1 . '_container', "<div id=\"entry".$entry['id']."CommentList\">".$commentContainer.$pagingView."</div>", $commentView);
+		}
+	} else {
+		dress($prefix1 . '_container', '', $commentView);
+	}
+	/// Comment write block
+	if($inputBlock == true) {
+		if(!empty($entry['acceptcomment'])) {
+			$acceptcomment = $entry['acceptcomment'];
+		} else {
+			$pool = DBModel::getInstance();
+			$pool->reset('Entries');
+			$pool->setQualifier('blogid','equals',$blogid);
+			$pool->setQualifier('id','equals',$entry['id']);
+			$pool->setQualifier('draft','equals',0);
+			$acceptcomment = $pool->getCell('acceptcomment');
+		}
+		$useForm = false;
+		$openidOnlyView = null;
+		$openid_identity = Acl::getIdentity('openid');
+		if ($isComment) {
+			if (!($skin->commentForm == '')) {
+				$commentRrevView = $commentView;	/// Comment Lists.
+				$commentView = $skin->commentForm;	/// Comment write block.
+				$useForm = true;
+			}
+		} else {
+			if (!($skin->guestForm == '')) {
+				$commentRrevView = $commentView;
+				$commentView = $skin->guestForm;
+				$useForm = true;
+			}
+		}
+
+		$default_guestname = '';
+		$default_homepage = '';
+		if (doesHaveOwnership() || ($isComment && $acceptcomment == 1 && Setting::getBlogSettingGlobal('acceptComments',1)) || ($isComment == false) || ($useForm == false)) {
+			$commentMemberView = ($isComment ? $skin->commentMember : $skin->guestMember);
+			if (!doesHaveMembership()) {
+				$commentGuestView = ($isComment ? $skin->commentGuest : $skin->guestGuest);
+				dress($prefix1 . '_input_name', 'name', $commentGuestView);
+				dress($prefix1 . '_input_password', 'password', $commentGuestView);
+				dress($prefix1 . '_input_homepage', 'homepage', $commentGuestView);
+				if (!empty($_POST["name_{$entry['id']}"]))
+					$guestName = htmlspecialchars($_POST["name_{$entry['id']}"], ENT_QUOTES | ENT_SUBSTITUTE);
+				else if (!empty($_SESSION['openid']['nickname']))
+					$guestName = htmlspecialchars($_SESSION['openid']['nickname'], ENT_QUOTES | ENT_SUBSTITUTE);
+				else if (!empty($_COOKIE[$context->getProperty('service.cookie_prefix').'guestName']))
+					$guestName = htmlspecialchars($_COOKIE[$context->getProperty('service.cookie_prefix').'guestName'], ENT_QUOTES | ENT_SUBSTITUTE);
+				else
+					$guestName = '';
+				dress('guest_name', $guestName, $commentGuestView);
+				if (!empty($_POST["homepage_{$entry['id']}"]) && $_POST["homepage_{$entry['id']}"] != 'http://') {
+					if (strpos($_POST["homepage_{$entry['id']}"], 'http://') === 0)
+						$guestHomepage = htmlspecialchars($_POST["homepage_{$entry['id']}"], ENT_QUOTES | ENT_SUBSTITUTE);
+					else
+						$guestHomepage = 'http://' . htmlspecialchars($_POST["homepage_{$entry['id']}"], ENT_QUOTES | ENT_SUBSTITUTE);
+				} else if (!empty($_SESSION['openid']['homepage'])) {
+					$guestHomepage = htmlspecialchars($_SESSION['openid']['homepage'], ENT_QUOTES | ENT_SUBSTITUTE);
+				} else if (!empty($_COOKIE[$context->getProperty('service.cookie_prefix').'guestHomepage'])) {
+					$guestHomepage = htmlspecialchars($_COOKIE[$context->getProperty('service.cookie_prefix').'guestHomepage'], ENT_QUOTES | ENT_SUBSTITUTE);
+				}
+				else
+					$guestHomepage = 'http://';
+				dress('guest_homepage', $guestHomepage, $commentGuestView);
+				dress($prefix1 . ($isComment ? '_guest' : '_form'), $commentGuestView, $commentMemberView);
+			}
+			dress($prefix1 . '_input_is_secret', 'secret', $commentMemberView);
+			dress($prefix1 . '_member', $commentMemberView, $commentView);
+
+			dress($prefix1 . '_input_comment', 'comment', $commentView);
+			dress($prefix1 . '_onclick_submit', "addComment(this, {$entry['id']}); return false;", $commentView);
+			dress($prefix1 . '_textarea_body', 'comment', $commentView);
+			dress($prefix1 . '_textarea_body_value', '', $commentView);
+			dress('article_rep_id', $entry['id'], $commentView);
+			// 댓글 오픈아이디 전용 모드(AddCommentMode)에서 이 방문자가 쓸 수 없으면 — 서버 판정(blog.comment.php)과 같은 함수 —
+			// 스킨의 <s_rp_input_form_openid_only>·<s_guest_input_form_openid_only> 블록을 입력 폼 대신 보여 준다. 블록이 없으면 폼 그대로(v3.153).
+			if ($useForm == true && isCommentOpenIDOnlyBlocked()) {
+				if ($isComment) {
+					$openidOnlyView = isset($skin->commentFormOpenIDOnly) ? $skin->commentFormOpenIDOnly : null;
+				} else {
+					$openidOnlyView = isset($skin->guestFormOpenIDOnly) ? $skin->guestFormOpenIDOnly : null;
+				}
+			}
+		} else if ($useForm == true) {
+			$commentView = '';
+		}
+
+		if ($useForm == true) {
+			if ($openidOnlyView !== null) {
+				// 입력 폼 대신 오픈아이디 로그인 안내(v3.153). [##_guest_openid_login_##] = 방문자 OpenID 로그인 화면 주소(돌아올 주소는 OpenID::getReturnURI), escape.
+				// Textcube-NG: 오픈아이디 전용 모드 안내 블록도 ViewCommentOpenIDOnlyForm 이벤트로 플러그인이 덧붙일 수 있게 한다(둘째 인자='rp'|'guest', r3-39)
+				$openidOnlyView = fireEvent('ViewCommentOpenIDOnlyForm', $openidOnlyView, $prefix1);
+				dress('guest_openid_login', htmlspecialchars(OpenID::getGuestLoginURI(), ENT_QUOTES), $openidOnlyView);
+				dress('article_rep_id', $entry['id'], $openidOnlyView);
+				dress($prefix1 . '_input_form', '', $commentRrevView);
+				dress($prefix1 . '_input_form_openid_only', $openidOnlyView, $commentRrevView);
+			} else {
+				dress($prefix1 . '_input_form', "<form id=\"entry".$entry['id']."WriteComment\" method=\"post\" action=\"".$context->getProperty('uri.blog')."/comment/add/{$entry['id']}\" onsubmit=\"return false\" style=\"margin: 0\">" . $commentView . '</form>', $commentRrevView);
+				dress($prefix1 . '_input_form_openid_only', '', $commentRrevView);
+			}
+			$commentView = $commentRrevView;
+		} else {
+			dress($prefix1 . '_input_form_openid_only', '', $commentView);
+			$commentView = "<form id=\"entry".$entry['id']."WriteComment\" method=\"post\" action=\"".$context->getProperty('uri.blog')."/comment/add/{$entry['id']}\" onsubmit=\"return false\" style=\"margin: 0\">" . $commentView . '</form>';
+		}
+	} else {
+		dress($prefix1 . '_input_form', "", $commentView);
+		dress($prefix1 . '_input_form_openid_only', '', $commentView);
+	}
+	/// Adding feed links.
+	dress('article_rep_rp_atomurl', $context->getProperty('uri.default').'/atom/comment/'.$entry['id'], $commentView);
+	dress('article_rep_rp_rssurl', $context->getProperty('uri.default').'/rss/comment/'.$entry['id'], $commentView);
+	return $commentView;
+}
+
+function getCategoriesView($totalPosts, $categories, $selected, $xhtml = false) {
+	global $blogURL, $service, $blog;
+	requireModel('blog.category');
+	requireLibrary('blog.skin');
+	$blogid = getBlogId();
+	// Textcube-NG: R-592 글갈래 다단계 — 원본의 1·2단 이중 반복을 재귀(__buildCategoriesViewNode)로 바꿨다. 볼 수 없는 분류는 자손째 빼고,
+	//   글 수는 '자기 글 + 보이는 자손의 글'(원본 식 '부모 자기 글 + 보이는 자식 합'을 깊이만큼 넓힘 — 2단 결과는 같다, 사용자 결정 ③)
+	$tree = array('id' => 0, 'label' => getCategoryNameById($blogid, 0), 'value' => $totalPosts, 'link' => "$blogURL/category", 'children' => array());
+	$owner = doesHaveOwnership();
+	foreach ($categories as $category1) {
+		$node = __buildCategoriesViewNode($blogid, $category1, $owner, 0);
+		if ($node !== null && $category1['id'] != 0)
+			array_push($tree['children'], $node);
+	}
+	ob_start();
+	printTreeView($tree, $selected, false, $xhtml);
+	$view = ob_get_contents();
+	ob_end_clean();
+	return $view;
+}
+
+function __buildCategoriesViewNode($blogid, $category, $owner, $level) {
+	global $blogURL, $service, $blog;
+	if ($level > 64)
+		return null;
+	if (!$owner && !(getCategoryVisibility($blogid, $category['id']) > 1))
+		return null;
+	$children = array();
+	$value = ($owner ? $category['entriesinlogin'] : $category['entries']);
+	if (isset($category['children'])) {
+		foreach ($category['children'] as $child) {
+			$value = $value - ($owner ? $child['entriesinlogin'] : $child['entries']);
+			$node = __buildCategoriesViewNode($blogid, $child, $owner, $level + 1);
+			if ($node !== null) {
+				array_push($children, $node);
+				$value = $value + $node['value'];
+			}
+		}
+	}
+	return array('id' => $category['id'],
+		'label' => $category['name'],
+		'value' => $value,
+		'link' => "$blogURL/category/" . ($blog['useSloganOnCategory'] ? URL::encode($category['label'],$service['useEncodedURL']) : $category['id']),
+		'rsslink' => "$blogURL/rss/category/" . ($blog['useSloganOnCategory'] ? URL::encode($category['label'],$service['useEncodedURL']) : $category['id']),
+		'atomlink' => "$blogURL/atom/category/" . ($blog['useSloganOnCategory'] ? URL::encode($category['label'],$service['useEncodedURL']) : $category['id']),
+		'children' => $children);
+}
+
+function getCategoriesViewInOwner($totalPosts, $categories, $selected) {
+	global $blogURL;
+	$blogid = getBlogId();
+	requireModel('blog.category');
+	requireLibrary('blog.skin');
+	// Initialize root category.
+	$tree = array('id' => 0, 'label' => getCategoryNameById(getBlogId(), 0), 'value' => $totalPosts, 'link' => "$blogURL/owner/entry/category", 'children' => array());
+	// Textcube-NG: R-592 — 깊이만큼 재귀로 그린다. 링크는 id 로 고르고 name1·name2 는 붙이지 않는다(관리 화면이 깊이를 분류 캐시로 셈). [!] = 조상 가운데 비공개
+	foreach ($categories as $category1) {
+		if($category1['id'] != 0)
+			array_push($tree['children'], __buildCategoriesViewInOwnerNode($blogid, $category1, false, 0));
+	}
+	ob_start();
+	printTreeView($tree, $selected);
+	$view = ob_get_contents();
+	ob_end_clean();
+	return $view;
+}
+
+function __buildCategoriesViewInOwnerNode($blogid, $category, $hiddenAbove, $level) {
+	global $blogURL;
+	$selfPublic = (getCategoryVisibility($blogid, $category['id']) == 2);
+	$children = array();
+	if ($level < 64 && isset($category['children'])) {
+		foreach ($category['children'] as $child)
+			array_push($children, __buildCategoriesViewInOwnerNode($blogid, $child, $hiddenAbove || !$selfPublic, $level + 1));
+	}
+	return array('id' => $category['id'],
+		'label' => ($hiddenAbove ? '[!] ' : '') . ($selfPublic ? $category['name'] : _t('(비공개)').' '.$category['name']),
+		'value' => $category['entriesinlogin'],
+		'link' => "$blogURL/owner/entry/category/?id={$category['id']}&entries={$category['entries']}&priority={$category['priority']}",
+		'children' => $children);
+}
+
+function getCategoriesViewInSkinSetting($totalPosts, $categories, $selected) {
+	requireModel('blog.category');
+	requireLibrary('blog.skin');
+
+	$tree = array('id' => 0, 'label' => getCategoryNameById(getBlogId(), 0), 'value' => $totalPosts, 'link' => "", 'children' => array());
+	// Textcube-NG: R-592 — 깊이만큼 재귀로
+	foreach ($categories as $category1) {
+		if($category1['id'] != 0)
+			array_push($tree['children'], __buildCategoriesViewInSkinSettingNode($category1, 0));
+	}
+	ob_start();
+	printTreeView($tree, $selected, true);
+	$view = ob_get_contents();
+	ob_end_clean();
+	return $view;
+}
+
+function __buildCategoriesViewInSkinSettingNode($category, $level) {
+	$children = array();
+	if ($level < 64 && isset($category['children'])) {
+		foreach ($category['children'] as $child)
+			array_push($children, __buildCategoriesViewInSkinSettingNode($child, $level + 1));
+	}
+	return array('id' => $category['id'], 'label' => $category['name'], 'value' => (doesHaveOwnership() ? $category['entriesinlogin'] : $category['entries']), 'link' => "", 'children' => $children);
+}
+
+/* Textcube-NG: R-592 글갈래 다단계 — printTreeView xhtml(category_list) 의 하위 목록을 깊이만큼 재귀로 쓴다.
+   줄마다 쓰는 문자열은 원본 1단·2단 출력과 같다(1단 ATOM 링크만 앞 공백이 있던 것도 그대로 — 2단 이하 트리는 바뀌기 전과 바이트까지 같다, 사용자 결정 ⑦) */
+function __printTreeViewXhtmlChildren($children, $selected, $skin, $blog, $depth) {
+	echo '<ul>'.CRLF;
+	foreach($children as $child) {
+		$classNames = array();
+		if ($child['id'] === $selected)
+			array_push($classNames, 'selected');
+		if ($child == end($children))
+			array_push($classNames, 'lastChild');
+		$isSelected = count($classNames) > 0 ? ' class="' . implode(' ', $classNames) . '"' : '';
+
+		echo "<li$isSelected>".CRLF;
+		if ($blog['useFeedViewOnCategory'])
+			echo ($depth == 1 ? ' ' : '').'<a href="'.$child['atomlink'].'" class="categoryFeed"><span class="text">ATOM</span></a>'.CRLF;
+		echo "<a href=\"", htmlspecialchars($child['link'], ENT_QUOTES | ENT_SUBSTITUTE), '" class="categoryItem">', htmlspecialchars($child['label'], ENT_QUOTES | ENT_SUBSTITUTE);
+		if ($skin['showValue'])
+			echo " <span class=\"c_cnt\">{$child['value']}</span>";
+		echo "</a>".CRLF;
+		if ($depth < 64 && isset($child['children']) && sizeof($child['children']) > 0)
+			__printTreeViewXhtmlChildren($child['children'], $selected, $skin, $blog, $depth + 1);
+		echo '</li>'.CRLF;
+	}
+	echo '</ul>'.CRLF;
+}
+
+/* Textcube-NG: R-592 — printTreeView JS 트리에서 1단 분류 아래 줄을 깊이 우선 순서로 편다(__depth = 단(2부터), __last = 형제 가운데 마지막).
+   3단 아래는 1단을 펼치면 함께 보이고 따로 접지 않는다(새 그림 없이 들여쓰기 칸만 — 사용자 결정 ⑦) */
+function __flattenTreeViewChildren($children, $depth) {
+	$flat = array();
+	if ($depth > 64)
+		return $flat;
+	$count = count($children);
+	$n = 0;
+	foreach ($children as $child) {
+		$n++;
+		$grandChildren = isset($child['children']) ? $child['children'] : array();
+		$child['__depth'] = $depth;
+		$child['__last'] = ($n == $count);
+		array_push($flat, $child);
+		if (!empty($grandChildren))
+			$flat = array_merge($flat, __flattenTreeViewChildren($grandChildren, $depth + 1));
+	}
+	return $flat;
+}
+
+function printTreeView($tree, $selected, $embedJava = false, $xhtml=false) {
+	requireLibrary('blog.skin');
+	requireModel('blog.entry');
+	global $skinSetting, $defaultURL, $blog;
+	$skin = $skinSetting;
+	if ($embedJava == false) { // not from getCategoriesViewInSkinSetting
+		$skin = getCategoriesSkin();
+	}
+	if ($xhtml) {
+		echo '<ul>'.CRLF;
+		$isSelected = ($tree['id'] === $selected) ? ' class="selected"' : '';
+
+		echo "<li$isSelected>".CRLF;
+		if ($blog['useFeedViewOnCategory'])
+			echo ' <a href="'.$defaultURL.'/atom" class="categoryFeed"><span class="text">ATOM</span></a>'.CRLF;
+		echo "<a href=\"", htmlspecialchars($tree['link'], ENT_QUOTES | ENT_SUBSTITUTE), '" class="categoryItem">', htmlspecialchars($tree['label'], ENT_QUOTES | ENT_SUBSTITUTE);
+		if ($skin['showValue'])
+			echo " <span class=\"c_cnt\">{$tree['value']}</span>";
+		echo "</a>".CRLF;
+		if (sizeof($tree['children']) > 0)	// Textcube-NG: R-592 — 깊이만큼 재귀(__printTreeViewXhtmlChildren)
+			__printTreeViewXhtmlChildren($tree['children'], $selected, $skin, $blog, 1);
+		echo '</li>'.CRLF.'</ul>'.CRLF;
+		return;
+	}
+	$action = 0;
+?>
+<script type="text/javascript">
+	//<![CDATA[
+		var expanded = false;
+		function expandTree() {
+<?php
+	foreach ($tree['children'] as $level1) {
+		if (!empty($level1['children'])) {
+?>
+			expandFolder(<?php echo $level1['id'];?>, true);
+<?php
+		}
+	}
+?>
+		}
+
+		function expandFolder(category, expand) {
+			var oLevel1 = document.getElementById("category_" + category);
+			var oImg = oLevel1.getElementsByTagName("img")[0];
+			switch (expand) {
+				case true:
+					oImg.src = "<?php echo $skin['url'];?>/tab_opened.gif";
+					showLayer("category_" + category + "_children");
+					return true;
+				case false:
+					oImg.src = "<?php echo $skin['url'];?>/tab_closed.gif";
+					hideLayer("category_" + category + "_children");
+					return true;
+			}
+			return false;
+		}
+
+		function toggleFolder(category) {
+			var oLevel1 = document.getElementById("category_" + category);
+			var oImg = oLevel1.getElementsByTagName("img")[0];
+			switch (oImg.src.substr(oImg.src.length - 10, 6)) {
+				case "isleaf":
+					return true;
+				case "closed":
+					oImg.src = "<?php echo $skin['url'];?>/tab_opened.gif";
+					showLayer("category_" + category + "_children");
+					expanded = true;
+					return true;
+				case "opened":
+					oImg.src = "<?php echo $skin['url'];?>/tab_closed.gif";
+					hideLayer("category_" + category + "_children");
+					expanded = false;
+					return true;
+			}
+			return false;
+		}
+		var selectedNode = 0;
+		function selectNode(category) {
+			try {
+				var root = document.getElementById('treeComponent');
+				var prevSelectedNode= root.getAttribute('currentselectednode');
+				var oLevel = document.getElementById("category_" + selectedNode);
+				var oChild = oLevel.getElementsByTagName("table")[0];
+
+				oChild.style.color = "#<?php echo $skin['itemColor'];?>";
+<?php
+	if ($skin['itemBgColor'] != '')
+		echo "				oChild.style.backgroundColor = \"#{$skin['itemBgColor']}\"";
+	else
+		echo "				oChild.style.backgroundColor = \"\"";
+?>
+
+				root.setAttribute('currentselectednode',category);
+				document.getElementById('text_'+selectedNode).style.color="#<?php echo $skin['itemColor'];?>";
+
+				var oLevel = document.getElementById("category_" + category);
+				var oChild = oLevel.getElementsByTagName("table")[0];
+				oChild.style.color = "#<?php echo $skin['activeItemColor'];?>";
+<?php
+	if ($skin['activeItemBgColor'] != '')
+		echo "				oChild.style.backgroundColor = \"#{$skin['activeItemBgColor']}\"";
+	else
+		echo "				oChild.style.backgroundColor = \"\"";
+?>
+
+				document.getElementById('text_'+category).style.color="#<?php echo $skin['activeItemColor'];?>";
+
+				selectedNode = category;
+			} catch(e) {
+				alert(e.message);
+			}
+
+		}
+
+		function setTreeStyle(skin) {
+			try {
+				treeNodes = document.getElementsByName("treeNode");
+				for(var i=0; i<treeNodes.length; i++) {
+					if( ('category_'+selectedNode) == (treeNodes[i].getAttribute('id').value) ) {
+						var oLevel = document.getElementById('category_'+i);
+						var oChild = oLevel.getElementsByTagName("table")[0];
+						oChild.style.color ='#'+skin['activeItemColor'];
+						if (skin['activeItemBgColor'] != '' && skin['activeItemBgColor'] != undefined) {
+							oChild.style.backgroundColor ='#'+skin['activeItemBgColor'];
+						} else {
+							oChild.style.backgroundColor ="";
+						}
+						alert(oChild.style.backgroundColor);
+					} else{
+						var oLevel = document.getElementById("category_" + i);
+						var oChild = oLevel.getElementsByTagName("table")[0];
+						oChild.style.color ='#'+skin['colorOnTree'];
+						oChild.style.backgroundColor ='#'+skin['bgcolorOnTree'];
+						var oLevel = document.getElementById('text_'+i).style.color='#'+skin['colorOnTree'];
+						alert(document.getElementById('text_'+i).style.color);
+				}
+				}
+			} catch(e) {
+				alert(e.message);
+			}
+		}
+	//]]>
+</script>
+	<?php
+	if ($skin['itemBgColor'] == "") {
+		$itemBgColor = '';
+	} else {
+		$itemBgColor = 'background-color: #' . $skin['itemBgColor'] . ';';
+	}
+?>
+	<table id="treeComponent" <?php echo ($embedJava==true) ? 'currentselectednode="' . $selected . '"' : '';?> cellpadding="0" cellspacing="0" style="width: 100%;"><tr>
+	<td>
+		<table id="category_0" <?php echo ($embedJava==true) ? 'name="treeNode"' : '';?> cellpadding="0" cellspacing="0"><tr>
+			<td class="ib" style="font-size: 1px"><img src="<?php echo $skin['url'];?>/tab_top.gif" width="16" onclick="expandTree()" alt="" /></td>
+			<td valign="top" style="font-size:9pt; padding-left:3px">
+				<table onclick="<?php
+	if ($action == 1) {
+?> alert(3);onclick_setimp(window, this, c_ary, t_ary); <?php
+	}
+?>" id="imp0" cellpadding="0" cellspacing="0" style="<?php echo $itemBgColor;?>"><tr>
+					<?php
+	if (empty($tree['link']))
+		$link = 'onclick="selectNode(0)"';
+	else
+		$link = 'onclick="window.location.href=\'' . escapeJSInAttribute($tree['link']) . '\'"';
+?>
+					<td class="branch3" <?php echo $link;?>><div id="text_0" style=" color: #<?php echo $skin['itemColor'];?>;"><?php echo htmlspecialchars($tree['label'], ENT_QUOTES | ENT_SUBSTITUTE);?> <?php
+	if ($skin['showValue'])
+		print "<span class=\"c_cnt\">({$tree['value']})</span>";
+?></div></td>
+				</tr></table>
+			</td>
+		</tr></table>
+
+<?php
+	$parentOfSelected = false;
+	$i = count($tree['children']);
+
+	foreach ($tree['children'] as $row) {
+		$i--;
+		if (empty($row['link']))
+			$link = 'onclick="selectNode(' . $row['id'] . ')"';
+		else
+			$link = 'onclick="window.location.href=\'' . escapeJSInAttribute($row['link']) . '\'"';
+?>
+		<table <?php echo ($embedJava==true) ? 'name="treeNode"' : '';?>  id="category_<?php echo $row['id'];?>" cellpadding="0" cellspacing="0"><tr>
+			<td class="ib" style="width:39px; font-size: 1px; background-image: url('<?php echo $skin['url'];?>/navi_back_noactive<?php echo ($i ? '' : '_end');?>.gif')"><a class="click" onclick="toggleFolder('<?php echo $row['id'];?>')"><img src="<?php echo $skin['url'];?>/tab_<?php echo (count($row['children']) ? 'closed' : 'isleaf');?>.gif" width="39" alt="" /></a></td>
+			<td>
+				<table cellpadding="0" cellspacing="0" style="<?php echo $itemBgColor;?>"><tr>
+					<td class="branch3" <?php echo $link;?>><div id="text_<?php echo $row['id'];?>" style="color: #<?php echo $skin['itemColor'];?>;"><?php echo htmlspecialchars(UTF8::lessenAsEm($row['label'], $skin['labelLength']), ENT_QUOTES | ENT_SUBSTITUTE);?> <?php
+		if ($skin['showValue'])
+			print "<span class=\"c_cnt\">({$row['value']})</span>";
+?></div></td>
+				</tr></table>
+			</td>
+		</tr></table>
+		<div id="category_<?php echo $row['id'];?>_children" style="display:none">
+<?php
+		// Textcube-NG: R-592 — 1단 아래 자손 전체를 깊이 우선으로(__flattenTreeViewChildren). __last 가 원본 $j(남은 형제 수 0)를 대신한다
+		foreach (__flattenTreeViewChildren($row['children'], 2) as $irow) {
+			if ($irow['id'] == $selected)
+				$parentOfSelected = $row['id'];
+			if (empty($irow['link']))
+				$link = 'onclick="selectNode(' . $irow['id'] . ')"';
+			else
+				$link = 'onclick="window.location.href=\'' . escapeJSInAttribute($irow['link']) . '\'"';
+			if (empty($irow['link']))
+				$link = 'onclick="selectNode(' . $irow['id'] . ')"';
+			else
+				$link = 'onclick="window.location.href=\'' . escapeJSInAttribute($irow['link']) . '\'"';
+?>
+				<table id="category_<?php echo $irow['id'];?>" <?php echo ($embedJava==true) ? 'name="treeNode"' : '';?> cellpadding="0" cellspacing="0"><tr>
+				<td style="width:<?php echo 39 + 22 * ($irow['__depth'] - 2);?>px; font-size: 1px"><img src="<?php echo $skin['url'];?>/navi_back_active<?php echo ($i ? '' : '_end');?>.gif" width="17" height="18" alt="" /><?php echo str_repeat('<span style="display:inline-block;width:22px"></span>', $irow['__depth'] - 2);?><img src="<?php echo $skin['url'];?>/tab_treed<?php
+			if ($irow['__last'])
+				print "_end";
+?>.gif" width="22" alt="" /></td>
+				<td>
+					<table <?php echo $link;?> cellpadding="0" cellspacing="0" style="<?php echo $itemBgColor;?>"><tr>
+					<td class="branch3"><div id="text_<?php echo $irow['id'];?>" style="color: #<?php echo $skin['itemColor'];?>;"><?php echo htmlspecialchars(UTF8::lessenAsEm($irow['label'], $skin['labelLength']), ENT_QUOTES | ENT_SUBSTITUTE);?> <?php echo ($skin['showValue'] ? "<span class=\"c_cnt\">({$irow['value']})</span>" : '');?></div></td>
+					</tr></table>
+				</td>
+				</tr></table>
+<?php
+		}
+?>
+		</div>
+<?php
+	}
+?>
+	</td></tr></table>
+<?php
+	if (is_numeric($selected)) {
+?>
+<script type="text/javascript">
+//<![CDATA[
+	function execOnLoadSelect() {
+<?php
+		if ($parentOfSelected) {
+?>
+	expandFolder(<?php echo $parentOfSelected;?>, true);
+<?php
+		}
+?>
+	selectNode(<?php echo $selected;?>);
+	}
+	window.addEventListener("load", execOnLoadSelect, false);
+//]]>
+</script>
+<?php
+	}
+}
+
+function getArchivesView($archives, $template) {
+	global $blogURL;
+	ob_start();
+	foreach ($archives as $archive) {
+		$view = "$template";
+		dress('archive_rep_link', "$blogURL/archive/{$archive['period']}", $view);
+		dress('archive_rep_date', fireEvent('ViewArchiveDate', getPeriodLabel($archive['period']), $archive['period']), $view);
+		dress('archive_rep_count', $archive['count'], $view);
+		print $view;
+	}
+	$view = ob_get_contents();
+	ob_end_clean();
+	return $view;
+}
+
+function getCalendarView($calendar) {
+	global $blogURL;
+	$current = $calendar['year'] . $calendar['month'];
+	$previous = addPeriod($current, - 1);
+	$next = addPeriod($current, 1);
+	// Textcube-NG: 4자리 기간이면 month 가 substr() 결과 ''(PHP 5 는 false) — PHP 8.0 부터 mktime() 의 int 인자에 '' 는 TypeError, PHP 7.x 는 경고 뒤 false 라 요일이 달라진다. 원본(PHP 5)처럼 정수로 넘긴다(v3.181)
+	$firstWeekday = date('w', mktime(0, 0, 0, (int)$calendar['month'], 1, (int)$calendar['year']));
+	$lastDay = date('t', mktime(0, 0, 0, (int)$calendar['month'], 1, (int)$calendar['year']));
+	$today = ($current == Timestamp::get('Ym') ? Timestamp::get('j') : null);
+
+	$currentMonthStr = fireEvent('ViewCalendarHead', Timestamp::format('%Y/%m', getTimeFromPeriod($current)));
+
+	ob_start();
+?>
+<table class="tt-calendar" cellpadding="0" cellspacing="1" style="width: 100%; table-layout: fixed">
+	<caption class="cal_month">
+		<a href="<?php echo $blogURL;?>/archive/<?php echo $previous;?>" title="<?php echo _text('1개월 앞의 달력을 보여줍니다.');?>">&laquo;</a>
+		&nbsp;
+		<a href="<?php echo $blogURL;?>/archive/<?php echo $current;?>" title="<?php echo _text('현재 달의 달력을 보여줍니다.');?>"><?php echo $currentMonthStr;?></a>
+		&nbsp;
+		<a href="<?php echo $blogURL;?>/archive/<?php echo $next;?>" title="<?php echo _text('1개월 뒤의 달력을 보여줍니다.');?>">&raquo;</a>
+	</caption>
+	<thead>
+		<tr>
+			<th class="cal_week2"><?php echo fireEvent('ViewCalendarHeadWeekday', _text('일요일'));?></th>
+			<th class="cal_week1"><?php echo fireEvent('ViewCalendarHeadWeekday',_text('월요일'));?></th>
+			<th class="cal_week1"><?php echo fireEvent('ViewCalendarHeadWeekday',_text('화요일'));?></th>
+			<th class="cal_week1"><?php echo fireEvent('ViewCalendarHeadWeekday',_text('수요일'));?></th>
+			<th class="cal_week1"><?php echo fireEvent('ViewCalendarHeadWeekday',_text('목요일'));?></th>
+			<th class="cal_week1"><?php echo fireEvent('ViewCalendarHeadWeekday',_text('금요일'));?></th>
+			<th class="cal_week1"><?php echo fireEvent('ViewCalendarHeadWeekday',_text('토요일'));?></th>
+		</tr>
+	</thead>
+	<tbody>
+<?php
+	$day = 0;
+	$totalDays = $firstWeekday + $lastDay;
+	$lastWeek = ceil($totalDays / 7);
+
+	for ($week=0; $week<$lastWeek; $week++) {
+		// 주중에 현재 날짜가 포함되어 있으면 주를 현재 주 class(tt-current-week)를 부여한다.
+		if (($today + $firstWeekday) > $week * 7 && ($today + $firstWeekday) <= ($week + 1) * 7) {
+			echo '		<tr class="cal_week cal_current_week">'.CRLF;
+		} else {
+			echo '		<tr class="cal_week">'.CRLF;
+		}
+
+		for($weekday=0; $weekday<7; $weekday++) {
+			$day++;
+			$dayString = isset($calendar['days'][$day]) ? '<a class="cal_click" href="'.$blogURL.'/archive/'.$current.($day > 9 ? $day : "0$day").'">'.$day.'</a>' : $day;
+
+			// 일요일, 평일, 토요일별로 class를 부여한다.
+			switch ($weekday) {
+				case 0:
+					$className = " cal_day cal_day_sunday";
+					break;
+				case 1:
+				case 2:
+				case 3:
+				case 4:
+				case 5:
+				case 6:
+					$className = " cal_day";
+					break;
+			}
+
+			// 오늘에 현재 class(tt-current-day)를 부여한다.
+			$className .= $day == $today ? " cal_day4" : " cal_day3";
+
+			if ($week == 0) {
+				if ($weekday < $firstWeekday) {
+					$day--;
+					// 달의 첫째날이 되기 전의 빈 칸.
+					echo '			<td class="cal_day1">&nbsp;</td>'.CRLF;
+				} else {
+					echo '			<td class="'.$className.'">'.$dayString.'</td>'.CRLF;
+				}
+			} else if ($week == ($lastWeek - 1)) {
+				if ($day <= $lastDay) {
+					echo '			<td class="'.$className.'">'.$dayString.'</td>'.CRLF;
+				} else {
+					// 달의 마지막날을 넘어간 날짜 빈 칸.
+					echo '			<td class="cal_day2">&nbsp;</td>'.CRLF;
+				}
+			} else {
+				echo '			<td class="'.$className.'">'.$dayString.'</td>'.CRLF;
+			}
+		}
+		echo '		</tr>'.CRLF;
+
+		if ($day >= $lastDay) {
+			break;
+		}
+	}
+?>
+	</tbody>
+</table>
+<?php
+	$view = ob_get_contents();
+	ob_end_clean();
+	return $view;
+}
+
+function getAuthorListView($authorInfo, $template) {
+	global $blog, $service, $blogURL, $skinSetting, $contentContainer;
+	ob_start();
+	foreach ($authorInfo as $user) {
+		$view = "$template";
+		$permalink = "$blogURL/author/" . rawurlencode($user['name']);
+		dress('author_rep_link', $permalink, $view);
+		dress('author_rep_name', $user['name'], $view);
+//		dress('author_rep_post_count', $user['postcount'], $view);
+
+		print $view;
+	}
+	$view = ob_get_contents();
+	ob_end_clean();
+
+	return $view;
+}
+
+function getRecentNoticesView($notices, $noticeView, $noticeItemView, $isPage = false) {
+	global $blog, $service, $blogURL, $skinSetting, $contentContainer;
+	if($isPage) $prefix = 'page'; else $prefix = 'notice';
+	if (sizeof($notices) > 0) {
+		$itemsView = '';
+		foreach ($notices as $notice) {
+			$itemView = $noticeItemView;
+			dress($prefix.'_rep_title', htmlspecialchars(fireEvent('View'.$prefix.'Title', UTF8::lessenAsEm($notice['title'], $skinSetting['recentNoticeLength']), $notice['id']), ENT_QUOTES | ENT_SUBSTITUTE), $itemView);
+			if($blog['useSloganOnPost']) {
+				if(isset($notice['slogan'])&& !empty($notice['slogan'])) {
+					$noticeURL = URL::encode($notice['slogan']);
+				} else {
+					$noticeURL = URL::encode($notice['title']);
+				}
+			} else {
+				$noticeURL = $notice['id'];
+			}
+			$name = User::getName($notice['userid']);
+			dress($prefix.'_rep_link', "$blogURL/".$prefix."/$noticeURL", $itemView);
+			dress($prefix.'_rep_author', $name, $itemView);
+			dress($prefix.'_rep_author', $blogURL."/author/".rawurlencode($name), $itemView);
+			$itemsView .= $itemView;
+		}
+		dress('rct_'.$prefix.'_rep', $itemsView, $noticeView);
+		// IE webslice support
+		if(Setting::getBlogSettingGlobal('useMicroformat',3) == 3) {
+			$noticeView = addWebSlice($noticeView, 'recentNoticeWebslice', htmlspecialchars($blog['title'].' - '._t('최근 공지'), ENT_QUOTES | ENT_SUBSTITUTE));
+		}
+	}
+	return $noticeView;
+}
+
+function getRecentEntriesView($entries, $entriesView = null, $template) {
+	global $blog, $service, $blogURL, $skinSetting, $contentContainer;
+	$recentEntriesView = '';
+	foreach ($entries as $entry) {
+		$view = "$template";
+		$permalink = "$blogURL/" . ($blog['useSloganOnPost'] ? "entry/" . URL::encode($entry['slogan'],$service['useEncodedURL']) : $entry['id']);
+		dress('rctps_rep_link', $permalink, $view);
+		$contentContainer["recent_entry_{$entry['id']}"] = htmlspecialchars(UTF8::lessenAsEm($entry['title'], $skinSetting['recentEntryLength']), ENT_QUOTES | ENT_SUBSTITUTE);
+		dress('rctps_rep_title', setTempTag("recent_entry_{$entry['id']}"), $view);
+		$name = User::getName($entry['userid']);
+		dress('rctps_rep_author',  $name, $view);
+		dress('rctps_rep_author_link', $blogURL."/author/" . rawurlencode($name), $view);
+		dress('rctps_rep_time', fireEvent('ViewRecentPostDate', Timestamp::format2($entry['published']), $entry['published']), $view);
+		dress('rctps_rep_rp_cnt', "<span id=\"commentCountOnRecentEntries{$entry['id']}\">".($entry['comments'] > 0 ? "{$entry['comments']}" : '').'</span>', $view);
+		$recentEntriesView .= $view;
+	}
+	if(!is_null($entriesView)) {
+		dress('rctps_rep',$recentEntriesView, $entriesView);
+		// IE webslice support
+		if(Setting::getBlogSettingGlobal('useMicroformat',3) == 3) {
+			$recentEntriesView = addWebSlice($entriesView, 'recentEntriesWebslice', htmlspecialchars($blog['title'].' - '._t('최근 글'), ENT_QUOTES | ENT_SUBSTITUTE));
+		} else return $entriesView;
+	}
+	return $recentEntriesView;
+}
+
+function getRecentCommentsView($comments, $commentView = null, $template) {
+	global $blog, $service, $blogURL, $skinSetting, $contentContainer;
+	$recentCommentView = '';
+	foreach ($comments as $comment) {
+		$view = "$template";
+		dress('rctrp_rep_link', "$blogURL/".($blog['useSloganOnPost'] ? "entry/".URL::encode($comment['slogan'],$service['useEncodedURL']) : $comment['entry'])."?commentId=".$comment['id']."#comment{$comment['id']}", $view);
+		$contentContainer["recent_comment_{$comment['id']}"] = htmlspecialchars(UTF8::lessenAsEm(strip_tags($comment['comment']), $skinSetting['recentCommentLength']), ENT_QUOTES | ENT_SUBSTITUTE);
+		dress('rctrp_rep_desc', setTempTag("recent_comment_{$comment['id']}"), $view);
+		dress('rctrp_rep_time', fireEvent('ViewRecentCommentDate', Timestamp::format2($comment['written']), $comment['written']), $view);
+		dress('rctrp_rep_name', htmlspecialchars(UTF8::lessenAsEm($comment['name'], $skinSetting['recentCommentLength']), ENT_QUOTES | ENT_SUBSTITUTE), $view);
+		$recentCommentView .= $view;
+	}
+	if(!is_null($commentView)) {
+		dress('rctrp_rep',$recentCommentView, $commentView);
+		// IE webslice support
+		if(Setting::getBlogSettingGlobal('useMicroformat',3) == 3) {
+			$recentCommentView = addWebSlice($commentView, 'recentCommentWebslice', htmlspecialchars($blog['title'].' - '._t('최근 댓글'), ENT_QUOTES | ENT_SUBSTITUTE));
+		} else return $commentView;
+	}
+	return $recentCommentView;
+}
+
+function getRecentTrackbacksView($trackbacks, $trackbackView = null, $template) {
+	global $blogURL, $blog, $skinSetting, $service;
+	$recentTrackbackView = '';
+	foreach ($trackbacks as $trackback) {
+		$view = "$template";
+		dress('rcttb_rep_link', "$blogURL/".($blog['useSloganOnPost'] ? "entry/".URL::encode($trackback['slogan'],$service['useEncodedURL']) : $trackback['entry'])."#trackback{$trackback['id']}", $view);
+
+		dress('rcttb_rep_desc', htmlspecialchars(UTF8::lessenAsEm($trackback['subject'], $skinSetting['recentTrackbackLength']), ENT_QUOTES | ENT_SUBSTITUTE), $view);
+		dress('rcttb_rep_time', fireEvent('ViewRecentTrackbackDate', Timestamp::format2($trackback['written']), $trackback['written']), $view);
+		dress('rcttb_rep_name', htmlspecialchars(UTF8::lessenAsEm($trackback['site'], $skinSetting['recentTrackbackLength']), ENT_QUOTES | ENT_SUBSTITUTE), $view);
+		$recentTrackbackView .= $view;
+	}
+	if(!is_null($trackbackView)) {
+		dress('rcttb_rep',$recentTrackbackView, $trackbackView);
+		// IE webslice support
+		if(Setting::getBlogSettingGlobal('useMicroformat',3) == 3) {
+			$recentTrackbackView = addWebSlice($trackbackView, 'recentCommentWebslice', htmlspecialchars($blog['title'].' - '._t('최근 트랙백'), ENT_QUOTES | ENT_SUBSTITUTE));
+		} else return $trackbackView;
+	}
+	return $recentTrackbackView;
+}
+
+function addWebSlice($content, $id, $title) {
+	return '<div class="hslice" id="'.$id.'" style="margin:0;padding:0;">'.CRLF.
+		'<h4 class="entry-title" style="visibility:hidden;height:0;margin:0;padding:0;">'.$title.'</h4>'.CRLF.
+		'<div class="entry-content" style="margin:0;padding:0;">'.CRLF.$content.CRLF.'</div>'.CRLF.
+		'</div>'.CRLF;
+}
+
+function addXfnAttrs( $url, $xfn, & $view ) {
+	$view = str_replace( "href=\"$url\"", "href=\"$url\" rel=\"$xfn\"", $view);
+	$view = str_replace( "href='$url'", "href='$url' rel=\"$xfn\"", $view);
+}
+
+function getLinksView($links, $template) {
+	global $blogURL, $skinSetting, $suri, $pathURL;
+	if( rtrim( $suri['url'], '/' ) == $pathURL ) {
+		$home = true;
+	} else {
+		$home = false;
+	}
+	ob_start();
+	$showXfn = (Setting::getBlogSettingGlobal('useMicroformat',3) > 1);
+	foreach ($links as $link) {
+		if((!doesHaveOwnership() && $link['visibility'] == 0) ||
+			(!doesHaveMembership() && $link['visibility'] < 2)) {
+			continue;
+		}
+		$view = "$template";
+		dress('link_url', htmlspecialchars($link['url'], ENT_QUOTES | ENT_SUBSTITUTE), $view);
+		dress('link_category', htmlspecialchars($link['categoryName'], ENT_QUOTES | ENT_SUBSTITUTE), $view);
+		if( $showXfn && $home && $link['xfn'] ) {
+			addXfnAttrs( htmlspecialchars($link['url'], ENT_QUOTES | ENT_SUBSTITUTE), htmlspecialchars($link['xfn'], ENT_QUOTES | ENT_SUBSTITUTE), $view );
+		}
+		dress('link_site', fireEvent('ViewLink', htmlspecialchars(UTF8::lessenAsEm($link['name'], $skinSetting['linkLength']), ENT_QUOTES | ENT_SUBSTITUTE)), $view);
+		print $view;
+	}
+	$view = ob_get_contents();
+	ob_end_clean();
+	return $view;
+}
+
+function getLinkListView($links) {
+	global $blogURL, $skinSetting, $suri, $pathURL;
+	if( rtrim( $suri['url'], '/' ) == $pathURL ) {
+		$home = true;
+	} else {
+		$home = false;
+	}
+	$categoryName = null;
+	$buffer = '<ul>'.CRLF;
+	$showXfn = (Setting::getBlogSettingGlobal('useMicroformat',3) > 1);
+	foreach ($links as $link) {
+		if((!doesHaveOwnership() && $link['visibility'] == 0) ||
+			(!doesHaveMembership() && $link['visibility'] < 2)) {
+			continue;
+		}
+		if($categoryName != $link['categoryName']) {
+			if(!empty($categoryName)) $buffer .= '</ul>'.CRLF.'</li>'.CRLF;
+			$categoryName = $link['categoryName'];
+			$buffer .= '<li><span class="link_ct">'.htmlspecialchars($link['categoryName'], ENT_QUOTES | ENT_SUBSTITUTE).'</span>'.CRLF
+				.'<ul>'.CRLF;
+		}
+		if( $showXfn && $home && $link['xfn'] ) {
+			addXfnAttrs( htmlspecialchars($link['url'], ENT_QUOTES | ENT_SUBSTITUTE), htmlspecialchars($link['xfn'], ENT_QUOTES | ENT_SUBSTITUTE), $link['url']);
+		}
+		$buffer .= '<li><a href="'.htmlspecialchars($link['url'], ENT_QUOTES | ENT_SUBSTITUTE).'">'.fireEvent('ViewLink', htmlspecialchars(UTF8::lessenAsEm($link['name'], $skinSetting['linkLength']), ENT_QUOTES | ENT_SUBSTITUTE)).'</a></li>'.CRLF;
+	}
+	if(!empty($categoryName)) $buffer .= '</ul>'.CRLF.'</li>'.CRLF;
+	$buffer .='</ul>'.CRLF;
+	return $buffer;
+}
+
+function getRandomTagsView($tags, $template) {
+	global $blogURL, $service;
+	ob_start();
+	list($maxTagFreq, $minTagFreq) = getTagFrequencyRange();
+	foreach ($tags as $tag) {
+		$view = $template;
+		dress('tag_link', "$blogURL/tag/" . (Setting::getBlogSettingGlobal('useSloganOnTag',true) ? URL::encode($tag['name'],$service['useEncodedURL']) : $tag['id']), $view);
+		dress('tag_name', htmlspecialchars($tag['name'], ENT_QUOTES | ENT_SUBSTITUTE), $view);
+		dress('tag_class', "cloud" . getTagFrequency($tag, $maxTagFreq, $minTagFreq), $view);
+		print $view;
+	}
+	$view = ob_get_contents();
+	ob_end_clean();
+	return $view;
+}
+
+function getEntryContentView($blogid, $id, $content, $formatter, $keywords = array(), $type = 'Post', $useAbsolutePath = true, $bRssMode = false) {
+	global $hostURL, $service;
+	requireModel('blog.attachment');
+	requireModel('blog.keyword');
+	requireLibrary('blog.skin');
+	$context  = Model_Context::getInstance();
+	// Textcube-NG: 캐시 키 라벨을 실제 변환 함수와 맞춘다(원본은 RSS=summarizeContent 를 'format', 본문=formatContent 를 'summarize' 로 적었음). 옛 캐시와 이름이 엇갈리므로 점검 개정 번호를 올려 clearCache() 로 비운다(config.default.php TEXTCUBE_NG_CHECKUP_REVISION 3, v3.181)
+	// Textcube-NG: 글 본문 캐시 키에 현재 언어(locale domain·언어)를 넣는다. 원본은 언어가 없어, 포매터·플러그인이 언어별 문구를 넣은 본문이
+	// 다른 언어 화면에도 그대로 나왔다(ownerView.php 도 이 함수를 거친다). 'entry-<id>-' 접두는 그대로라 flushEntry() 가 함께 지운다(r3-5)
+	$cacheLocale = Locales::getInstance();
+	$cacheKey = 'entry-'.$id.'-'.$type.($bRssMode ? 'summarize' : 'format').($useAbsolutePath ? 'absoultePath' : 'relativePath').($context->getProperty('blog.displaymode','desktop')).((isset($cacheLocale->domain) && isset($cacheLocale->locale[$cacheLocale->domain])) ? '-'.$cacheLocale->domain.'.'.$cacheLocale->locale[$cacheLocale->domain] : '');
+	$cache = pageCache::getInstance();
+	$cache->reset($cacheKey);
+	if(!defined('__TEXTCUBE_NO_ENTRY_CACHE__') && $cache->load()) {	// If cached content exists.
+		$view = $cache->contents;
+	} else {	// No cache is found.
+		$content = fireEvent('Format' . $type . 'Content', $content, $id);
+		$func = ($bRssMode ? 'summarizeContent' : 'formatContent');
+		$view = $func($blogid, $id, $content, $formatter, $keywords, $useAbsolutePath);
+		if ($context->getProperty('blog.displaymode','desktop') == 'mobile')
+			$view = stripHTML($view, array('a', 'abbr', 'acronym', 'address','b', 'blockquote', 'br', 'caption', 'cite', 'code', 'dd', 'del', 'dfn', 'div', 'dl', 'dt', 'em', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'hr', 'i', 'iframe', 'img', 'ins', 'kbd', 'li', 'ol', 'p', 'pre', 'q', 's', 'samp', 'span', 'strike', 'strong', 'sub', 'sup', 'table', 'tbody', 'td', 'tfoot', 'th', 'thead', 'tr', 'u', 'ul', 'var'));
+		if(!$useAbsolutePath)
+			$view = avoidFlashBorder($view);
+
+		if (!empty($keywords) && is_array($keywords)) $view = bindKeywords($keywords, $view);
+
+
+		// image resampling
+		if (Setting::getBlogSettingGlobal('resamplingDefault') == true) {
+			preg_match_all("@<img.+src=['\"](.+)['\"](.*)/?>@Usi", $view, $images, PREG_SET_ORDER);
+			$view = preg_replace("@<img.+src=['\"].+['\"].*/?>@Usi", '[#####_#####_#####_image_#####_#####_#####]', $view);
+			$contentWidth = Misc::getContentWidth();
+
+			if (count($images) > 0) {
+				for ($i=0; $i<count($images); $i++) {
+					if (strtolower(Misc::getFileExtension($images[$i][1])) == 'gif') {
+						$view = preg_replace('@\[#####_#####_#####_image_#####_#####_#####\]@', $images[$i][0], $view, 1);
+						continue;
+					}
+
+					$attributes = preg_match('/(style="cursor: pointer;" onclick="open_img\((.[^"]+)\); return false;")/si', $images[$i][2], $matches) ? ' '.$matches[1] : '';
+					$attributes .= preg_match('/(alt="([^"]*)")/si', $images[$i][2], $matches) ? ' '.$matches[1] : ' alt="resize"';
+					$attributes .= preg_match('/(title="([^"]*)")/si', $images[$i][2], $matches) ? $title = ' '.$matches[1] : '';
+
+					$tempPath = explode('/', $images[$i][1]);	// Textcube-NG: array_pop() 은 참조 인자를 받으므로 함수 결과를 바로 넘기지 않고 변수에 담는다 — PHP 7.0+ E_NOTICE "Only variables should be passed by reference" 제거, 결과 같음(v3.181)
+					$tempFileName = array_pop($tempPath);
+					if (preg_match('/(.+)\.w(\d{1,})\-h(\d{1,})\.(.+)/', $tempFileName, $matches))
+						$tempFileName = $matches[1].'.'.$matches[4];
+
+					$newImage = $images[$i][0];
+					if (file_exists(__TEXTCUBE_ATTACH_DIR__."/{$blogid}/{$tempFileName}")) {
+						$tempAttributes = Misc::getAttributesFromString($images[$i][2]);
+						$tempOriginInfo = getimagesize(__TEXTCUBE_ATTACH_DIR__."/{$blogid}/{$tempFileName}");
+						if (isset($tempAttributes['width']) && ($tempOriginInfo[0] > $tempAttributes['width'])) {
+							$image = Utils_Image::getInstance();
+							list($tempImageURL, $tempImageWidth, $tempImageHeight, $tempImageSrc) = $image->getImageResizer($tempFileName, array('width' => $tempAttributes['width']));
+							if ($bRssMode) $tempImageURL = URL::toAbsolute($tempImageURL);	// Textcube-NG: 피드(bRssMode)에서만 //host 에 스킴을 붙인다(getImageResizer 는 uri.service 기준). 화면은 그대로(r3-34)
+							$newImage = "<img src=\"{$tempImageURL}\" width=\"{$tempImageWidth}\" height=\"{$tempImageHeight}\"{$attributes}/>";
+						}
+					}
+					$view = preg_replace('@\[#####_#####_#####_image_#####_#####_#####\]@', $newImage, $view, 1);
+				}
+			}
+		}
+		$cache->contents = $view;
+		$cache->update();
+	}
+	$cache->reset();
+	$view = fireEvent('View' . $type . 'Content', $view, $id);
+	return $view;
+}
+
+function printEntryContentView($blogid, $id, $content, $formatter, $keywords = array()) {
+	print (getEntryContentView($blogid, $id, $content, $formatter, $keywords));
+}
+
+function printFeedGroups($blogid, $selectedGroup = 0, $starredOnly = false, $searchKeyword = null) {
+	global $service;
+?>
+													<div id="groupAdder">
+														<div class="title"><span class="text"><?php echo _t('그룹 등록하기');?></span></div>
+														<div class="button-box">
+															<input type="text" id="newGroupTitle" class="input-text" value="<?php echo _t('그룹을 추가하세요.');?>" onfocus="if(this.value == '<?php echo _t('그룹을 추가하세요.');?>') this.value = ''" onblur="if(this.value == '') this.value = '<?php echo _t('그룹을 추가하세요.');?>'" onkeydown="if(event.keyCode==13) Reader.addGroup(this.value)" />
+															<a class="add-button button" href="#void" onclick="Reader.addGroup(document.getElementById('newGroupTitle').value)"><span class="text"><?php echo _t('추가');?></span></a>
+														</div>
+													</div>
+
+													<ul id="groupList">
+<?php
+	$count = 0;
+	foreach (getFeedGroups($blogid, $starredOnly, $searchKeyword) as $group) {
+		if ($group['id'] == 0)
+			$group['title'] = _t('전체보기');
+		$className = ($count % 2) == 1 ? 'even-line' : 'odd-line';
+		$className .= ($selectedGroup == $group['id']) ? ' active-class' : ' inactive-class';
+?>
+														<li id="groupList<?php echo $group['id'];?>" class="<?php echo $className;?>" onmouseover="rolloverClass(this, 'over')" onmouseout="rolloverClass(this, 'out')">
+															<div class="title">
+																<a href="#void" onclick="Reader.selectGroup(this, <?php echo $group['id'];?>)"><?php echo htmlspecialchars($group['title'], ENT_QUOTES | ENT_SUBSTITUTE);?></a>
+															</div>
+<?php
+		if ($group['id']) {
+?>
+
+															<div class="button-box">
+																<a class="edit-button button" href="#void" onclick="Reader.editGroup(<?php echo $group['id'];?>, '<?php echo escapeJSInAttribute($group['title']);?>'); return false;" title="<?php echo _t('이 그룹 정보를 수정합니다.');?>"><span class="text"><?php echo _t('수정');?></span></a>
+															</div>
+<?php
+		}
+?>
+														</li>
+<?php
+		$count++;
+	}
+?>
+													</ul>
+
+													<div id="groupEditor" style="display: none;">
+														<div class="title"><span><?php echo _t('그룹 수정하기');?></span></div>
+														<div class="input-box">
+															<div class="input-field">
+																<input type="text" id="changeGroupTitle" class="input-text" name="changeGroupTitle" />
+															</div>
+															<div class="button-box">
+																<input type="button" class="delete-button input-button" value="<?php echo _t('삭제');?>" onclick="Reader.deleteGroup(); return false;" />
+																<span class="divider">|</span>
+																<input type="submit" class="edit-button input-button" value="<?php echo _t('저장');?>" onclick="Reader.editGroupExecute(); return false;" />
+																<span class="divider">|</span>
+																<input type="button" class="cancel-button input-button" value="<?php echo _t('취소');?>" onclick="Reader.cancelEditGroup(); return false;" />
+															</div>
+														</div>
+													</div>
+<?php
+}
+
+function printFeeds($blogid, $group = 0, $starredOnly = false, $searchKeyword = null) {
+	global $service;
+?>
+													<div id="feedAdder">
+														<div class="title"><span><?php echo _t('피드 등록하기');?></span></div>
+														<div class="button-box">
+															<input type="text" id="newFeedURL" class="input-text" name="newFeedURL" value="<?php echo _t('피드 주소를 입력하세요.');?>" onfocus="if(this.value == '<?php echo _t('피드 주소를 입력하세요.');?>') this.value = ''" onblur="if(this.value == '') this.value = '<?php echo _t('피드 주소를 입력하세요.');?>'" onkeydown="if(event.keyCode==13) Reader.addFeed(this.value)" />
+															<a class="add-button button" href="#void" onclick="Reader.addFeed(document.getElementById('newFeedURL').value)"><span class="text"><?php echo _t('추가');?></span></a>
+															<?php echo fireEvent('AddFeedURLToolbox', '');?>
+														</div>
+													</div>
+
+													<ul id="feedList">
+<?php
+	$count = 0;
+	foreach (getFeeds($blogid, $group, $starredOnly, $searchKeyword) as $feed) {
+		if ($feed['modified'] > time() - 86400)
+			$status = 'Update';
+		else if ($feed['modified'] == 0)
+			$status = 'Failure';
+		else
+			$status = 'UpdateNo';
+		$className = ($count % 2) == 1 ? 'even-line' : 'odd-line';
+?>
+														<li class="<?php echo $className;?> inactive-class" onmouseover="rolloverClass(this, 'over')" onmouseout="rolloverClass(this, 'out')" onclick="Reader.selectFeed(this, <?php echo $feed['id'];?>)">
+															<div class="title"><?php echo $feed['blogURL'] ? '<a href="' . htmlspecialchars($feed['blogURL'], ENT_QUOTES | ENT_SUBSTITUTE) . '" onclick="window.open(this.href); event.cancelBubble=true; return false;" title="'._t('이 피드의 원본 사이트를 새 창으로 엽니다.').'">' : '';?><?php echo htmlspecialchars($feed['title'], ENT_QUOTES | ENT_SUBSTITUTE);?><?php echo $feed['blogURL'] ? "</a>\n" : '';?></div>
+															<div class="description"><?php echo $feed['description']?'<span class="divider"> | </span>':'&nbsp;';?><?php echo htmlspecialchars($feed['description'], ENT_QUOTES | ENT_SUBSTITUTE);?></div>
+															<div class="button-box">
+																<a id="iconFeedStatus<?php echo $feed['id'];?>" class="update-button button" onclick="Reader.updateFeed(<?php echo $feed['id'];?>, '<?php echo _t('피드를 갱신 했습니다.');?>'); event.cancelBubble=true; return false;" title="<?php echo _t('이 피드를 갱신 합니다.');?>"><span class="text"><?php echo _t('피드 갱신');?></span></a>
+																<span class="divider">|</span>
+																<a class="edit-button button" href="#void" onclick="Reader.editFeed(<?php echo $feed['id'];?>, '<?php echo escapeJSInAttribute($feed['xmlurl']);?>')" title="<?php echo _t('이 피드 정보를 수정합니다.');?>"><span class="text"><?php echo _t('수정');?></span></a>
+															</div>
+														</li>
+<?php
+		$count++;
+	}
+?>
+													</ul>
+
+													<div id="feedEditor" style="display: none;">
+														<div class="title"><span class="text"><?php echo _t('피드 수정하기');?></span></div>
+														<div class="input-box">
+															<div class="input-field">
+																<select id="changeFeedGroup">
+<?php
+	foreach (getFeedGroups($blogid) as $group) {
+		if ($group['id'] == 0)
+			$group['title'] = _t('그룹 없음');
+?>
+																	<option value="<?php echo $group['id'];?>"><?php echo htmlspecialchars($group['title'], ENT_QUOTES | ENT_SUBSTITUTE);?></option>
+<?php
+	}
+?>
+																</select>
+																<input type="text" id="changeFeedURL" class="text-readonly-input" readonly="readonly" />
+															</div>
+															<div class="button-box">
+																<input type="button" class="delete-button input-button" value="<?php echo _t('삭제');?>" onclick="Reader.deleteFeed(); return false;" />
+																<span class="divider">|</span>
+																<input type="submit" class="edit-button input-button" value="<?php echo _t('저장');?>" onclick="Reader.editFeedExecute(); return false;" />
+																<span class="divider">|</span>
+																<input type="button" class="cancel-button input-button" value="<?php echo _t('취소');?>" onclick="Reader.cancelEditFeed(); return false;" />
+															</div>
+														</div>
+													</div>
+<?php
+}
+
+
+
+function printFeedEntries($blogid, $group = 0, $feed = 0, $unreadOnly = false, $starredOnly = false, $searchKeyword = null) {
+	global $service;
+?>
+												<script type="text/javascript">
+													//<![CDATA[
+														var scrapedPostText = "<?php echo _t('스크랩 포스트');?>";
+														var disscrapedPostText = "<?php echo _t('미스크랩 포스트');?>";
+													//]]>
+												</script>
+
+												<table cellpadding="0" cellspacing="0">
+													<tbody>
+<?php
+	$count = 0;
+	foreach (getFeedEntries($blogid, $group, $feed, $unreadOnly, $starredOnly, $searchKeyword) as $entry) {
+		if ($count == 0)
+			$firstEntryId = $entry['id'];
+		$className = $entry['wasread'] ? 'read' : 'unread';
+		$className .= ($count % 2) == 1 ? ' even-line' : ' odd-line';
+		$className .= ($count == 0) ? ' active-class' : ' inactive-class';
+		$podcast = $entry['enclosure'] ? '<span class="podcast-icon bullet" title="'._t('팟캐스트 포스트입니다.').'"><span class="text">' . _t('팟캐스트') . '</span></span>' : '';
+?>
+														<tr id="entrytitleList<?php echo $entry['id'];?>" class="<?php echo $className;?>" onmouseover="rolloverClass(this, 'over')" onmouseout="rolloverClass(this, 'out')" onclick="Reader.selectEntry(<?php echo $entry['id'];?>)">
+															<td>
+																<div class="icons">
+<?php
+			if ($entry['item']) {
+?>
+																	<span id="star<?php echo $entry['id'];?>" class="scrap-on-icon bullet" title="<?php echo _t('이 포스트를 스크랩 해제합니다.');?>" onclick="Reader.toggleStarred(<?php echo $entry['id'];?>)"><span class="text"><?php echo _t('스크랩 포스트');?></span></span>
+<?php
+			} else {
+?>
+																	<span id="star<?php echo $entry['id'];?>" class="scrap-off-icon bullet" title="<?php echo _t('이 포스트를 스크랩합니다.');?>" onclick="Reader.toggleStarred(<?php echo $entry['id'];?>)"><span class="text"><?php echo _t('미스크랩 포스트');?></span></span>
+<?php
+			}
+?>
+																	<?php echo $podcast;?>
+																</div>
+																<div class="content">
+																	<div class="title"><span class="text"><?php echo htmlspecialchars($entry['entry_title'], ENT_QUOTES | ENT_SUBSTITUTE);?></span></div>
+																	<div class="blog"><?php echo htmlspecialchars($entry['blog_title'], ENT_QUOTES | ENT_SUBSTITUTE);?></div>
+																</div>
+															</td>
+														</tr>
+<?php
+		$count++;
+	}
+?>
+													</tbody>
+												</table>
+
+												<div id="additionalFeedContainer"></div>
+												<div id="feedLoadingIndicator" class="system-message" style="display: none;">
+													<?php echo _t('피드를 읽어오고 있습니다.');?>
+												</div>
+
+												<script type="text/javascript">
+													//<![CDATA[
+														Reader.setShownEntries(<?php echo $count;?>);
+														Reader.setTotalEntries(<?php echo getFeedEntriesTotalCount($blogid, $group, $feed, $unreadOnly, $starredOnly, $searchKeyword);?>);
+<?php
+	if (isset($firstEntryId)) {
+?>
+														Reader.selectedEntryObject = document.getElementById("entrytitleList<?php echo $firstEntryId;?>").parentNode;
+<?php
+	}
+?>
+													//]]>
+												</script>
+<?php
+	return $count;
+}
+
+function printFeedEntriesMore($blogid, $group = 0, $feed = 0, $unreadOnly = false, $starredOnly = false, $searchKeyword = null, $offset) {
+	global $service;
+?>
+												<table cellpadding="0" cellspacing="0">
+<?php
+	$count = 0;
+	foreach (getFeedEntries($blogid, $group, $feed, $unreadOnly, $starredOnly, $searchKeyword, $offset) as $entry) {
+		$class = $entry['wasread'] ? 'read' : 'unread';
+		$class .= ($count % 2) == 1 ? ' odd-line' : ' even-line';
+		$class .= ' inactive-class';
+		$podcast = $entry['enclosure'] ? '<span class="podcast-icon bullet" title="'._t('팟캐스트 포스트입니다.').'"><span class="text">' . _t('팟캐스트') . '</span></span>' : '';
+?>
+													<tr id="entrytitleList<?php echo $entry['id'];?>" class="<?php echo $class;?>" onmouseover="rolloverClass(this, 'over')" onmouseout="rolloverClass(this, 'out')" onclick="Reader.selectEntry(<?php echo $entry['id'];?>)">
+														<td>
+															<div class="icons">
+<?php
+		if ($entry['item']) {
+?>
+																<span id="star<?php echo $entry['id'];?>" class="scrap-on-icon bullet" title="<?php echo _t('이 포스트를 스크랩 해제합니다.');?>" onclick="Reader.toggleStarred(<?php echo $entry['id'];?>)"><span class="text"><?php echo _t('스크랩 포스트');?></span></span>
+<?php
+		} else {
+?>
+																<span id="star<?php echo $entry['id'];?>" class="scrap-off-icon bullet" title="<?php echo _t('이 포스트를 스크랩합니다.');?>" onclick="Reader.toggleStarred(<?php echo $entry['id'];?>)"><span class="text"><?php echo _t('미스크랩 포스트');?></span></span>
+<?php
+		}
+?>
+																<?php echo $podcast;?>
+															</div>
+															<div class="content">
+																<div class="title"><?php echo htmlspecialchars($entry['entry_title'], ENT_QUOTES | ENT_SUBSTITUTE);?></div>
+																<div class="blog"><?php echo htmlspecialchars($entry['blog_title'], ENT_QUOTES | ENT_SUBSTITUTE);?></div>
+															</div>
+														</td>
+													</tr>
+<?php
+		$count++;
+	}
+?>
+												</table>
+<?php
+	return $count;
+}
+
+function printFeedEntry($blogid, $group = 0, $feed = 0, $entry = 0, $unreadOnly = false, $starredOnly = false, $searchKeyword = null, $position = 'current') {
+	global $service;
+	if (!$entry = getFeedEntry($blogid, $group, $feed, $entry, $unreadOnly, $starredOnly, $searchKeyword, $position)) {
+		$entry = array('id' => 0, 'author' => 'Textcube', 'blog_title' => 'Textcube Reader', 'permalink' => '#', 'entry_title' => _t('포스트가 없습니다.'), 'language' => 'en-US', 'description' => '<div style="height: 369px"></div>', 'tags' => '', 'enclosure' => '', 'written' => time());
+	}
+?>
+												<div id="entryHead">
+													<div class="title"><a href="<?php echo htmlspecialchars($entry['permalink'], ENT_QUOTES | ENT_SUBSTITUTE);?>" onclick="window.open(this.href); return false;"><?php echo htmlspecialchars($entry['entry_title'], ENT_QUOTES | ENT_SUBSTITUTE);?></a></div>
+													<div class="writing-info"><span class="by">by </span><span class="name"><?php echo htmlspecialchars($entry['author'] ? preg_replace('/^\((.+)\)$/', '$1', $entry['author']) : $entry['blog_title'], ENT_QUOTES | ENT_SUBSTITUTE);?></span><span class="divider"> : </span><span class="date"><?php echo date('Y-m-d H:i:s', $entry['written']);?></span></div>
+													<div class="open"><a id="entryPermalink" href="<?php echo htmlspecialchars($entry['permalink'], ENT_QUOTES | ENT_SUBSTITUTE);?>" onclick="window.open(this.href); return false;" title="<?php echo _t('이 포스트를 새 창으로 엽니다.');?>"><span class="text"><?php echo _t('새 창으로');?></span></a></div>
+												</div>
+
+												<div id="entryBody" xml:lang="<?php echo htmlspecialchars($entry['language'], ENT_QUOTES | ENT_SUBSTITUTE);?>">
+<?php
+	if ($entry['enclosure']) {
+		if (preg_match('/\.mp3$/i', $entry['enclosure'])) {
+?>
+													<p><span class="podcast-icon bullet"><span class="text"><?php echo _t('팟캐스트');?></span></span><a href="<?php echo htmlspecialchars($entry['enclosure'], ENT_QUOTES | ENT_SUBSTITUTE);?>"><?php echo htmlspecialchars($entry['enclosure'], ENT_QUOTES | ENT_SUBSTITUTE);?></a></p>
+<?php
+		} else {
+?>
+													<p><span class="podcast-icon bullet"><span class="text"><?php echo _t('팟캐스트');?></span></span><a href="<?php echo htmlspecialchars($entry['enclosure'], ENT_QUOTES | ENT_SUBSTITUTE);?>"><?php echo htmlspecialchars($entry['enclosure'], ENT_QUOTES | ENT_SUBSTITUTE);?></a></p>
+<?php
+		}
+	}
+?>
+													<?php echo $entry['description'];?>
+												</div>
+
+												<script type="text/javascript">
+													//<![CDATA[
+														Reader.selectedEntry = <?php echo escapeJSInAttribute($entry['id']);?>;
+														Reader.setBlogTitle("<?php echo escapeJSInAttribute($entry['blog_title']);?>");
+														Reader.doPostProcessingOnEntry();
+													//]]>
+												</script>
+
+												<div id="entryFoot">
+<?php
+	if ($entry['tags']) {
+?>
+													<div id="entryTag">
+														<span class="title"><?php echo htmlspecialchars(_t('태그'), ENT_QUOTES | ENT_SUBSTITUTE);?></span><span class="divider"> : </span><span class="tags"><?php echo htmlspecialchars($entry['tags'], ENT_QUOTES | ENT_SUBSTITUTE);?></span>
+													</div>
+<?php
+	}
+?>
+													<div class="button-box">
+														<a class="non-read-button button input-button" href="#void" onclick="Reader.markAsUnread(<?php echo $entry['id'];?>)"><span class="text"><?php echo _t('안 읽은 글로 표시');?></span></a>
+													</div>
+													<div class="shortcut-box">
+													<ul>
+														<li><kbd>A</kbd>, <kbd>H</kbd> - <?php echo _t('이전 글');?></li>
+														<li><kbd>S</kbd>, <kbd>L</kbd> - <?php echo _t('다음 글');?></li>
+<li><kbd>D</kbd> - <?php echo _t('새 창으로');?></li>
+														<li><kbd>F</kbd> - <?php echo _t('안 읽은 글만보기');?></li>
+														<li><kbd>G</kbd> - <?php echo _t('스크랩된 글 보기');?></li>
+														<li><kbd>W</kbd> - <?php echo _t('현재글 스크랩');?></li>
+														<li><kbd>T</kbd> - <?php echo _t('글 수집하기');?></li>
+														<li><kbd>J</kbd> - <?php echo _t('위로 스크롤');?></li>
+														<li class="last-shortcut"><kbd>K</kbd> - <?php echo _t('아래로 스크롤');?></li>
+													</ul>
+													</div>
+												</div>
+<?php
+}
+
+function printScript($filename, $obfuscate = true) {
+	global $service, $hostURL, $blogURL, $serviceURL;
+	if (!$file = @file_get_contents(ROOT . "/resources/script/$filename"))
+		return '';
+	$file = "<script type=\"text/javascript\">//<![CDATA[" . CRLF
+		. $file;
+//	if ($obfuscate) {
+//	}
+	return "$file //]]></script>";
+}
+
+function addOpenIDPannel( $comment, $prefix ) {
+	if( !isActivePlugin( 'CL_OpenID' ) ) {
+		return $comment;
+	}
+	global $service,$blogURL;
+	require_once ROOT . '/framework/legacy/Textcube.Control.OIDC.php';
+	$oidcEnabled = OIDCClient::isEnabled();
+	// 이 패널은 OpenID(OIDC) 신원만 로그인 상태로 표시한다. 소셜 신원(CL_SocialLogin)은 미로그인과 같이 다루고
+	// "오픈아이디"로 표시하거나 식별자 원문을 출력하지 않는다(신원 종류를 섞지 않음, v3.153).
+	$openid_identity = Acl::getIdentity('openid');
+	$socialIdentity = (OpenID::identityKind($openid_identity) === 'social');
+	if( OpenID::identityKind($openid_identity) !== 'oidc' ) {
+		$openid_identity = null;
+	}
+	$whatisopenid = '<a target="_blank" href="'._text('http://www.google.co.kr/search?q=OpenID&amp;lr=lang_ko').'"><span style="color:#ff6200">'._text('오픈아이디란?').'</span></a>';
+	//$lastcomment = ' | <a href="#" onClick="recallLastComment([##_article_rep_id_##]); return false"><span style="color:#ff6200">'._text('마지막 댓글로 채우기').'</span></a>';
+	$lastcomment = '';
+
+	$openidOnlySettingNotice = '';
+	if( Setting::getBlogSettingGlobal( 'AddCommentMode', '' ) == 'openid' ) {
+		$openidOnlySettingNotice = "<b>"._text('오픈아이디로만 댓글을 남길 수 있습니다')."</b>";
+	}
+
+	// 돌아올 주소는 OpenID::getReturnURI() — ajax 댓글 응답(POST)에서는 REQUEST_URI(댓글 처리 주소) 대신 글 주소(Referer)(v3.153).
+	// 로그인 링크는 OIDC 가 설정됐을 때만 — 설정 전에는 눌러도 오류만 난다(v3.153).
+	$tag_login = '';
+	if( $oidcEnabled ) {
+		$tag_login = '<a href="'.htmlspecialchars(OpenID::getGuestLoginURI(), ENT_QUOTES).
+			'"><span style="color:#ff6200">'._text('로그인').'</span></a>';
+	}
+
+	$tag_logoff = '<a href="'.htmlspecialchars($blogURL.'/login/openid?action=logout&requestURI='.rawurlencode(OpenID::getReturnURI()), ENT_QUOTES).
+			'"><span style="">'._text('로그아웃').'</span></a>';
+	$tag_state = $openid_identity ? $tag_logoff : $tag_login;
+
+	$pannel = '<div class="commentOuterPannel">'.CRLF;
+	$openid_input = 'OPENID_TAG_NEEDED';
+
+	$cookie_openid = '';
+	if( !empty( $_COOKIE['openid'] ) ) {
+		$cookie_openid = $_COOKIE['openid'];
+	}
+	// 오픈아이디 전용 모드라도 소셜 신원은 이름/비밀번호 쪽(일반 댓글 경로)으로 쓴다 — 소셜 신원이면 그쪽을 기본 선택(v3.153).
+	if( ($openidOnlySettingNotice && !$socialIdentity) || $openid_identity ) {
+		$checked1 = 'checked="checked"'; $checked2 = '';
+		$disabled1 = ''; $disabled2 = 'disabled="disabled"';
+	} else {
+		$checked1 = ''; $checked2 = 'checked="checked"';
+		$disabled1 = 'disabled="disabled"'; $disabled2 = '';
+	}
+
+	$pannel_style = "style=\"width:100%; text-align:left\"";
+	$radio_style  = "style=\"width:15px;vertical-align:text-bottom;height:15px;border:0px;margin:0px;padding:0px;\"";
+	$label_style  = "style=\"display:inline;margin-top:0px;padding-left:0px;cursor:pointer\"";
+	$openid_input_style = 'style="padding-left:21px;width:165px;background-image:url('.$service['path'].'/resources/image/icon_openid.gif'.');'.
+					'background-repeat:no-repeat;background-position:0px center"';
+
+	if( $openid_identity ) {
+		// [보안] 식별자 원문을 href·value 에 넣지 않는다 — 표시 이름만 escape 해서 보여 준다(v3.153).
+		// hidden openid_identifier 는 라디오 onclick(this.form.openid_identifier)이 쓰므로 남기되 빈 값 — addopenid 는 세션 신원을 쓴다.
+		$openid_input = '<span>'.htmlspecialchars(OpenID::getDisplayName($openid_identity), ENT_QUOTES).'</span>'.CRLF;
+		$openid_input .= '<input type="hidden" name="openid_identifier" id="openid_identifier_[##_article_rep_id_##]" value="" />';
+		$openid_input = _text('현재 로그인한 오픈아이디').' '.$openid_input;
+		// 원본의 $_COOKIE['guestHomepage'/'guestName'] 대입 제거 — 읽는 곳은 접두어 붙은 쿠키(service.cookie_prefix, preprocessor 389-391 에서 비어 있지 않게 설정)뿐이라 쓰이지 않음(동작 동일, v3.153).
+	} else {
+		if( preg_match( '/.*?(<input[^>]+_(?:guest|rp)_input_homepage_[^>]+>).*/sm', $comment, $match ) ) {
+			$openid_input = $match[1];
+			$openid_input = str_replace( 'homepage_[##', 'openid_identifier_[##', $openid_input );
+			$openid_input = str_replace( '[##_'.$prefix.'_input_homepage_##]', 'openid_identifier', $openid_input );
+			$openid_input = preg_replace( '/style=("|\')?([^"\']+)("|\')?/', '', $openid_input );
+			// style 제거를 값 삽입보다 먼저: 값 안의 'style=' 이 value 의 닫는 따옴표까지 지우지 않도록
+			$openid_value = 'value="'.htmlspecialchars($cookie_openid, ENT_QUOTES).'"';
+			$openid_input = preg_replace_callback( '/value=(?:"|\')?(?:[^"\']+)(?:"|\')?/', function ($m) use ($openid_value) { return $openid_value; }, $openid_input );
+			$openid_input = preg_replace( '/(value=(?:"|\'))/', $openid_input_style.' $1', $openid_input );
+		}
+	}
+
+	if( $disabled1 ) {
+		$openid_input = preg_replace( '/(name=(?:"|\'))/', $disabled1.' $1', $openid_input );
+	}
+	if( $disabled2 ) {
+		$comment = preg_replace( "/(.*)(<input)((?:[^>]+)name_\\[##_article_rep_id_##\\](?:[^>]+)>(?:.*))/sm", "$1$2 $disabled2 $3", $comment );
+		$comment = preg_replace( "/(.*)(<input)((?:[^>]+)password_\\[##_article_rep_id_##\\](?:[^>]+)>(?:.*))/sm", "$1$2 $disabled2 $3", $comment );
+		$comment = preg_replace( "/(.*)(<input)((?:[^>]+)\\[##_{$prefix}_input_name_##\\](?:[^>]+)>(?:.*))/sm", "$1$2 $disabled2 $3", $comment );
+		$comment = preg_replace( "/(.*)(<input)((?:[^>]+)\\[##_{$prefix}_input_password_##\\](?:[^>]+)>(?:.*))/sm", "$1$2 $disabled2 $3", $comment );
+	}
+
+	$pannel .= '<div class="commentTypeOpenid" '.$pannel_style.'>'.
+		'<input class="commentTypeCheckbox" '.$checked1.' type="radio" '.CRLF.
+			$radio_style.CRLF.
+			'id="comment_type_[##_article_rep_id_##]_openid" '.CRLF.
+			'name="comment_type" value="openid" '.CRLF.
+			'onclick="this.form.[##_'.$prefix.'_input_name_##].disabled=this.form.[##_'.$prefix.'_input_password_##].disabled=true;this.form.openid_identifier.disabled=false;this.form.openid_identifier.disabled=false;"'.CRLF.
+			'/> '.CRLF.
+		'<label for="comment_type_[##_article_rep_id_##]_openid" '.$label_style.'>'.
+		_text('오픈아이디로 글쓰기').
+		'</label> <span>'.($tag_state !== '' ? '['.$tag_state.']' : '').'['.$whatisopenid.$lastcomment.']</span></div>'.CRLF;
+	/* Opera browser does not work with single 'this.form.openid_identifier.disabled=false;', is it a bug? */
+
+	$pannel .= '<div style="padding:5px 0 5px 0px;width:100%;">'.$openid_input.'</div>'.CRLF;
+
+	$pannel .= '<div class="commentTypeNamepassword" '.$pannel_style.' >'.CRLF.
+		'<input class="commentTypeCheckbox" '.$checked2.' type="radio" '.CRLF.
+			$radio_style.CRLF.
+			'id="comment_type_[##_article_rep_id_##]_idpwd" '.CRLF.
+			'name="comment_type" value="idpwd" '.CRLF.
+			'onclick="this.form.[##_'.$prefix.'_input_name_##].disabled=this.form.[##_'.$prefix.'_input_password_##].disabled=false;this.form.openid_identifier.disabled=true;this.form.openid_identifier.disabled=true;"'.CRLF.
+			'/> '.CRLF.
+		'<label for="comment_type_[##_article_rep_id_##]_idpwd" '.$label_style.'>'.
+		_text('이름/비밀번호로 글쓰기').'</label> '.$openidOnlySettingNotice.'</div>'.CRLF;
+	$comment = $pannel.$comment."</div>";
+	return $comment;
+}
+
+function getTrackbackRDFView($blogid, $info) {
+	$buf = new OutputWriter();
+    $buf->buffer('<!--'.CRLF);
+	$buf->buffer('<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"'.CRLF);
+    $buf->buffer('      xmlns:dc="http://purl.org/dc/elements/1.1/"'.CRLF);
+    $buf->buffer('        xmlns:trackback="http://madskills.com/public/xml/rss/module/trackback/">'.CRLF);
+    $buf->buffer('<rdf:Description'.CRLF);
+    $buf->buffer('   rdf:about="'.$info['permalink'].'"'.CRLF);
+    $buf->buffer('   dc:identifier="'.$info['permalink'].'"'.CRLF);
+    $buf->buffer('   dc:title="'.$info['title'].'"'.CRLF);
+    $buf->buffer('   trackback:ping="'.$info['trackbackURL'].'" />'.CRLF);
+    $buf->buffer('</rdf:RDF>'.CRLF);
+	$buf->buffer('-->'.CRLF);
+	return $buf->_buffer;
+}
+?>

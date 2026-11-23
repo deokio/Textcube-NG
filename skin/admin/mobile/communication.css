@@ -1,0 +1,132 @@
+@charset "utf-8";
+
+/* Textcube-NG: the mobile admin skin had no communication.css, so the communication pages asked for a missing file and their buttons had no icons.
+   Only the icon rules of canon/communication.css (comment reply, notify reply mark, trash revert, filter delete buttons, help footer) are copied; widths are left to basic.css (r3-16) */
+
+/* Comment ***************************************************************************************/
+
+#part-post-comment table.data-inbox tbody tr td.reply span
+{
+	display                          : none;
+}
+
+#part-post-comment table.data-inbox tbody tr td.reply a
+{
+	background-image                 : url("./image/icon_write.gif");
+	background-position              : left top;
+	background-repeat                : no-repeat;
+	display                          : block;
+	height                           : 15px;
+	width                            : 16px;
+}
+
+/* Notify ****************************************************************************************/
+
+#part-post-notify table.data-inbox tbody tr.reply-line td.content .commentURL
+{
+	background-image                 : url('./image/icon_reply.gif');
+	background-position              : left top;
+	background-repeat                : no-repeat;
+	padding-left                     : 26px;
+}
+
+/* Trash *****************************************************************************************/
+
+#part-post-trash table.data-inbox tbody tr td.revert a
+{
+	background-image                 : url("./image/icon_revert.gif");
+	background-position              : left top;
+	background-repeat                : no-repeat;
+	display                          : block;
+	height                           : 15px;
+	width                            : 16px;
+}
+
+#part-post-trash table.data-inbox tbody tr td.revert a span
+{
+	display                          : none;
+}
+
+/* Filter ****************************************************************************************/
+
+#part-communication-filter div.data-inbox .section table tbody tr td .delete-button,
+#part-communication-whitelist div.data-inbox .section table tbody tr td .delete-button
+{
+	background-color                 : transparent;
+	background-image                 : url("./image/icon_delete.gif");
+	background-position              : left top;
+	display                          : block;
+	height                           : 11px;
+	margin                           : 0 auto;
+	padding                          : 0;
+	width                            : 11px;
+}
+
+#part-communication-filter div.data-inbox .section table tbody tr td .delete-button span,
+#part-communication-whitelist div.data-inbox .section table tbody tr td .delete-button span
+{
+	display                          : none;
+}
+
+/* simple help footer ****************************************************************************/
+
+#data-description dl.modify-description
+{
+	background-image                 : url("./image/icon_modify.gif");
+	background-color                 : transparent;
+	background-position              : 8px 2px;
+	background-repeat                : no-repeat;
+}
+
+#data-description dl.ban-description
+{
+	background-image                 : url("./image/icon_block_off.gif");
+	background-color                 : transparent;
+	background-position              : 8px 2px;
+	margin                           : 0 3px 0 0;
+	background-repeat                : no-repeat;
+}
+
+#data-description dl.trash-description
+{
+	background-image                 : url("./image/icon_delete.gif");
+	background-color                 : transparent;
+	background-position              : 8px 7px;
+	height                           : 11px;
+	margin                           : 0 auto;
+	background-repeat                : no-repeat;
+}
+
+/* Textcube-NG: r3-18 R-400 narrow width — comment, trackback and trash tables only (mobile 375px). Less cell side padding, wrap date/IP/content, hide the header text of the reply/revert/delete columns as canon does */
+
+#part-post-comment table.data-inbox tbody tr td,
+#part-post-trackback table.data-inbox tbody tr td,
+#part-post-trash table.data-inbox tbody tr td
+{
+	padding                          : 1px 2px;
+}
+
+#part-post-comment table.data-inbox tbody tr td.date,
+#part-post-comment table.data-inbox tbody tr td.ip,
+#part-post-comment table.data-inbox tbody tr td.content,
+#part-post-trackback table.data-inbox tbody tr td.date,
+#part-post-trackback table.data-inbox tbody tr td.ip,
+#part-post-trackback table.data-inbox tbody tr td.site,
+#part-post-trackback table.data-inbox tbody tr td.title,
+#part-post-trash table.data-inbox tbody tr td.date,
+#part-post-trash table.data-inbox tbody tr td.ip,
+#part-post-trash table.data-inbox tbody tr td.content,
+#part-post-trash table.data-inbox tbody tr td.site,
+#part-post-trash table.data-inbox tbody tr td.title
+{
+	word-break                       : break-all;
+}
+
+#part-post-comment table.data-inbox thead tr th.reply span,
+#part-post-comment table.data-inbox thead tr th.delete span,
+#part-post-trackback table.data-inbox thead tr th.delete span,
+#part-post-trash table.data-inbox thead tr th.revert span,
+#part-post-trash table.data-inbox thead tr th.delete span
+{
+	display                          : none;
+}

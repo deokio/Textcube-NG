@@ -1,0 +1,14 @@
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+*_local_tools*
+Icon?
+ehthumbs.db
+Thumbs.db
+/attach/
+/cache/
+skin/blog/customize
+config.php
+.htaccess

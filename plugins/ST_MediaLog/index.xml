@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="utf-8"?>
+<plugin version="1.0">
+  <title xml:lang="ko">미디어로그</title>
+  <title xml:lang="en">Media Log</title>
+  <link>http://www.textcube.org/</link>
+  <version>1.0</version>
+  <description xml:lang="ko"><![CDATA[글에 넣은 첨부 가운데 이미지·음성을 모아 분류별, 종류별(이미지/음성), 글 단위 또는 미디어만으로 골라 보는 미디어로그 페이지를 더합니다. 음성은 미리 듣기를 할 수 있고, 칸 수와 칸 폭은 스킨 index.xml 의 contentWidth 에 맞춰 자동으로 정합니다. 페이지 플러그인(ST_Pages)이 켜져 있어야 하며, 페이지 화면에서 종류 '미디어로그'로 주소를 만듭니다. 공개 글의 첨부만 보이고 보호·비공개·예약 글과 비공개 분류의 글은 넣지 않습니다. 스킨의 [##_medialog_link_##] 는 미디어로그 페이지 주소로 바뀌고(페이지가 없으면 빈 값), 스킨에 <s_media> 블록이 있으면 미디어로그를 그 블록의 [##_media_content_##] 자리에 냅니다.]]></description>
+  <description xml:lang="en"><![CDATA[Adds a media log page that collects the images and sounds attached to posts, filtered by category, by kind (image/sound) and shown per post or per media item. Sounds can be previewed, and the number and width of cells follow the skin's contentWidth (index.xml). The Pages plugin (ST_Pages) must be active; create the address on the Pages screen with the page kind 'Media Log'. Only attachments of public posts are shown; protected, private and scheduled posts and posts in private categories are left out. In skins, [##_medialog_link_##] becomes the address of the media log page (empty when there is none), and if the skin has an <s_media> block the media log is shown at its [##_media_content_##].]]></description>
+  <license>GPL</license>
+  <author xml:lang="ko" link="http://deok.io/"><![CDATA[@deokio]]></author>
+  <author xml:lang="en" link="http://deok.io/"><![CDATA[@deokio]]></author>
+  <safety changeData="no" exposeData="no" accessLocal="no" accessRemote="no" accessRaw="no" />
+  <requirements>
+    <textcube>
+      <minVersion>1.8</minVersion>
+    </textcube>
+  </requirements>
+  <binding>
+    <listener event="AddPageType" handler="ST_MediaLog_addType" />
+    <listener event="ViewPageContent" handler="ST_MediaLog_view" />
+    <tag name="medialog_link" handler="ST_MediaLog_linkTag" />
+    <config xml:lang="ko" dataValHandler="">
+      <window width="500" height="600"/>
+      <fieldset legend="보기">
+        <field title="기본 보기" type="select" name="mlView">
+          <op value="post" checked="checked"><![CDATA[글 단위(글 하나에 한 칸)]]></op>
+          <op value="media"><![CDATA[미디어만(미디어 하나에 한 칸)]]></op>
+          <caption><![CDATA[페이지 플러그인(ST_Pages)이 켜져 있어야 합니다. 페이지 화면에서 종류 '미디어로그'로 주소를 만들면 그 주소에 미디어로그가 나옵니다(페이지 플러그인이 꺼져 있으면 나오지 않습니다). 공개 글의 첨부만 보이며, 소유자가 볼 때도 손님과 같은 목록입니다. 칸 수를 '자동'으로 두면 스킨 index.xml 의 contentWidth 에 맞춰 정합니다.]]></caption>
+        </field>
+        <field title="기본 종류" type="select" name="mlType">
+          <op value="all" checked="checked"><![CDATA[전체]]></op>
+          <op value="image"><![CDATA[이미지]]></op>
+          <op value="audio"><![CDATA[음성]]></op>
+        </field>
+        <field title="한 쪽 칸 수" type="select" name="mlPerPage">
+          <op value="12"><![CDATA[12]]></op>
+          <op value="20" checked="checked"><![CDATA[20]]></op>
+          <op value="30"><![CDATA[30]]></op>
+          <op value="40"><![CDATA[40]]></op>
+          <op value="60"><![CDATA[60]]></op>
+        </field>
+        <field title="열 수" type="select" name="mlColumns">
+          <op value="auto" checked="checked"><![CDATA[자동(스킨 contentWidth)]]></op>
+          <op value="2"><![CDATA[2]]></op>
+          <op value="3"><![CDATA[3]]></op>
+          <op value="4"><![CDATA[4]]></op>
+          <op value="5"><![CDATA[5]]></op>
+          <op value="6"><![CDATA[6]]></op>
+        </field>
+        <field title="썸네일" type="select" name="mlThumb">
+          <op value="crop" checked="checked"><![CDATA[정사각 썸네일]]></op>
+          <op value="original"><![CDATA[원본 줄여 보이기]]></op>
+        </field>
+      </fieldset>
+      <fieldset legend="미디어 종류">
+        <field title="이미지 확장자" type="checkbox" name="mlExtImage">
+          <op name="mlExtJpg" value="1" checked="checked"><![CDATA[jpg·jpeg]]></op>
+          <op name="mlExtPng" value="1" checked="checked"><![CDATA[png]]></op>
+          <op name="mlExtGif" value="1" checked="checked"><![CDATA[gif]]></op>
+          <op name="mlExtWebp" value="1" checked="checked"><![CDATA[webp]]></op>
+          <op name="mlExtAvif" value="1" checked="checked"><![CDATA[avif]]></op>
+        </field>
+        <field title="음성 확장자" type="checkbox" name="mlExtAudio">
+          <op name="mlExtMp3" value="1" checked="checked"><![CDATA[mp3]]></op>
+          <op name="mlExtM4a" value="1"><![CDATA[m4a]]></op>
+          <op name="mlExtOgg" value="1"><![CDATA[ogg]]></op>
+          <op name="mlExtWav" value="1"><![CDATA[wav]]></op>
+        </field>
+        <field title="종류 판정" type="select" name="mlMatch">
+          <op value="ext" checked="checked"><![CDATA[확장자]]></op>
+          <op value="mime"><![CDATA[MIME 타입]]></op>
+          <op value="both"><![CDATA[확장자와 MIME 타입 모두]]></op>
+          <caption><![CDATA[확장자: 고른 확장자의 첨부를 냅니다. MIME 타입: 첨부할 때 기록된 MIME 타입이 고른 확장자의 타입과 맞으면 냅니다. 모두: 확장자와 그 확장자의 MIME 타입이 함께 맞아야 냅니다. 어느 경우든 위 표에 없는 확장자(예: php)의 첨부는 내지 않습니다.]]></caption>
+        </field>
+      </fieldset>
+      <fieldset legend="글 범위">
+        <field title="본문에 없는 첨부" type="checkbox" name="mlScope">
+          <op name="mlUnlinked" value="1"><![CDATA[본문에 넣지 않은 첨부도 보이기]]></op>
+          <caption><![CDATA[끄면 글 본문에 넣은(치환자 또는 첨부 주소로 들어간) 첨부만 보입니다. 켜면 첨부만 하고 본문에 넣지 않은 파일(공개 글을 고치며 임시 저장본에만 넣은 첨부 포함)도 보입니다.]]></caption>
+        </field>
+      </fieldset>
+    </config>
+    <config xml:lang="en" dataValHandler="">
+      <window width="500" height="600"/>
+      <fieldset legend="View">
+        <field title="Default view" type="select" name="mlView">
+          <op value="post" checked="checked"><![CDATA[Per post (one cell per post)]]></op>
+          <op value="media"><![CDATA[Media only (one cell per item)]]></op>
+          <caption><![CDATA[The Pages plugin (ST_Pages) must be active. Create an address on the Pages screen with the page kind 'Media Log' and the media log is shown there (nothing is shown while the Pages plugin is off). Only attachments of public posts are shown, and the owner sees the same list as visitors. With columns set to 'Auto', the layout follows the skin's contentWidth (index.xml).]]></caption>
+        </field>
+        <field title="Default kind" type="select" name="mlType">
+          <op value="all" checked="checked"><![CDATA[All]]></op>
+          <op value="image"><![CDATA[Images]]></op>
+          <op value="audio"><![CDATA[Sounds]]></op>
+        </field>
+        <field title="Cells per page" type="select" name="mlPerPage">
+          <op value="12"><![CDATA[12]]></op>
+          <op value="20" checked="checked"><![CDATA[20]]></op>
+          <op value="30"><![CDATA[30]]></op>
+          <op value="40"><![CDATA[40]]></op>
+          <op value="60"><![CDATA[60]]></op>
+        </field>
+        <field title="Columns" type="select" name="mlColumns">
+          <op value="auto" checked="checked"><![CDATA[Auto (skin contentWidth)]]></op>
+          <op value="2"><![CDATA[2]]></op>
+          <op value="3"><![CDATA[3]]></op>
+          <op value="4"><![CDATA[4]]></op>
+          <op value="5"><![CDATA[5]]></op>
+          <op value="6"><![CDATA[6]]></op>
+        </field>
+        <field title="Thumbnail" type="select" name="mlThumb">
+          <op value="crop" checked="checked"><![CDATA[Square thumbnail]]></op>
+          <op value="original"><![CDATA[Scaled original]]></op>
+        </field>
+      </fieldset>
+      <fieldset legend="Media kinds">
+        <field title="Image extensions" type="checkbox" name="mlExtImage">
+          <op name="mlExtJpg" value="1" checked="checked"><![CDATA[jpg, jpeg]]></op>
+          <op name="mlExtPng" value="1" checked="checked"><![CDATA[png]]></op>
+          <op name="mlExtGif" value="1" checked="checked"><![CDATA[gif]]></op>
+          <op name="mlExtWebp" value="1" checked="checked"><![CDATA[webp]]></op>
+          <op name="mlExtAvif" value="1" checked="checked"><![CDATA[avif]]></op>
+        </field>
+        <field title="Sound extensions" type="checkbox" name="mlExtAudio">
+          <op name="mlExtMp3" value="1" checked="checked"><![CDATA[mp3]]></op>
+          <op name="mlExtM4a" value="1"><![CDATA[m4a]]></op>
+          <op name="mlExtOgg" value="1"><![CDATA[ogg]]></op>
+          <op name="mlExtWav" value="1"><![CDATA[wav]]></op>
+        </field>
+        <field title="Match by" type="select" name="mlMatch">
+          <op value="ext" checked="checked"><![CDATA[Extension]]></op>
+          <op value="mime"><![CDATA[MIME type]]></op>
+          <op value="both"><![CDATA[Extension and MIME type]]></op>
+          <caption><![CDATA[Extension: attachments with a selected extension are shown. MIME type: shown when the MIME type recorded at upload matches a type of a selected extension. Both: the extension and its MIME type must both match. In every case attachments whose extension is not listed above (e.g. php) are never shown.]]></caption>
+        </field>
+      </fieldset>
+      <fieldset legend="Posts">
+        <field title="Attachments not in the body" type="checkbox" name="mlScope">
+          <op name="mlUnlinked" value="1"><![CDATA[Also show attachments not placed in the body]]></op>
+          <caption><![CDATA[When off, only attachments placed in the post body (by a placeholder or an attachment address) are shown. When on, files attached but not placed in the body are shown too, including files added only in an unsaved draft of a public post.]]></caption>
+        </field>
+      </fieldset>
+    </config>
+  </binding>
+</plugin>

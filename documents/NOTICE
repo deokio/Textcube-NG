@@ -1,0 +1,69 @@
+Textcube-NG — PHP 5.5 – 7.3 Legacy Edition (Community Fork)
+=============================================================
+
+This software is a fork of Textcube, originally developed by:
+
+    Copyright (c) 2004-2016, Needlworks / Tatter Network Foundation (TNF)
+    Originally GPL-licensed in 2006.
+    Upstream: https://github.com/Needlworks/Textcube
+
+The original Needlworks/TNF copyright on all upstream source files is
+preserved unchanged in their respective file headers, as required by GPL.
+
+------------------------------------------------------------------------
+
+Fork modifications (PHP 5.6 → 7.4 port lowered to run on PHP 5.5 – 7.3,
+dependency updates and removal, documentation, security hardening —
+including an OpenID Connect reimplementation replacing the EOL OpenID 2.0
+stack): 2026, @deokio.
+
+Nature of the modifications:
+
+  The port consists predominantly of mechanical migrations following the
+  official PHP upgrade documentation (https://www.php.net/migration70,
+  .../migration71, .../migration72, .../migration73, .../migration74).
+  This edition keeps the resulting code runnable on PHP 5.5 – 7.3.
+  Specifically:
+
+    - PHP4-style constructor replacement (function ClassName → __construct)
+    - mysqli procedural API → object-oriented API (1:1 mapping)
+    - Deprecated function replacement per official PHP migration guides
+    - Syntax newer than PHP 5.5 (null coalescing, variadics, typed
+      properties) rewritten in PHP 5.5 form, with compatibility functions
+      for APIs missing on PHP 5.5 / 5.6 (random_bytes, random_int,
+      hash_equals, TLS stream options, safe unserialize)
+
+  Such mechanical transformations would yield substantially identical
+  results regardless of who or what performs them, and are not considered
+  to embody original creative authorship.
+
+  A small number of components were newly authored as part of security
+  hardening — notably a dependency-free OpenID Connect (OIDC) client
+  (framework/legacy/Textcube.Control.OIDC.php) that replaces the
+  end-of-life OpenID 2.0 implementation, and the removal of the bundled
+  phpopenid library. These newly authored components are released under
+  the GPL, consistent with the rest of the project.
+
+  This work was performed with the assistance of an AI coding assistant
+  (Anthropic Claude) under human review. The maintainer asserts no
+  additional copyright over the mechanical migration changes themselves.
+
+  No additional copyright is asserted over these modifications.
+  All modifications are made available under the GNU General Public
+  License (same as upstream).
+
+------------------------------------------------------------------------
+
+This fork is an independent community continuation and is not affiliated
+with, endorsed by, or sponsored by Needlworks or Tatter Network Foundation.
+
+The "Textcube" name is used here for descriptive purposes (nominative fair
+use) to identify the upstream codebase from which this fork is derived.
+Any trademark rights to the name "Textcube" remain with their respective
+holders.
+
+For the full list of changes from upstream, see:
+  - documents/CHANGELOG.md             (change history, r1–r4)
+  - documents/SECURITY.md              (security status and remaining issues)
+
+Original LICENSE (GPL) is preserved at /documents/LICENSE and /LICENSE.

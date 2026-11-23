@@ -1,0 +1,58 @@
+@charset "utf-8";
+/* Textcube-NG: mobile 관리 스킨 플러그인 화면(r3-13). 헤더가 <스킨>/plugin.css 를 불러오므로 차단 배지·경고 상자 규칙만 둔다 */
+
+/* Textcube-NG: 차단 배지·경고 상자(r3-13) ------------------------------ */
+#part-plugin-list #iconview-box ol.data-inbox li.guard-blocked-class .plugin-box
+{
+	position                         : relative;
+}
+
+#part-plugin-list #iconview-box ol.data-inbox li.guard-blocked-class .plugin-box .plugin-icon
+{
+	opacity                          : 0.4;
+}
+
+#part-plugin-list #iconview-box ol.data-inbox li .plugin-box .plugin-guard-badge
+{
+	background-color                 : #D9534F;
+	border-radius                    : 3px;
+	color                            : #FFFFFF;
+	font-size                        : 0.85em;
+	font-weight                      : bold;
+	line-height                      : 1.5em;
+	padding                          : 0 5px;
+	position                         : absolute;
+	right                            : 3px;
+	top                              : 3px;
+}
+
+/* Textcube-NG: r3-42 다시 검사할 수 있는 배지(누르면 recheckPlugin)는 손가락 모양 */
+#part-plugin-list #iconview-box ol.data-inbox li .plugin-box .plugin-guard-badge[role="button"]
+{
+	cursor                           : pointer;
+}
+
+#part-plugin-list #iconview-box ol.data-inbox li .summary .plugin-guard-box,
+#part-plugin-list #listview-box ol.data-inbox li .plugin-box .plugin-guard-badge
+{
+	display                          : none;
+}
+
+#part-plugin-list #listview-box ol.data-inbox li .summary .plugin-guard-box
+{
+	background-color                 : #FFF4E5;
+	border                           : 1px solid #F0A040;
+	color                            : #663C00;
+	margin                           : 5px 5px 5px 0;
+	padding                          : 5px 8px;
+}
+
+#part-plugin-list #listview-box ol.data-inbox li .summary .plugin-guard-box p
+{
+	margin                           : 0 0 4px 0;
+}
+
+#part-plugin-list #listview-box ol.data-inbox li .summary .plugin-guard-box .plugin-guard-title
+{
+	font-weight                      : bold;
+}

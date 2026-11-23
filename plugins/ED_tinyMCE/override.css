@@ -1,0 +1,211 @@
+@charset utf-8;
+/* This stylesheet overrides administration panel skin, to make uploader section float. */
+
+/* PHP port(Textcube-NG): r3-10 R-284 4.x 클래스(.mce-*) 7개 규칙을 7.x(silver 테마·oxide 스킨) 클래스(.tox-*)로 바꿈. 스킨 CSS 가 이 파일 뒤에 읽히므로
+   선택자를 .tox.tox-tinymce 로 시작해 스킨보다 우선하게 함.
+   원본 .mce-toolbar-grp(툴바 묶음) → .tox-editor-header(툴바 묶음). 원본처럼 position:fixed·top 80px·left 175px 로 관리 화면 머리 아래 고정 띠
+   (#formatbox-container) 안에 둔다(사용자 결정 11-08, r3-10 첫 적용의 index.php toolbar_sticky 를 대신함). 7.x 는 left 만으로 너비가 정해지지 않으므로
+   right 15px·width auto 를 더하고, 스킨의 padding 4px 0 과 아래 회색 그림자(.tox:not(.tox-tinymce-inline) .tox-editor-header 는 선택자 세기가 같고
+   스킨 CSS 가 이 파일 뒤에 읽힘)는 !important 로 없앤다. height:30px 는 7.x 툴바(2줄)를 자르고 display:block 은 7.x 의 grid 배치를 깨므로 옮기지 않음 */
+.tox.tox-tinymce .tox-editor-header {
+	position:fixed!important;
+	top:80px!important;
+	left:175px!important;
+	right:15px!important;
+	width:auto!important;
+	padding:0!important;
+	box-shadow:none!important;
+	z-index:100;
+	background-color:#fff!important;
+	border:0!important;
+	background:#fff!important;
+}
+
+/* PHP port(Textcube-NG): r3-10 R-284 원본 .popup-editor .mce-toolbar-grp { top:45px; left:3px; } → 팝업 편집기(body.popup-editor)의 툴바 머리 */
+.popup-editor .tox.tox-tinymce .tox-editor-header {
+	top:45px!important;
+	left:3px!important;
+}
+
+/* PHP port(Textcube-NG): r3-10 R-284 툴바 머리(2줄)가 들어가도록 고정 띠 #formatbox-container 높이와 그 아래 분류 줄 위 여백을 7px 늘림
+   (사용자 결정 11-08, 원본 간격과 다름). 원본 값: skin/admin/canon/editor.css 높이 51px·#category-section 위 여백 80px, popup-editor.css 61px·98px.
+   이 파일은 TinyMCE 를 쓰는 글쓰기 화면에서만 읽히므로 다른 편집기 화면은 원본 값 그대로다 */
+#formatbox-container {
+	height:58px!important;
+}
+
+#category-section {
+	margin-top:87px!important;
+}
+
+.popup-editor #formatbox-container {
+	height:68px!important;
+}
+
+.popup-editor #category-section {
+	margin-top:105px!important;
+}
+
+.popup-editor #save-section {
+	position:fixed;
+	top:0!important;
+	margin:0!important;
+	padding:0!important;
+}
+
+/* PHP port(Textcube-NG): r3-10 R-284 원본 .mce-fullscreen → 7.x 전체 화면 편집기(.tox-fullscreen) */
+.tox.tox-tinymce.tox-fullscreen {
+	z-index:2000!important;
+}
+
+/* PHP port(Textcube-NG): r3-10 R-284 원본 .mce-container(편집기 틀을 가운데로) → 7.x 편집기 틀(.tox-tinymce) */
+.tox.tox-tinymce {
+	margin-left:auto!important;
+	margin-right:auto!important;
+}
+
+/* PHP port(Textcube-NG): r3-10 R-284 원본 .mce-stack-layout(툴바·편집 구역을 쌓는 틀) → .tox-editor-container */
+.tox.tox-tinymce .tox-editor-container {
+	box-shadow:none!important;
+}
+
+/* PHP port(Textcube-NG): r3-10 R-284 원본 .mce-container-body(편집 구역 바탕) → .tox-sidebar-wrap(편집 구역을 감싸는 틀) */
+.tox.tox-tinymce .tox-sidebar-wrap {
+	background-color:#fff!important;
+}
+
+/* PHP port(Textcube-NG): r3-10 R-284 원본 .mce-edit-area(편집 구역) → .tox-edit-area */
+.tox.tox-tinymce .tox-edit-area {
+	padding:8px!important;
+	box-shadow:0 0 5px rgba(0,0,0,0.3);
+	border:1px #eee solid!important;
+}
+
+/* PHP port(Textcube-NG): r3-10 R-284 툴바를 원본 4.x(toolbar_items_size 'small')처럼 작게. oxide 스킨 기본값은 버튼 높이 28px·너비 34px·
+   위아래 여백 6px/5px·묶음 좌우 여백 11px/12px·글꼴 14px, 줄 구분선은 39px 간격(repeating-linear-gradient)이다. 버튼 수·순서는 바꾸지 않음.
+   아래 값은 추정치이며 브라우저 시험 뒤 조정할 수 있음(_sectest/_work/r3_10/r284_notes.md) */
+.tox.tox-tinymce .tox-tbtn {
+	height:24px;
+	width:26px;
+	margin:2px 1px 2px 0;
+	font-size:12px;
+}
+
+.tox.tox-tinymce .tox-tbtn svg {
+	transform:scale(.75);
+}
+
+.tox.tox-tinymce .tox-tbtn--select {
+	width:auto;
+	margin:2px 1px 2px 0;
+	padding:0 2px;
+}
+
+.tox.tox-tinymce .tox-split-button {
+	margin:2px 1px 2px 0;
+}
+
+.tox.tox-tinymce .tox-split-button__chevron {
+	width:12px;
+}
+
+.tox.tox-tinymce .tox-tbtn--bespoke .tox-tbtn__select-label {
+	width:5em;
+}
+
+/* PHP port(Textcube-NG): r3-11 Textcube 전용 버튼(TTMLsupport 의 tcattach 파일 올리기·삽입, tcsave 글 저장, tcmoreless 더보기/접기 구역 추가)을
+   TinyMCE 기본 버튼과 구별되게 관리 스킨 강조색 테두리와 옅은 바탕으로 표시한다(사용자 결정 11-08 16:52, 툴팁 앞 [TC] 와 함께. 원본 4.x 에는 없음).
+   선택자는 silver 테마(tinymce/themes/silver/theme.min.js 7.9.3)가 툴바 버튼 <button class="tox-tbtn"> 에 등록 이름 그대로 주는 data-mce-name 속성이다(툴팁·언어와 무관).
+   이 파일은 canon·mobile 관리 스킨 모두의 글쓰기 화면에서 읽힌다. 색은 두 관리 스킨 값: 테두리 #92B5E8(canon·mobile editor.css 입력란 테두리),
+   바탕 #edf1f9·hover 바탕 #c3cee5(canon basic.css 강조 상자 바탕·테두리), hover 테두리 #6B90C3(canon 강조 글자색).
+   테두리 1px 가 버튼 크기(위 .tox-tbtn 높이 24px·너비 26px)를 늘리지 않도록 box-sizing 을 border-box 로 한다 */
+.tox.tox-tinymce .tox-tbtn[data-mce-name="tcattach"],
+.tox.tox-tinymce .tox-tbtn[data-mce-name="tcsave"],
+.tox.tox-tinymce .tox-tbtn[data-mce-name="tcmoreless"] {
+	box-sizing:border-box;
+	border:1px solid #92B5E8;
+	background-color:#edf1f9;
+}
+
+.tox.tox-tinymce .tox-tbtn[data-mce-name="tcattach"]:hover,
+.tox.tox-tinymce .tox-tbtn[data-mce-name="tcsave"]:hover,
+.tox.tox-tinymce .tox-tbtn[data-mce-name="tcmoreless"]:hover,
+.tox.tox-tinymce .tox-tbtn[data-mce-name="tcattach"]:focus,
+.tox.tox-tinymce .tox-tbtn[data-mce-name="tcsave"]:focus,
+.tox.tox-tinymce .tox-tbtn[data-mce-name="tcmoreless"]:focus {
+	border-color:#6B90C3;
+	background-color:#c3cee5;
+}
+
+.tox.tox-tinymce .tox-toolbar__group {
+	padding:0 4px;
+}
+
+.tox.tox-tinymce .tox-toolbar,
+.tox.tox-tinymce .tox-toolbar__overflow,
+.tox.tox-tinymce .tox-toolbar__primary {
+	background-image:repeating-linear-gradient(#e3e3e3 0 1px, transparent 1px 28px);
+	background-position:center top 29px;
+	background-size:calc(100% - 4px * 2) calc(100% - 30px);
+}
+
+/* PHP port(Textcube-NG): r3-10 R-284 7.x 의 서식(styles)·문단(blocks) 메뉴는 항목 미리보기를 실제 h1~h3 태그로 그리는데, 관리 스킨의
+   h1, h2 { display:none } (canon·mobile basic.css)와 h3 { display:none } (canon·mobile editor.css)에 가려 제목 1~3 항목 글자가 보이지 않음.
+   원본 4.x 는 메뉴 항목 글자를 <span class="mce-text"> 에 서식 CSS(formatter.getCssText)를 style 로 줘서 그려 이 규칙에 걸리지 않았음 → 메뉴 안의 h1~h3 만 다시 보이게 함 */
+.tox .tox-collection__item-label>h1,
+.tox .tox-collection__item-label>h2,
+.tox .tox-collection__item-label>h3 {
+	display:block!important;
+}
+
+#textarea-section {
+	background-color:transparent!important;
+}
+
+#save-section {
+	position:fixed!important;
+	top:32px;
+	height:20px!important;
+	right:15px;
+	z-index:100;
+}
+
+#save-section .button-box input {
+	height:20px!important;
+	line-height:20px!important;
+}
+
+#saveAndReturnButton {
+	background-image:linear-gradient(top, #333, #f33)!important;
+}
+
+/* Textcube-NG: z-index·top·bottom·margin-top 은 skin/admin/canon/editor.css 에 !important 로 있던 팝업 위치 값을 옮김 */
+#upload-section {
+	background-color:#FFF;
+	margin:10px 20px 10px 0;
+	display:none;
+	position:fixed;
+	z-index:400;
+	border-top:1px solid #bbb;
+	top:auto;
+	bottom:30px;
+	left:50%;
+	margin-top:0;
+	margin-left:-370px;
+	border:1px solid #F2F2F2;
+	width:900px;
+	border-radius:3px;
+	box-shadow:0 0 10px rgba(0,0,0,0.3);
+}
+
+#insert-container {
+	position:absolute;
+	margin-top:0!important;
+	top:10px;
+	left:685px;
+	width:100px;
+}
+
+#status-container,#save-section .button-box .save-button,#save-section .button-box .list-button {
+	display:none;
+}

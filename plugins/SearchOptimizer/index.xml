@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="utf-8"?>
+<plugin version="1.0">
+  <title xml:lang="ko">검색 최적화(SEO)</title>
+  <title xml:lang="en">Search Optimizer (SEO)</title>
+  <link>http://www.textcube.org/</link>
+  <version>1.0</version>
+  <description xml:lang="ko"><![CDATA[검색 엔진과 AI 에이전트를 위해 head 에 설명(description)·Open Graph·Twitter 카드·JSON-LD·robots 메타를 넣고, 공개 글의 본문을 markdown 대체 표현(/plugin/seo/md?id=글번호, text/markdown)으로 냅니다. 보호·비공개·예약 글과 비공개 분류의 글은 손님에게 내지 않고(404), 관리자·글쓴이가 로그인했을 때만 X-Robots-Tag: noindex 를 붙여 markdown 으로 냅니다.]]></description>
+  <description xml:lang="en"><![CDATA[Adds description, Open Graph, Twitter card, JSON-LD and robots meta to the head for search engines and AI agents, and serves public posts as a markdown alternate representation (/plugin/seo/md?id=N, text/markdown). Protected, private, scheduled posts and posts in private categories are not served to visitors (404); they are served as markdown with X-Robots-Tag: noindex only when an administrator or writer is signed in.]]></description>
+  <license>GPL</license>
+  <author xml:lang="ko" link="http://deok.io/"><![CDATA[@deokio]]></author>
+  <author xml:lang="en" link="http://deok.io/">@deokio</author>
+  <safety changeData="no" exposeData="no" accessLocal="no" accessRemote="no" accessRaw="no" />
+  <requirements>
+    <textcube>
+      <minVersion>1.8</minVersion>
+    </textcube>
+  </requirements>
+  <binding>
+    <listener event="/plugin/seo/md" handler="SearchOptimizer_markdown" />
+    <listener event="OBStart" handler="SearchOptimizer_obStart" />
+    <listener event="OBEnd" handler="SearchOptimizer_obEnd" />
+    <tag name="SKIN_head_end" handler="SearchOptimizer_head" />
+    <config xml:lang="ko" dataValHandler="">
+      <window width="500" height="600"/>
+      <fieldset legend="메타 정보">
+        <field title="설명(description)" type="select" name="seoDescription">
+          <op value="on" checked="checked"><![CDATA[넣음]]></op>
+          <op value="off"><![CDATA[넣지 않음]]></op>
+          <caption><![CDATA[글 화면에는 본문 요약을, 그 밖의 화면에는 블로그 설명을 meta description 으로 넣습니다. 스킨의 head 에도 description 메타가 있으면 블로그 화면에서는 이 플러그인이 넣은 것 하나만 남기고 스킨의 것은 지웁니다(이 플러그인이 설명을 넣지 않은 화면은 스킨의 것을 그대로 둡니다).<br /><strong>모바일 접속 안내</strong>: 블로그 설정의 '모바일 인터페이스'(스마트폰 기기로 접속하면 스마트폰용 인터페이스로 이동, useiPhoneUI)가 켜져 있어 스마트폰 UA(Googlebot 스마트폰 크롤러 포함)에 스마트폰용 화면이 나갈 때에도 이 플러그인의 설명·Open Graph·Twitter 카드·JSON-LD·robots 메타는 데스크톱 화면과 같이 들어갑니다.]]></caption>
+        </field>
+        <field title="설명 길이" type="select" name="seoDescLength">
+          <op value="80"><![CDATA[80자]]></op>
+          <op value="120"><![CDATA[120자]]></op>
+          <op value="160" checked="checked"><![CDATA[160자]]></op>
+          <op value="255"><![CDATA[255자]]></op>
+          <caption><![CDATA[description·og:description·JSON-LD 설명의 최대 글자 수입니다.]]></caption>
+        </field>
+        <field title="Open Graph" type="select" name="seoOpenGraph">
+          <op value="on" checked="checked"><![CDATA[넣음]]></op>
+          <op value="off"><![CDATA[넣지 않음]]></op>
+          <caption><![CDATA[og:title·og:description·og:url·og:image 등을 넣습니다. og:image 는 공개 글의 첨부 이미지일 때만 넣습니다.]]></caption>
+        </field>
+        <field title="Twitter 카드" type="select" name="seoTwitterCard">
+          <op value="on" checked="checked"><![CDATA[넣음]]></op>
+          <op value="off"><![CDATA[넣지 않음]]></op>
+          <caption><![CDATA[공개 글 화면에 twitter:card 를 넣습니다. 제목·설명·이미지는 Open Graph 값을 씁니다.]]></caption>
+        </field>
+        <field title="JSON-LD" type="select" name="seoJsonLd">
+          <op value="on" checked="checked"><![CDATA[넣음]]></op>
+          <op value="off"><![CDATA[넣지 않음]]></op>
+          <caption><![CDATA[공개 글 화면에는 BlogPosting, 첫 화면에는 WebSite 구조화 데이터를 넣습니다.]]></caption>
+        </field>
+      </fieldset>
+      <fieldset legend="검색 제외">
+        <field title="noindex 화면" type="checkbox" name="seoNoindex">
+          <op name="seoNoindexSearch" value="1" checked="checked"><![CDATA[검색 결과]]></op>
+          <op name="seoNoindexTag" value="1"><![CDATA[태그]]></op>
+          <op name="seoNoindexArchive" value="1"><![CDATA[보관함(날짜)]]></op>
+          <op name="seoNoindexCategory" value="1"><![CDATA[분류]]></op>
+          <caption><![CDATA[고른 화면에 robots 메타 noindex,follow 를 넣습니다. 검색 결과 화면은 검색어마다 주소가 생기므로 기본으로 제외합니다.]]></caption>
+        </field>
+      </fieldset>
+      <fieldset legend="대체 표현(markdown)">
+        <field title="markdown 대체 표현" type="select" name="seoAlternate">
+          <op value="on" checked="checked"><![CDATA[사용]]></op>
+          <op value="off"><![CDATA[사용 안 함]]></op>
+          <caption><![CDATA[공개 글 화면에 link rel="alternate" type="text/markdown" 을 넣고 /plugin/seo/md?id=글번호 로 본문을 markdown 으로 냅니다. 고유 주소(fancyURL) 설정이 주소 재작성일 때만 링크를 넣습니다. 링크 주소에는 mode=desktop 을 붙여 스마트폰 UA 에서도 markdown 이 열리게 합니다. 끄면 markdown 주소도 404 입니다.]]></caption>
+        </field>
+        <field title="canonical 헤더" type="select" name="seoMdCanonical">
+          <op value="on" checked="checked"><![CDATA[보냄]]></op>
+          <op value="off"><![CDATA[보내지 않음]]></op>
+          <caption><![CDATA[markdown 응답에 Link: &lt;글 주소&gt;; rel="canonical" 헤더를 보냅니다.]]></caption>
+        </field>
+        <field title="X-Robots-Tag noindex" type="select" name="seoMdNoindex">
+          <op value="on" checked="checked"><![CDATA[보냄]]></op>
+          <op value="off"><![CDATA[보내지 않음]]></op>
+          <caption><![CDATA[markdown 응답이 검색 결과에 따로 실리지 않도록 X-Robots-Tag: noindex 헤더를 보냅니다.]]></caption>
+        </field>
+      </fieldset>
+    </config>
+    <config xml:lang="en" dataValHandler="">
+      <window width="500" height="600"/>
+      <fieldset legend="Meta">
+        <field title="Description" type="select" name="seoDescription">
+          <op value="on" checked="checked"><![CDATA[On]]></op>
+          <op value="off"><![CDATA[Off]]></op>
+          <caption><![CDATA[Adds the post summary on post pages and the blog description elsewhere as meta description. If the skin's head also has a description meta, blog pages keep only the one added by this plugin and the skin's is removed (pages where this plugin adds no description keep the skin's).<br /><strong>Mobile visitors</strong>: while the blog setting 'Mobile interface' (move smartphone visitors to the smartphone interface, useiPhoneUI) is on and smartphone user agents (including the Googlebot smartphone crawler) get the smartphone interface, the description, Open Graph, Twitter card, JSON-LD and robots meta of this plugin are added there as on the desktop interface.]]></caption>
+        </field>
+        <field title="Description length" type="select" name="seoDescLength">
+          <op value="80"><![CDATA[80 characters]]></op>
+          <op value="120"><![CDATA[120 characters]]></op>
+          <op value="160" checked="checked"><![CDATA[160 characters]]></op>
+          <op value="255"><![CDATA[255 characters]]></op>
+          <caption><![CDATA[Maximum length of description, og:description and the JSON-LD description.]]></caption>
+        </field>
+        <field title="Open Graph" type="select" name="seoOpenGraph">
+          <op value="on" checked="checked"><![CDATA[On]]></op>
+          <op value="off"><![CDATA[Off]]></op>
+          <caption><![CDATA[Adds og:title, og:description, og:url, og:image and so on. og:image is added only for attached images of public posts.]]></caption>
+        </field>
+        <field title="Twitter card" type="select" name="seoTwitterCard">
+          <op value="on" checked="checked"><![CDATA[On]]></op>
+          <op value="off"><![CDATA[Off]]></op>
+          <caption><![CDATA[Adds twitter:card on public post pages. Title, description and image come from Open Graph.]]></caption>
+        </field>
+        <field title="JSON-LD" type="select" name="seoJsonLd">
+          <op value="on" checked="checked"><![CDATA[On]]></op>
+          <op value="off"><![CDATA[Off]]></op>
+          <caption><![CDATA[Adds BlogPosting structured data on public post pages and WebSite on the front page.]]></caption>
+        </field>
+      </fieldset>
+      <fieldset legend="Exclude from search">
+        <field title="noindex pages" type="checkbox" name="seoNoindex">
+          <op name="seoNoindexSearch" value="1" checked="checked"><![CDATA[Search results]]></op>
+          <op name="seoNoindexTag" value="1"><![CDATA[Tags]]></op>
+          <op name="seoNoindexArchive" value="1"><![CDATA[Archives]]></op>
+          <op name="seoNoindexCategory" value="1"><![CDATA[Categories]]></op>
+          <caption><![CDATA[Adds robots meta noindex,follow on the selected pages. Search results are excluded by default because every query makes a new address.]]></caption>
+        </field>
+      </fieldset>
+      <fieldset legend="Alternate representation (markdown)">
+        <field title="Markdown alternate" type="select" name="seoAlternate">
+          <op value="on" checked="checked"><![CDATA[On]]></op>
+          <op value="off"><![CDATA[Off]]></op>
+          <caption><![CDATA[Adds link rel="alternate" type="text/markdown" on public post pages and serves the post as markdown at /plugin/seo/md?id=N. The link is added only when fancy URL is set to URL rewriting. The link carries mode=desktop so that the markdown also opens for smartphone user agents. When off, the markdown address returns 404.]]></caption>
+        </field>
+        <field title="Canonical header" type="select" name="seoMdCanonical">
+          <op value="on" checked="checked"><![CDATA[Send]]></op>
+          <op value="off"><![CDATA[Do not send]]></op>
+          <caption><![CDATA[Sends a Link: &lt;post address&gt;; rel="canonical" header with the markdown response.]]></caption>
+        </field>
+        <field title="X-Robots-Tag noindex" type="select" name="seoMdNoindex">
+          <op value="on" checked="checked"><![CDATA[Send]]></op>
+          <op value="off"><![CDATA[Do not send]]></op>
+          <caption><![CDATA[Sends X-Robots-Tag: noindex so the markdown response is not listed separately in search results.]]></caption>
+        </field>
+      </fieldset>
+    </config>
+  </binding>
+</plugin>

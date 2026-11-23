@@ -1,0 +1,35 @@
+<?php
+$__text["%1 (으)로 로그인"] = "使用 %1 登入";
+$__text["%1 계정으로 작성하였습니다"] = "使用 %1 帳號撰寫";
+$__text["관리자 계정과 연결된 소셜 계정"] = "與管理員帳號連結的社群帳號";
+$__text["%1 계정으로 로그인됨"] = "已使用 %1 帳號登入";
+$__text["로그아웃"] = "登出";
+$__text["소셜 로그인 — 기본 비활성. 사용할 프로바이더만 활성으로 바꾸고 Client ID/Secret 을 입력하세요. Redirect URI(콜백): %1 — 이 주소를 각 프로바이더 개발자콘솔에 등록하세요."] = "社群登入 — 預設停用。僅啟用要使用的提供者並填寫 Client ID/Secret。Redirect URI（回呼）：%1 — 請將此位址註冊到各提供者的開發者主控台。";
+$__text["%1 활성화"] = "啟用 %1";
+$__text["비활성 (기본)"] = "停用 (預設)";
+$__text["활성"] = "啟用";
+$__text["%1 개발자콘솔의 앱 키(REST API 키 / Client ID)."] = "%1 開發者主控台中的應用程式金鑰（REST API 金鑰 / Client ID）。";
+$__text["%1 Client Secret. (네이버=Client Secret, 카카오=보안 Client Secret, 페이스북=앱 시크릿)"] = "%1 Client Secret。（Naver=Client Secret，Kakao=安全 Client Secret，Facebook=應用程式密鑰）";
+$__text["Kakao Developers에서 앱을 만들고 카카오 로그인과 OpenID Connect를 켜세요. 이 플러그인은 카카오 로그인(OAuth 2.0 + OpenID Connect)의 ID 토큰으로 사용자를 확인하고, ID 토큰이 없을 때만 사용자 정보 가져오기 API v2(/v2/user/me)를 씁니다. 카카오 로그인에는 따로 고를 API 버전이 없습니다. 위의 Redirect URI를 카카오 로그인의 Redirect URI에 등록하세요. 동의 항목: 닉네임, 카카오계정(이메일) — 이메일은 앱 설정에 따라 별도 권한이 필요할 수 있습니다. 이메일 동의가 없어도 로그인 판정에는 영향이 없습니다(이 플러그인은 이메일을 쓰지 않습니다)."] = "在 Kakao Developers 中建立應用程式，並啟用 Kakao 登入與 OpenID Connect。本外掛使用 Kakao 登入（OAuth 2.0 + OpenID Connect）的 ID 權杖確認使用者，僅在沒有 ID 權杖時使用使用者資訊 API v2（/v2/user/me）。Kakao 登入沒有可選擇的 API 版本。請將上方的 Redirect URI 註冊為 Kakao 登入的 Redirect URI。同意項目：暱稱、Kakao 帳號（電子郵件）— 依應用程式設定，電子郵件可能需要另外申請權限。即使未同意提供電子郵件，也不影響登入判定（本外掛不使用電子郵件）。";
+$__text["Kakao Developers 앱의 REST API 키입니다."] = "Kakao Developers 中應用程式的 REST API 金鑰。";
+$__text["카카오 로그인 보안 설정에서 만든 Client Secret 코드입니다. 이 플러그인은 Client Secret이 있어야 동작하므로 사용 상태로 두세요."] = "在 Kakao 登入安全設定中產生的 Client Secret 代碼。本外掛需要 Client Secret，請保持啟用狀態。";
+$__text["네이버 개발자센터에서 애플리케이션을 등록하고 사용 API로 네이버 로그인을 고르세요. 이 플러그인은 네이버 로그인(OAuth 2.0)과 회원 프로필 조회 API v1(/v1/nid/me)을 씁니다. 네이버 로그인에는 따로 고를 API 버전이 없습니다. 제공 정보에서 이메일 주소와 이름(또는 별명)을 고르고, 서비스 URL에 블로그 주소를, Callback URL에 위의 Redirect URI를 넣으세요."] = "在 NAVER Developers 中註冊應用程式，並選擇 NAVER 登入作為使用的 API。本外掛使用 NAVER 登入（OAuth 2.0）與會員資料查詢 API v1（/v1/nid/me）。NAVER 登入沒有可選擇的 API 版本。請在提供資訊中選擇電子郵件地址與姓名（或暱稱），在服務 URL 填寫部落格位址，在 Callback URL 填寫上方的 Redirect URI。";
+$__text["네이버 개발자센터 애플리케이션 정보의 Client ID입니다."] = "NAVER Developers 應用程式資訊中顯示的 Client ID。";
+$__text["네이버 개발자센터 애플리케이션 정보의 Client Secret입니다."] = "NAVER Developers 應用程式資訊中顯示的 Client Secret。";
+$__text["Meta for Developers에서 앱을 만들고 Facebook 로그인을 추가하세요. 이 플러그인은 Facebook 로그인(OAuth 2.0)과 Graph API의 /me(필드 id, name, email)를 쓰며, 버전은 아래 Graph API 버전 칸의 값을 씁니다. 위의 Redirect URI를 Facebook 로그인 설정의 유효한 OAuth 리디렉션 URI에 등록하세요. 요청 권한: email, public_profile."] = "在 Meta for Developers 中建立應用程式並新增 Facebook 登入。本外掛使用 Facebook 登入（OAuth 2.0）與 Graph API 的 /me（欄位 id、name、email），版本使用下方 Graph API 版本欄的值。請將上方的 Redirect URI 註冊到 Facebook 登入設定中的有效 OAuth 重新導向 URI。要求的權限：email、public_profile。";
+$__text["Meta for Developers 앱의 앱 ID입니다."] = "Meta for Developers 中應用程式的應用程式編號。";
+$__text["Meta for Developers 앱의 앱 시크릿 코드입니다."] = "Meta for Developers 中應用程式的應用程式密鑰。";
+$__text["Graph API 버전. 형식은 vN.N(예: %1)입니다. 비우거나 형식이 맞지 않으면 %1을 씁니다. Graph API는 버전마다 사용 기한(만료일)이 있으므로 Meta 개발자 문서의 Graph API 버전 목록(Changelog)에서 만료일을 확인하고, 쓰는 버전이 만료되기 전에 새 버전으로 바꾸세요."] = "Graph API 版本。格式為 vN.N（例如：%1）。留空或格式不符時使用 %1。Graph API 的每個版本都有使用期限（到期日），請在 Meta 開發者文件的 Graph API 版本清單（Changelog）中確認到期日，並在使用中的版本到期前改為新版本。";
+$__text["Graph API 버전"] = "Graph API 版本";
+$__text["댓글·방명록 입력 폼"] = "留言·訪客簿輸入表單";
+$__text["소셜 로그인 버튼 자동 표시"] = "自動顯示社群登入按鈕";
+$__text["표시 (기본)"] = "顯示 (預設)";
+$__text["표시하지 않음"] = "不顯示";
+$__text["활성화한 공급자의 로그인 버튼을 댓글·방명록의 방문자 입력 칸 위에 자동으로 넣습니다. 소셜 계정으로 로그인한 방문자에게는 로그인 상태와 로그아웃 링크를 보여 줍니다. 스킨에 소셜 로그인 치환자를 따로 넣어 쓰고 있다면 버튼이 두 번 나오지 않도록 표시하지 않음으로 바꾸세요."] = "在留言與訪客簿表單的訪客輸入欄上方自動加入已啟用提供者的登入按鈕。以社群帳號登入的訪客會看到登入狀態與登出連結。如果面板中已另外放入社群登入替換標籤，請改為「不顯示」，以免按鈕出現兩次。";
+$__text["소셜 계정으로 로그인 후 댓글 쓰기"] = "使用社群帳號登入後發表留言";
+$__text["소셜 계정으로 로그인 후 방명록 쓰기"] = "使用社群帳號登入後寫訪客簿";
+$__text["소셜 계정으로 로그인"] = "使用社群帳號登入";
+$__text["소셜 계정으로 글쓰기"] = "使用社群帳號發表";
+$__text["소셜 계정으로 로그인해 주십시오."] = "請使用社群帳號登入。";
+$__text["이름/비밀번호로 글쓰기"] = "輸入姓名/密碼的回覆";
+?>

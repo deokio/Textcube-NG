@@ -1,0 +1,37 @@
+<?php
+$__text['이 웹브라우저는 구글맵과 호환되지 않습니다.'] = 'Your browser is not compatible with Google Maps.';
+$__text['위도 또는 경도의 값이 올바르지 않습니다.'] = 'The value of latitude or longitude is out of range.';
+$__text['위도'] = 'latitude';
+$__text['경도'] = 'longitude';
+$__text['구글맵 삽입하기'] = 'Insert GoogleMap';
+$__text['마커 표시 모드'] = 'Edit Markers';
+$__text['본문에 삽입하기'] = 'Paste into Post';
+$__text['지도 검색'] = 'Search the map';
+$__text['위치 검색'] = 'Search locations';
+$__text['찾기'] = 'Search';
+$__text['기본 설정'] = 'Options';
+$__text['가로'] = 'Width';
+$__text['세로'] = 'Height';
+$__text['적용'] = 'Apply';
+$__text['이용 안내'] = 'Help';
+$__text['현재 위치 첨부하기'] = 'Attach current location';
+$__text['첨부된 위치 제거하기'] = 'Remove attached location';
+$__text['첨부된 위치 정보를 제거하시겠습니까?'] = 'Are you sure to remove the location attached to this post?';
+$__text['웹브라우저가 제공하는 Geolocation 서비스를 이용하여 현재 위치 정보를 가져옵니다. 정확도는 사용하고 계신 기기나 지역에 따라 다를 수 있습니다.'] = 'Get the current location which is provided by your web browser. The accuracy may be different depending on what device you are using, or the location where you are.';
+$__text['자세히 알아보기'] = 'More details';
+$__text['지도 삽입하기'] = 'Insert a Map';
+$__text['권한 없음'] = 'Permission denied';
+$__text['위치정보 없음'] = 'Not available';
+$__text['시간 제한 초과'] = 'Timeout';
+$__text['알 수 없는 오류'] = 'Unknown error';
+$__text['위치 정보를 가져오지 못하였습니다.'] = 'Could not retrieve your location.';
+$__text['현재 웹브라우저는 Geolocation 기능을 지원하지 않습니다.'] = 'Your web browser does not provide Geolocation functions.';
+$__text['검색 결과가 없습니다.'] = 'No results found.';
+$__text['마커 고정시키기'] = 'Pin this marker';
+$__text['오류가 발생하였습니다. (%1)'] = 'An error has occurred. (%1)';
+$__text['닫기'] = 'Close';
+$__text['제목 : '] = 'Title : ';
+$__text['설명 : '] = 'Description : ';
+$__text['삭제하기'] = 'Delete';
+$__text['%1에 얽힌 이야기'] = 'Stories about %1';
+?>

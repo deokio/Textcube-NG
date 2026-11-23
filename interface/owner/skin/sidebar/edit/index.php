@@ -1,0 +1,156 @@
+<?php
+/// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
+/// All rights reserved. Licensed under the GPL.
+/// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 5.5 - 7.3 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
+
+$ajaxcall = (isset($_REQUEST['ajaxcall']) && $_REQUEST['ajaxcall'] == true)  ? true : false;
+// [보안] ajaxcall 값은 전송 버튼 onclick 에 출력됨(반사형 XSS) → sidebar.js editSidebarPlugin() 가 보내는 submitSidebarPlugin(n,p) 형식만 허용
+$ajaxmethod = (isset($_REQUEST['ajaxcall']) && is_string($_REQUEST['ajaxcall']) && preg_match('/^submitSidebarPlugin\(\d+,\d+\)\z/', $_REQUEST['ajaxcall'])) ? $_REQUEST['ajaxcall'] : 'return false;';
+
+$IV = array(
+		'REQUEST' => array(
+			'sidebarNumber' => array('int'),
+			'modulePos' => array('int'),
+			'viewMode' => array('string', 'default' => '')
+			)
+		);
+
+require ROOT . '/library/preprocessor.php';
+requireLibrary('blog.skin');
+requireModel("blog.sidebar");
+requireStrictRoute();
+
+$skin = new Skin($skinSetting['skin']);
+$sidebarCount = count($skin->sidebarBasicModules);
+$sidebarOrderData = getSidebarModuleOrderData($sidebarCount);
+
+$sidebarNumber = $_REQUEST['sidebarNumber'];
+$modulePos = $_REQUEST['modulePos'];
+
+if (($sidebarNumber < 0) || ($sidebarNumber >= $sidebarCount)) Respond::ErrorPage(null,null,null,$ajaxcall);
+if (!isset($sidebarOrderData[$sidebarNumber]) || !isset($sidebarOrderData[$sidebarNumber][$modulePos])) Respond::ErrorPage(null,null,null,$ajaxcall);
+
+$pluginData = $sidebarOrderData[$sidebarNumber][$modulePos];
+if ($pluginData['type'] != 3) Respond::ErrorPage(null,null,null,$ajaxcall);
+
+$plugin = $pluginData['id']['plugin'];
+$handler = $pluginData['id']['handler'];
+$oldParameters = $pluginData['parameters'];
+
+$title = $plugin . '::' . $handler;
+
+foreach($sidebarMappings as $sm)
+{
+	if (($sm['plugin'] == $plugin) && ($sm['handler'] == $handler))
+		$title = $sm['display'] . '::' . $sm['title'];
+}
+
+
+$identifier = $plugin . '/' . $handler;
+
+$parameters = array();
+foreach($sidebarMappings as $item) {
+	if (($item['plugin'] == $plugin) && ($item['handler'] == $handler)) {
+		$parameters = $item['parameters'];
+		break;
+	}
+}
+
+$params = array();
+foreach($parameters as $item)
+{
+	$data = array();
+	$data['name'] = $item['name'];
+	switch($item['type']) {
+		case 'string':
+		case 'int':
+			$data['type'] = 'text';
+			break;
+        case 'textarea':
+            $data['type'] = 'textarea';
+            break;
+		default:
+			$data['type'] = 'invalid';
+			break;
+	}	
+	$data['title'] = $item['title'];
+	if (isset($oldParameters[$item['name']])) {
+		$data['value'] = $oldParameters[$item['name']];
+	} else {
+		$data['value'] = '';
+	}
+	
+	array_push($params, $data);
+}
+
+ob_start();
+
+if (count($params) > 0) {
+	foreach($params as $item) {
+        switch ($data['type']) {       
+            case 'text':
+			    echo '<div class="line">';
+			    echo '<label ';
+			    echo 'for="' , $item['name'] , '" ';
+			    echo ' >';
+			    echo $item['title'];
+			    echo '</label>';
+			    
+			    echo '<input class="input-text" ';
+			    echo 'type="' , $item['type'] , '" ';
+			    echo 'name="' , $item['name'] , '" ';
+			    echo 'value="' , htmlspecialchars($item['value'],ENT_QUOTES) , '" ';
+			    echo ' />';
+			    echo '</div>';
+                break;
+            case 'textarea':
+                echo '<div class="line">';
+                echo '<label for="' , $item['name'] , '">';
+			    echo $item['title'];
+			    echo '</label>';
+                echo '<textarea id="' , $item['name'] , '" name="' , $item['name'] , '" cols="50" rows="10">';
+                echo htmlspecialchars($item['value'], ENT_QUOTES | ENT_SUBSTITUTE);
+                echo '</textarea>';
+                echo '</div>';
+                break;
+		}
+	}
+}
+
+$result = ob_get_contents();
+ob_end_clean();
+
+if ($ajaxcall == false) {
+	require ROOT . '/interface/common/owner/header.php';
+	
+}
+
+// [보안] viewMode 는 $IV 'string'(UTF-8 검사만) — 폼 action 속성에 출력할 때 이스케이프(반사형 XSS)
+$modeParam = !empty($_REQUEST['viewMode']) ? '&' . $_REQUEST['viewMode'] : '';
+
+echo '<h2 class="caption"><span class="main-text">' . $title . '</span></h2>';
+echo '<form action="' . $blogURL . '/owner/skin/sidebar/setPlugin?sidebarNumber=', $sidebarNumber, '&modulePos=', $modulePos, htmlspecialchars($modeParam, ENT_QUOTES), '" method="POST" >';
+echo '	<div class="field-box">';
+echo $result;
+echo '	</div>';
+echo '	<div class="button-box">';
+if ($ajaxcall == false) {
+	echo '		<input class="input-button" type="submit" value="' , _t('전송') , '" />';
+} else {
+	echo '		<input class="input-button" type="submit" value="' , _t('전송') , '" onclick="',htmlspecialchars($ajaxmethod, ENT_QUOTES),'; return false" />';
+}
+echo '	</div>';
+echo '</form>';
+
+if ($ajaxcall == false) {
+	require ROOT . '/interface/common/owner/footer.php';
+}
+?>

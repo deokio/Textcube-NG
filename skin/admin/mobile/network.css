@@ -1,0 +1,77 @@
+@charset "utf-8";
+
+/* Textcube-NG: the mobile admin skin had no network.css, so the link list and the help footer of the network pages had no icons.
+   Only the icon rules of canon/network.css (link list edit/visibility buttons, help footer) are copied; widths are left to basic.css (r3-4) */
+
+/* link list ************************************************************************************/
+
+#part-link-list table.data-inbox tbody tr td.edit .edit-button
+{
+	background-color                 : transparent;
+	background-image                 : url("./image/icon_modify.gif");
+	background-position              : left top;
+	display                          : block;
+	height                           : 11px;
+	margin                           : 0 auto;
+	padding                          : 0;
+	width                            : 11px;
+}
+
+#part-link-list table.data-inbox tbody tr td.edit .edit-button span,
+#part-link-list table.data-inbox tbody tr td.edit .visible-button span
+{
+	display                          : none;
+}
+
+#part-link-list table.data-inbox tbody tr td.edit .visible-button
+{
+	background-color                 : transparent;
+	display                          : block;
+	height                           : 15px;
+	margin                           : 0 auto;
+	padding                          : 0;
+	width                            : 15px;
+}
+
+#part-link-list table.data-inbox tbody tr td.edit .invisible-link
+{
+	background-image                 : url("./image/icon_public.gif");
+	background-position              : left top;
+}
+
+#part-link-list table.data-inbox tbody tr td.edit .visible-link
+{
+	background-image                 : url("./image/icon_public.gif");
+	background-position              : left bottom;
+}
+
+/* simple help footer ****************************************************************************/
+
+#data-description dl.modify-description
+{
+	background-image                 : url("./image/icon_modify.gif");
+	background-color                 : transparent;
+	background-position              : 4px 4px;
+	height                           : 11px;
+	margin                           : 0 auto;
+	background-repeat                : no-repeat;
+}
+
+#data-description dl.ban-description
+{
+	background-image                 : url("./image/icon_block_off.gif");
+	background-color                 : transparent;
+	background-position              : 8px 2px;
+	margin                           : 0 3px 0 0;
+	background-repeat                : no-repeat;
+}
+
+#data-description dl.trash-description
+{
+	background-image                 : url("./image/icon_delete_single.gif");
+	background-color                 : transparent;
+	background-position              : 4px 4px;
+	height                           : 11px;
+	margin                           : 0 auto;
+	background-repeat                : no-repeat;
+}

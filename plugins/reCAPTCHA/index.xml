@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<plugin version="1.0">
+  <title xml:lang="ko">Google reCAPTCHA</title>
+  <title xml:lang="en">Google reCAPTCHA</title>
+  <link>https://www.google.com/recaptcha</link>
+  <version>2.0</version>
+  <description xml:lang="ko">익명 사용자가 댓글을 작성할 때 Google reCAPTCHA(v2/v3)를 이용해 스팸 봇인지 판별합니다.</description>
+  <description xml:lang="en">Filters out automated comment spamming using Google reCAPTCHA (v2/v3).</description>
+  <license>GPL</license>
+  <author xml:lang="en" link="http://forum.tattersite.com/ko">Tatter Network Foundation</author>
+  <author xml:lang="ko" link="http://forum.tattersite.com/ko">태터네트워크재단</author>
+  <safety changeData="no" exposeData="no" accessLocal="no" accessRemote="yes" accessRaw="no" />
+  <requirements>
+    <textcube>
+      <minVersion>1.10.1</minVersion>
+    </textcube>
+  </requirements>
+  <binding>
+    <tag name="SKIN_head_end" handler="Recaptcha_Header" />
+    <tag name="SKIN_body_end" handler="Recaptcha_Footer" />
+    <listener event="REPLY_head_end" handler="Recaptcha_CCHeader" />
+    <listener event="AddingComment" handler="Recaptcha_AddingCommentHandler" />
+    <listener event="ManipulateIVRules" handler="Recaptcha_AddInputValidatorRule" />
+    <config xml:lang="ko" dataValHandler="Recaptcha_ConfigHandler">
+      <window width="500" height="700" />
+      <fieldset legend="버전 선택">
+        <field title="reCAPTCHA 버전" name="version" type="select">
+          <op value="v2" checked="checked">v2 (체크박스)</op>
+          <op value="v3">v3 (보이지 않음, 점수 기반)</op>
+          <caption>v2: 사용자가 체크박스를 클릭합니다. v3: 사용자 상호작용 없이 백그라운드에서 봇 점수를 산출합니다. ⚠ 버전 변경 시 Site Key / Secret Key도 반드시 해당 버전용으로 교체하십시오.</caption>
+        </field>
+      </fieldset>
+      <fieldset legend="인증 정보">
+        <field title="Site Key" name="siteKey" type="text" value="" />
+        <field title="Secret Key" name="secretKey" type="text" value="">
+          <caption><![CDATA[Google reCAPTCHA API를 사용하기 위한 인증 키를 입력합니다. 인증키는 <a href="https://www.google.com/recaptcha/admin" target="_blank">Google reCAPTCHA 사이트</a>에서 발급받을 수 있습니다.
+⚠ 주의: v2와 v3는 Site Key / Secret Key 쌍을 반드시 별도로 발급받아야 합니다. v2용 키를 v3에서 사용하거나 반대로 사용하면 인증이 실패합니다. 버전을 변경한 경우 반드시 해당 버전용 키로 교체하십시오.]]></caption>
+        </field>
+        <field title="v3 봇 차단 임계점수" name="scoreThreshold" type="text" value="0.5">
+          <caption>v3 전용. 0.0(봇)~1.0(사람) 범위의 점수 임계값. 이 값 미만이면 스팸으로 처리합니다. 권장값: 0.5</caption>
+        </field>
+      </fieldset>
+    </config>
+    <config xml:lang="en" dataValHandler="Recaptcha_ConfigHandler">
+      <window width="500" height="700" />
+      <fieldset legend="Version">
+        <field title="reCAPTCHA Version" name="version" type="select">
+          <op value="v2" checked="checked">v2 (Checkbox)</op>
+          <op value="v3">v3 (Invisible, Score-based)</op>
+          <caption>v2: User clicks a checkbox. v3: Bot score computed in the background with no user interaction. ⚠ When changing versions, you must also replace Site Key / Secret Key with keys issued for that version.</caption>
+        </field>
+      </fieldset>
+      <fieldset legend="Authentication Information">
+        <field title="Site Key" name="siteKey" type="text" value="" />
+        <field title="Secret Key" name="secretKey" type="text" value="">
+          <caption><![CDATA[Specify your Google reCAPTCHA API keys. You can get your API Keys at <a href="https://www.google.com/recaptcha/admin" target="_blank">Google reCAPTCHA</a> page.
+⚠ Important: v2 and v3 require completely separate Site Key / Secret Key pairs. Using v2 keys with v3 (or vice versa) will cause authentication failure. If you change the version, you must replace both keys with ones issued for that version.]]></caption>
+        </field>
+        <field title="v3 Score Threshold" name="scoreThreshold" type="text" value="0.5">
+          <caption>For v3 only. Score range: 0.0 (bot) to 1.0 (human). Scores below this threshold are blocked. Recommended: 0.5</caption>
+        </field>
+      </fieldset>
+    </config>
+  </binding>
+</plugin>
+<!-- vim: set sts=2 sw=2 et: -->

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<plugin version="1.0">
+	<title xml:lang="en">Markdown Formatter</title>
+	<title xml:lang="ko">Markdown 포매터</title>
+	<link>https://www.needlworks.org/</link>
+	<version>0.2</version>
+	<description xml:lang="en"><![CDATA[Implements Markdown formatter, to support semantic HTML with plain text markup syntax. Uses PHP Markdown Extra 1.9.1 (michelf/php-markdown, BSD-3-Clause).]]></description>
+	<description xml:lang="ko"><![CDATA[일반적인 텍스트 문서를 통하여 의미론적인 HTML을 생성해내는 Markdown 포맷을 지원합니다. PHP Markdown Extra 1.9.1 (michelf/php-markdown, BSD-3-Clause) 라이브러리를 사용합니다.]]></description>
+	<description xml:lang="ja"><![CDATA[HTML標準勧告に合わせた文書作成環境を提供する Markdownフォーマット用プラグイン。PHP Markdown Extra 1.9.1 (michelf/php-markdown, BSD-3-Clause) を使用します。]]></description>
+	<license>GPL</license>
+	<author xml:lang="en" link="http://forest.nubimaru.com/">Jeongkyu Shin (inureyes / Needlworks)</author>
+	<author xml:lang="en" link="https://michelf.ca/projects/php-markdown/">Michel Fortin (PHP Markdown Extra 1.9.1)</author>
+	<author xml:lang="en" link="https://daringfireball.net/projects/markdown/">John Gruber (Original Markdown)</author>
+	<author xml:lang="ko" link="http://forest.nubimaru.com/">신정규 (inureyes / Needlworks)</author>
+	<author xml:lang="ko" link="https://michelf.ca/projects/php-markdown/">Michel Fortin (PHP Markdown Extra 1.9.1)</author>
+	<author xml:lang="ko" link="https://daringfireball.net/projects/markdown/">John Gruber (Original Markdown)</author>
+	<safety changeData="no" exposeData="no" accessLocal="yes" accessRemote="no" accessRaw="no" />
+	<requirements>
+		<textcube>1.6</textcube>
+	</requirements>
+	<binding>
+		<formatter id="markdown" name="Markdown">
+			<format>FM_Markdown_format</format>
+			<summary>FM_Markdown_summary</summary>
+			<usedFor editor="modern" />
+			<usedFor editor="tinyMCE" />
+		</formatter>
+		<config manifestHandler="FM_Markdown_ConfigHandler" />
+	</binding>
+</plugin>

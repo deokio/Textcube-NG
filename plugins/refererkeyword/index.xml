@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="utf-8"?>
+<plugin version="1.0">
+  <title xml:lang="en">Keyword Statistics</title>
+  <title xml:lang="ko">리퍼러 검색어 통계</title>
+  <title xml:lang="ja">キーワード統計</title>
+  <link>http://forum.tattersite.com/ko/</link>
+  <version>1.10.3</version>
+  <description xml:lang="en">Keyword Statistics</description>
+  <description xml:lang="ko">리퍼러에서 검색 키워드를 추출하여 통계를 출력합니다.</description>
+  <description xml:lang="ja">キーワード統計を表示します。</description>
+  <license>GPL</license>
+  <author xml:lang="en" link="http://forum.tattersite.com/en">Tatter &amp; Friends (Chiri)</author>
+  <author xml:lang="ko" link="http://forum.tattersite.com/ko/">태터앤프렌즈 (치리)</author>
+  <safety changeData="no" exposeData="no" accessLocal="no" accessRemote="no" accessRaw="yes" />
+  <requirements>
+    <textcube>
+		<minVersion>1.10.3</minVersion>
+	</textcube>
+  </requirements>
+  <binding>
+    <adminMenu>
+      <viewMethods>
+        <method>
+          <title xml:lang="en">Keyword Statistics</title>
+          <title xml:lang="ko">리퍼러 검색어 통계</title>
+          <title xml:lang="ja">キーワード統計</title>
+          <handler>refererkeyword</handler>
+		  <topMenu>center</topMenu>
+		  <contentMenuOrder>6</contentMenuOrder>
+          <params>
+            <param>
+              <name>showURL</name>
+              <type>int</type>
+              <default>0</default>
+            </param>
+            <param>
+              <name>showKeywordlistLight</name>
+              <type>int</type>
+              <default></default>
+            </param>
+	  </params>
+        </method>
+      </viewMethods>
+    </adminMenu>
+	<config dataValHandler = "KeywordStatisticsDataSet" xml:lang="ko" >
+		<window width="500" height="450" />
+		<fieldset legend="통계 페이지 출력 설정" name="KSsetting1">
+			<field title="검색어 순위를 얼마큼 보여줄지 선택" name="limitRank" type="select">
+				<op value="5" checked="checked">5위까지</op>
+				<op value="10">10위까지</op>
+				<op value="15">15위까지</op>
+				<op value="3939">전부 다</op>
+				<caption> - 통계 페이지 출력시 기본적으로 몇 위까지 출력할지를 선택합니다.</caption>
+			</field>
+			<field title="검색어가 포함된 주소를 기본적으로 보여줄지 선택" name="showURL" type="select">
+				<op value="0" checked="checked">보이지 않기</op>
+				<op value="1">보이기</op>
+				<caption> - 각 순위의 검색어가 검출된 주소를 기본적으로 함께 보여줄지 선택합니다.</caption>
+			</field>
+		</fieldset>
+		<fieldset legend="통계에서 제외할 단어 설정" name="KSsetting2">
+			<field title="각 단어의 구분은 컴마［,］나 공백［ ］으로 구분해 주세요." name="WordFiltering" rows="6" cols="50" titledirection="bk" type="textarea">
+				<![CDATA[]]>
+			</field>
+
+		</fieldset>
+	</config>
+
+	<config dataValHandler = "KeywordStatisticsDataSet" xml:lang="ja" >
+		<window width="500" height="450" />
+		<fieldset legend="統計表示設定" name="KSsetting1">
+			<field title="キーワード順位表示設定" name="limitRank" type="select">
+				<op value="5" checked="checked">5位まで</op>
+				<op value="10">10位まで</op>
+				<op value="15">15位まで</op>
+				<op value="3939">全体順位表示</op>
+				<caption> - 統計表示時に基本表示範囲を設定します。</caption>
+			</field>
+			<field title="キーワードのリファラ表示設定" name="showURL" type="select">
+				<op value="0" checked="checked">非表示</op>
+				<op value="1">表示</op>
+				<caption> - キーワードのリファラの表示可否を設定します。</caption>
+			</field>
+		</fieldset>
+		<fieldset legend="集計除外設定" name="KSsetting2">
+			<field title="複数のキーワードの入力時には半角コンマ(,)、または空白( )で各項目を区分します。" name="WordFiltering" rows="6" cols="50" titledirection="bk" type="textarea">
+				<![CDATA[]]>
+			</field>
+
+		</fieldset>
+	</config>
+
+	<config dataValHandler = "KeywordStatisticsDataSet" xml:lang="en" >
+		<window width="500" height="450" />
+		<fieldset legend="Statistics page display settings" name="KSsetting1">
+			<field title="Select how many keyword ranks to show" name="limitRank" type="select">
+				<op value="5" checked="checked">Top 5</op>
+				<op value="10">Top 10</op>
+				<op value="15">Top 15</op>
+				<op value="3939">All ranks</op>
+				<caption> - Select how many ranks to show by default on the statistics page.</caption>
+			</field>
+			<field title="Select whether to show the addresses containing the keywords by default" name="showURL" type="select">
+				<op value="0" checked="checked">Do not show</op>
+				<op value="1">Show</op>
+				<caption> - Select whether to also show, by default, the addresses where each ranked keyword was found.</caption>
+			</field>
+		</fieldset>
+		<fieldset legend="Words to exclude from statistics" name="KSsetting2">
+			<field title="Separate each word with a comma (,) or a space ( )." name="WordFiltering" rows="6" cols="50" titledirection="bk" type="textarea">
+				<![CDATA[]]>
+			</field>
+
+		</fieldset>
+	</config>
+
+  </binding>
+</plugin>

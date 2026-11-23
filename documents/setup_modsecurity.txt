@@ -1,0 +1,1042 @@
+# mod_security(OWASP CRS)와 함께 쓰기 — Textcube-NG 1.10.10
+
+Apache + ModSecurity v2 + OWASP CRS 뒤에서 Textcube-NG를 운영할 때 막히는 요청과 그 대응을 정리한다.
+대상은 CRS 3.3.x다. 4.x 차이는 7절에 따로 적는다. 기준 배치는 RHEL 계열 mod_security·mod_security_crs 패키지다.
+관련 문서: MIGRATION.md, SECURITY.md(릴리즈본은 documents/, 이식본은 최상위 폴더).
+
+- 4~6절의 룰과 설정 값은 제시안이다. 운영 서버에 적용한 기록은 없다.
+- 코드로 고친 것은 EAF4.js(v3.207, 1.1절)와 플러그인 설정 저장 receiveConfig의 DATA 전송 형식(v3.216) 두 곳이다. 나머지는 운영자가 서버 설정으로 정한다.
+- URL과 룰 접두어는 루트 설치(fancyURL 2) 기준이다. 다른 설치 형태는 2절대로 바꾼다.
+- `<host>`는 블로그 호스트, `<client>`는 접속한 클라이언트 주소 자리다.
+- "1차 재현"은 1.3절의 시험 구성에서 잰 결과다. "재시험"은 1.3절의 재시험 구성에서 잰 결과다. "정적 추적"은 코드·룰 파일만 읽고 실행하지 않은 결과다.
+
+---
+
+## 1. 요약(먼저 볼 것)
+
+### 1.1 코드 수정: 본문 없는 POST의 Content-Type (v3.207)
+
+- 원인
+  - `resources/script/EAF4.js`의 `HTTPRequest`는 본문이 없는 POST를 `send("")`로 보낸다.
+  - 이전 코드는 본문이 있을 때만 Content-Type을 지정했다(480행 `if(this.content.length>0) …`). 원본 Textcube 1.10.10과 같은 코드다.
+  - XHR 규격상 문자열 본문에는 브라우저가 `Content-Type: text/plain;charset=UTF-8`을 붙인다.
+  - CRS 920420은 허용 목록에 없는 Content-Type을 CRITICAL(5점)로 잡는다. 기본 허용 목록(901162)에 text/plain은 없다.
+  - inbound 임계 5에서 949110이 403을 낸다.
+  - 보고된 운영 서버 로그도 이 순서였다: 920420 data `|text/plain|` → 949110 점수 5 → 403, uri `/owner/skin/sidebar/order`.
+- 수정
+  - 본문이 비어도 POST이면 Content-Type을 지정한다. 붙는 값은 `application/x-www-form-urlencoded`다.
+  - 서버(PHP) 쪽 처리는 바뀌지 않는다(PHP 7.4·8.2·8.4·8.5에서 확인).
+- 1차 재현
+  - 본문 없는 POST 26곳(부록 A.2)을 쟀다.
+  - 수정 전에는 8구성 모두에서 26곳이 403(점수 5)이었다.
+  - 수정 후에는 8구성 모두에서 26곳이 통과했다.
+- 남는 일
+  - 브라우저가 옛 EAF4.js를 쓰는 동안에는 403이 계속 난다. 그 기간에는 10103(4절)을 둔다.
+
+### 1.2 운영 설정 제시안
+
+| 구분 | 항목 | 할 일 |
+|---|---|---|
+| 필수(임시) | 10103 | 본문 0바이트 POST의 text/plain만 920420에서 뺀다. 옛 EAF4.js가 쓰이는 동안만 둔다 |
+| 권장 | 10104 | 기존 LocationMatch 블록(finish·draft)을 지우고 글 본문 인자 하나만 푼다. add/를 더한다 |
+| 권장 | 10105 | 사이드바·표지 플러그인 설정의 text 인자를 푼다 |
+| 권장 | 10101 변경 | 스킨 편집에서 REQUEST_BODY의 921110도 뺀다(3.3.x) |
+| 그대로 | 10102 | 스킨 잘라 편집 |
+| 선택 | 10106~10109 | 플러그인 설정 DATA(10106, v3.216 이전 판만), 트랙백 euc-kr, 첨부 내려받기, XML-RPC. 그 기능을 쓰고 로그에 걸릴 때만 |
+| 참고 | 10106 | v3.216부터 DATA는 base64(끝 `=` 없음)라 필요 없다. v3.216 이전 판에만 필요 |
+| 선택(3.3.x 전용) | 10111 | euc-kr 트랙백의 title·excerpt·blog_name에서 941310을 뺀다. 트랙백을 받을 때만 |
+| 선택 | 10112 | 서비스 관리 화면의 .htaccess 저장(`/control/server/rewrite/`)에서 `ARGS:body`만 뺀다. 관리 화면에서 .htaccess를 고칠 때만(4.9) |
+| 선택 | 10113 | 블로그 설명 저장(`/owner/setting/blog/description/`)의 `ARGS:description`에서 attack-xss만 뺀다. 설명에 HTML을 넣고 걸릴 때만(4.9) |
+| 선택 | 10114 | 페이지 플러그인(ST_Pages) 관리 화면 저장의 `ARGS:content`만 뺀다. 그 플러그인을 쓰고 걸릴 때만(4.9) |
+| 메인 설정 | SecRequestBodyNoFilesLimit | 131072에서는 긴 글·스킨이 413을 받는다. 올리는 것을 검토한다(6.4) |
+| 메인 설정 | PCRE 한도 1000/1000 | 넘은 룰은 탐지를 잃는다(fail-open). 100000으로 올리는 것을 검토한다(6.2) |
+| 메인 설정 | 200004 | CRS 앞 phase 2에 있으면 발동하지 않는다. PCRE 한도를 올린 뒤에는 10110(선택, CRS 뒤)을 검토한다. 한도 1000이면 10110을 넣지 않는다(6.3) |
+| 메인 설정 | 200003 | status:44를 400으로 바꾸는 것을 검토한다(6.5) |
+| 지울 것 | 기존 LocationMatch 블록 | 10104로 바꾼다(4.7) |
+
+- 룰 파일의 위치(CRS 앞·뒤)
+  - 로컬룰 파일 전체(10101~10109, 10111~10114)를 CRS 앞에 둔다. 자리는 crs-setup.conf 뒤, REQUEST-901 앞(재시험의 REQUEST-900 자리)이다. 10110만 CRS 뒤에 둔다.
+  - 근거(재시험): CRS 뒤(RESPONSE-999 자리)에서는 phase 1 룰(3.3.x·4.x의 920480, 4.x의 920420·920440)을 빼지 못했다. 4.25.2는 정상 122 중 92만 통과했다. 3.3.10도 CRS 뒤에서는 10111을 더해도 T1e가 920480으로 403이었다(5.3).
+  - RHEL `local_rules/`는 CRS(activated_rules) 뒤에 읽힌다. 그래서 그 자리에 두지 않는다(5.1).
+  - 운영 서버에서 crs-setup.conf를 읽는 위치는 확인 못 함. 적용 전에 확인한다.
+
+### 1.3 근거의 종류
+
+- 1차 재현 구성
+  - 컨테이너 이미지 두 개: CRS 3.3.10, CRS 4.25.2. 둘 다 ModSecurity 2.9.15, Apache 2.4.69, PCRE2 10.46이다.
+  - PL1, inbound 임계 5.
+  - 메인 설정 두 가지: 이미지 기본값(D), 보고된 운영 서버 값의 사본(S).
+  - 로컬룰 두 가지: 없음(A), 보고된 운영 서버의 현 로컬룰(B). B는 CRS 뒤(RESPONSE-999 자리)에 두었다.
+  - 2 × 2 × 2 = 8구성이다.
+- 1차 재현에서 재지 않은 것
+  - 응답 단계(950~959 탐지).
+  - multipart(업로드)·JSON·XML 요청.
+  - 글 본문은 5종, 스킨은 기본 스킨 periwinkle 하나, PL은 1만 썼다.
+- 보고된 운영 서버와 다른 점
+  - 운영 서버의 CRS는 배포판 3.3.4(백포트)다. 3.3.4와 3.3.10의 차이는 7.2절에 적은 것만 확인했다.
+  - 운영 서버의 ModSecurity 버전, crs-setup.conf 위치, 로컬룰 파일 위치는 확인 못 함. Include 순서는 보고된 메인 설정대로 RHEL 기본(5.1)과 같다.
+  - 그래서 점수와 룰 번호는 운영 서버와 다를 수 있다. 920420 경로만은 운영 서버 로그와 룰·점수·상태가 같았다.
+- 재시험 구성
+  - 본 측정은 이미지(3.3.10, 4.25.2) × 메인 설정(D, S) × 위치 2가지 = 8회다. 위치는 CRS 앞(PRE, REQUEST-900 자리)과 CRS 뒤(POST, RESPONSE-999 자리)다.
+  - 로컬룰은 4.3 권장 로컬룰(4.x는 4.4의 10107 형식)과 6.4 경로별 본문 한도다. 메인 설정 D·S는 1차 재현과 같다. PCRE 한도(6.2)는 바꾸지 않았다.
+  - 변형: 10111을 더한 v2 6회, 10110을 더한 것 14회, X1h 12회, 룰 없음(A) 4회. 본 측정과 합해 44회다.
+  - 경우: 정상 122(1차 재현 105 + B6·B7·P1~P3·T1e·T1u·F1l·F1s·F1j·X1·C1 17), 악성 18(M1~M15). 이름과 요청은 부록 A.3.
+  - 판정: 백엔드를 두지 않아 통과는 503, 차단은 403, 본문 한도는 413이다. 모든 구성에서 `httpd -t`는 rc 0이었다.
+- 재시험에서 재지 않은 것
+  - 운영 서버의 CRS 3.3.4 백포트, OS 패키지 배치와 그 밖의 Include.
+  - S에서 PCRE 한도만 100000으로 올린 구성.
+  - 4.25.2 CRS 뒤의 v2, 4.25.2 CRS 뒤에서 phase 1 대상 제거 룰만 CRS 앞으로 나눈 변형.
+  - 응답 단계(RESPONSE-95x). 요청은 대표 요청만 썼다.
+
+## 2. 설치 형태와 룰의 경로
+
+### 2.1 룰이 보는 경로
+
+- 로컬룰은 `REQUEST_FILENAME`을 본다.
+  - ModSecurity v2 매뉴얼의 정의는 "relative request URL without the query string part"다.
+  - 쿼리 문자열은 빠진다. 하위 폴더 설치 경로는 들어간다.
+- 판정은 원 요청 URI 기준이다.
+  - `.htaccess`가 `rewrite.php`로 내부 이동시킨 뒤의 경로가 아니다.
+  - mod_security2.c의 phase 2 훅은 subrequest·내부 redirect를 건너뛴다. 운영 서버 로그의 uri `/owner/skin/sidebar/order`도 이와 맞는다.
+- phase 1 룰은 `<Location>`·`<LocationMatch>` 같은 Apache 범위 안에서 쓸 수 없다.
+  - 그래서 `<LocationMatch>` 안의 `SecRuleRemoveById`는 phase 2 이후 룰에만 듣는다.
+
+### 2.2 설치 형태별 판정
+
+| 설치 형태 | 관리 요청 모양 | REQUEST_FILENAME | `@beginsWith /owner/` |
+|---|---|---|---|
+| single, 루트, fancyURL 2 | `/owner/skin/edit/skin/` | `/owner/skin/edit/skin/` | 맞음 |
+| domain, service path 없음 | `/owner/…` (호스트만 블로그별) | `/owner/…` | 맞음 |
+| single·domain, 하위 폴더 `{path}` | `{path}/owner/…` | `{path}/owner/…` | 안 맞음 |
+| path(경로형) | `{path}/{블로그}/owner/…` | 같음 | 안 맞음 |
+| fancyURL 1 | `{path}/?/owner/…` | `{path}/` | 안 맞음(REQUEST_URI로 봐야 함) |
+| fancyURL 0 | `{path}/index.php?/owner/…` | `{path}/index.php` | 안 맞음(REQUEST_URI로 봐야 함) |
+
+- 근거: `library/model/blog.service.php` 61~81(getBlogURL)·88~94(getFancyURLpostfix), `framework/Dispatcher.php` 132~150, `.htaccess` 355~364.
+- fancyURL 0·1 행은 정적 추적이다. 시험하지 않았다.
+- fancyURL 0을 주는 설정 위치는 확인 못 함.
+
+### 2.3 접두어 정하기
+
+- 접두어는 설치에 맞춰 `^`로 고정한 정규식으로 쓴다.
+- `/owner/` 접두어(10104·10105·10106)
+  - 루트: `^/owner/`
+  - 하위 폴더 `/blog`: `^/blog/owner/` (`/blog`를 실제 경로로 바꾼다)
+  - 경로형: `^/(?:이름1|이름2)/owner/` (블로그 이름 목록을 모르면 `^/[^/]+/owner/`)
+  - fancyURL 0·1: `REQUEST_FILENAME` 대신 `REQUEST_URI`를 `@rx ^/(?:index\.php)?\?/owner/`로 본다(시험 안 함)
+- 룰별로 바꿀 곳
+  - 10101·10102: `@beginsWith /owner/skin/edit/…`의 앞에 설치 경로를 붙인다. 경로형이면 `@rx`와 위 접두어로 바꾼다.
+  - 10103: `^/(?:owner/|trackback/delete/)`. 관리 화면의 트랙백 삭제는 `{블로그 주소}/trackback/delete/{id}`로 보낸다(`resources/script/common3.js` 1371). 앞부분은 `/owner/`와 같은 방식으로 바꾼다.
+  - 10107: 루트 `^/trackback/`, 하위 폴더 `^/blog/trackback/`, 경로형 `^/(?:이름1|이름2)/trackback/`.
+  - 10108: 루트 `^/attach/`, 하위 폴더 `^/blog/attach/`. 경로형에서도 첨부는 설치 경로 아래의 실제 폴더다(`^{설치 경로}/attach/`).
+  - 10109: `^/api/?$`. 다른 설치 형태의 접두어는 시험하지 않았다.
+  - fancyURL 0·1에서 10107~10109를 어떻게 쓸지는 시험하지 않았다. 첨부(10108)는 정적 파일이라 fancyURL과 관계없다.
+- 쓰지 말 것
+  - 아무 접두어나 받는 `(?:/[^/]+)*/owner/`
+  - `^` 없는 정규식, `^` 없는 `<LocationMatch>`
+- 이유(정적 추적)
+  - Dispatcher는 공개 인터페이스를 첫 조각만 보고 `interface/blog/{첫 조각}.php`로 고른다. 뒤 조각은 무시한다(`framework/Dispatcher.php` 199~206).
+  - 공개 인터페이스: api, archive, attachment, author, category, cfeed, checkup, cover, cron, entry, feeder, foaf, guestbook, iMazing, keylog, line, location, locationSuggest, logout, notice, page, plugin, pluginForOwner, search, stream, suggest, tag, ttxml, imageResizer.
+  - 그래서 `^`가 없으면 로그인하지 않은 요청 `/api/owner/entry/draft/`·`/plugin/owner/entry/finish/`·`/search/owner/entry/draft/`에도 예외가 걸린다.
+  - comment·trackback은 조각 전체로 경로를 만들어 404가 난다(Dispatcher 217).
+  - 경로형의 `^/[^/]+/owner/`는 첫 조각을 블로그 이름으로 처리하므로(Dispatcher 135) 이 문제가 없다. 그래도 이름 목록을 쓰는 편이 더 좁다.
+
+## 3. 알려진 차단과 원인
+
+- 3.1~3.5는 1차 재현으로 확인했다. 3.6은 정적 추적이다.
+- 1차 재현의 경우 이름
+  - 글 저장 4경로: `/owner/entry/finish/1`, `/owner/entry/finish/`, `/owner/entry/draft/1`, `/owner/entry/add/`
+  - 글 본문 B1~B5: B1 문단+링크, B2 img, B3 iframe 동영상, B4 script 광고 코드, B5 표+인라인 style
+  - HSK: 스킨 편집 skin.html, HST: 스킨 편집 style.css
+  - HC1·HC2·HC1p: 스킨 잘라 편집(3.4)
+  - 이 B1~B5는 부록 A.1의 요청 번호 B1~B8과 다르다.
+
+### 3.1 920420: 본문 없는 POST의 text/plain (코드 수정)
+
+- 걸린 룰: 920420 "Request content type is not allowed by policy", data `|text/plain|` → 949110 점수 5 → 403(phase 2).
+- 3.3.10·4.25.2, D·S, A·B 8구성 모두 26곳이 403이었다. 현 로컬룰(B)과 관계없다.
+- Content-Type이 없는 요청(대조)은 8구성 모두 통과했다. 920420은 Content-Type 헤더가 있을 때만 본다.
+  - 다만 브라우저는 `send("")`에도 text/plain을 붙인다. 그래서 헤더 없는 요청은 대조일 뿐이다.
+- 4.25.2는 920420을 phase 1에서 돌린다(3.3.10은 phase 2). 결과는 같았다.
+- 4.25.2는 json 변형(901360·901370)을 더 허용한다. 그래도 text/plain은 없다.
+- 대응: v3.207 배포(1.1절). 전환기에는 10103.
+- PHP 쪽 검사(r3-20): `library/preprocessor.php`가 본문이 있는 POST의 Content-Type을 검사한다.
+  - 받는 형식은 `application/x-www-form-urlencoded`·`multipart/form-data`다. XML-RPC(`/api`)는 `text/xml`·`application/xml`도 받는다. 그 밖이면 415를 낸다.
+  - 본문 0바이트(Content-Length가 없거나 0이고 chunked가 아님)는 Content-Type과 상관없이 통과한다. 그래서 옛 EAF4.js의 본문 없는 text/plain POST는 PHP에서 막히지 않는다. CRS에서는 위와 같이 920420에 걸리므로 전환기에는 10103이 그대로 필요하다.
+  - 본문이 있는 text/plain(부록 M5 꼴)과 chunked 빈 본문(M7 꼴)은 CRS 920420과 PHP 415 둘 다에 걸린다.
+
+### 3.2 글 본문의 HTML
+
+- 로컬룰 없음(A), 3.3.10과 4.25.2 같음
+  - B1 문단+링크: 통과
+  - B2 img, B3 iframe, B5 표+style: 403 점수 10(941100·941160)
+  - B4 script 광고 코드: 403 점수 20(932130·941100·941110·941160)
+  - 4.25.2의 B2는 점수 20이었다(934110·934190이 더해짐). 시험 본문의 img 주소가 `localhost`였기 때문이다. 주소를 `https://www.example.com/…`이나 상대 경로로 바꾸면 3.3.10과 같은 점수 10이다.
+  - 글 저장 4경로의 결과는 서로 같았다.
+- 현 로컬룰(B)
+  - finish·draft의 B3·B5: 통과
+  - finish·draft의 B4: 403 점수 10(932130·941110). LocationMatch가 끄는 4개(941100·941140·941160·941310)에 없는 룰이다.
+  - add/: A와 같다(403). LocationMatch가 add/를 포함하지 않는다. add/는 새 글을 처음 임시 저장할 때 쓴다.
+  - finish·draft의 B2: 3.3.10은 통과, 4.25.2는 403 점수 10(934110·934190, localhost 때문). 주소를 바꾼 변형은 B에서 재지 않았다.
+- 정적 추적: 기술 글(본문 안 `<?php`, 함수 호출 꼴, SQL 예시)은 933100·933160·942에 걸릴 수 있다. 현 LocationMatch는 이것을 풀지 않는다.
+- 대응: 10104.
+- 재시험: 10104를 둔 본 측정 8회 모두에서 글 저장 4경로 × B1~B5와 B6(4경로)·B7(3경로), 27경우가 모두 통과(503)했다. 1차 재현 B에서 403이던 B4(932130·941110)와 add/도 통과했다.
+
+### 3.3 스킨 편집
+
+- 경로 `/owner/skin/edit/skin/`, 인자 `ARGS:body`.
+- HSK(skin.html)
+  - A: 3.3.10 403 점수 70, 4.25.2 403 점수 65.
+  - B(10101): 3.3.10·4.25.2 모두 통과.
+- HST(style.css)
+  - A, 3.3.10: 403 점수 20(921110 `ARGS:body`·`REQUEST_BODY`, 932105, 932110).
+  - A, 4.25.2: 통과. 다만 실행 오류 5개가 난 채의 통과라 확정이 아니다.
+  - B, 3.3.10: 403 점수 5. 921110이 `REQUEST_BODY`에서 걸렸다. 10101은 `ARGS:body`만 빼기 때문이다.
+  - 매치는 style.css 61행 `#tt-body-pages .post img,`다. 3.3.10의 921110 정규식은 CSS의 `post img,` 뒤 줄바꿈을 HTTP 요청 줄로 본다.
+  - 4.25.2의 921110은 메서드 뒤에 `http/숫자`가 있어야 걸리도록 바뀌었다.
+- 대응: 10101에 `ctl:ruleRemoveTargetById=921110;REQUEST_BODY`를 더한다.
+- 재시험: 바꾼 10101을 둔 본 측정 8회 모두에서 HST가 통과(503)했다. HSK도 8회 모두 통과했다.
+
+### 3.4 스킨 잘라 편집
+
+- 경로 `/owner/skin/edit/crop/`, 인자 `ARGS:skinCode`·`ARGS:currentCode`.
+- HC2(article_rep 탭에서 all 탭으로, 92,255B)
+  - A: 403 점수 100(3.3.10·4.25.2).
+  - B(10102): 통과.
+- HC1p(HC1을 116,009B로 줄인 보조 경우)
+  - A: 3.3.10 403 점수 140, 4.25.2 403 점수 130.
+  - B(10102): 통과.
+- HC1(all 탭에서 다른 탭으로, 146,889B)
+  - 모든 구성에서 413이다. 본문 한도에 먼저 걸린다(3.5).
+  - all 탭을 떠날 때는 skinCode와 currentCode 양쪽에 skin.html 전체(periwinkle, 원본 42,556B)가 실린다. 그래서 인코딩 뒤 146,889B가 된다.
+
+### 3.5 413: 파일 아닌 본문의 한도
+
+- 로그 문구: `Request body no files data length is larger than the configured limit (131072).`
+- 원인: `SecRequestBodyNoFilesLimit 131072`. 1차 재현의 이미지 기본값과 운영 서버 값이 같다.
+- HC1(146,889B)은 3.3.10·4.25.2 모두 413이었다. CRS 판정 전 단계에서 막힌다.
+- 정적 계산
+  - 글 본문은 urlencoded라 한글 1자가 9바이트다(`가` → `%EA%B0%80`). 약 14,500자에서 413이 난다. 태그나 다른 인자가 있으면 더 일찍 난다.
+  - 기본 스킨 3종에서 가장 큰 파일은 인코딩 뒤 skin.html 73,612B(periwinkle), style.css 55,565B다. 한 파일 저장은 한도를 넘지 않는다. 사용자 스킨은 넘을 수 있다.
+  - XML-RPC는 text/xml 본문 전체가 대상이다. newMediaObject는 base64라 원본 약 96KiB부터 413이 난다.
+- 재시험 B7(한글 17,081자, 인코딩 뒤 176,079B, `finish/1`·`draft/1`·`add/` 3경로)
+  - 룰 없음(A, 131072): 3.3.10·4.25.2, D·S 모두 413.
+  - 6.4 경로별 한도를 둔 본 측정 8회: 모두 통과(503). HC1(146,889B)도 8회 모두 통과했다.
+- 대응: 6.4절.
+
+### 3.6 1차 재현에서 정적 추적만 한 차단
+
+**941310과 한국어 '를'**
+- 941310(3.3.4) 정규식은 바이트 0xBC 뒤에 `>`나 0xBE가 오면 맞는다. '를'은 UTF-8로 `EB A5 BC`다.
+- PHP `preg_match`로 바이트 단위 대조를 했다(t: 변환 없음).
+  - 맞음: `<p>사진를 넣음</p>`, `이 글을 보기를 바랍니다 <br>`
+  - 안 맞음: `글을 수정했습니다`, `<p>본문을 확인</p>`, `설정를 바꿈`, 영어 HTML
+- '를' 뒤에 `>`가 오면 맞는다. '를'로 끝나는 문장 뒤에 태그를 두는 일은 흔하다.
+- 1차 재현에서 941310은 HSK(3.3.10) 탐지 목록에 있었다. 글 본문 B1~B5에서는 탐지되지 않았다.
+- 재시험 B6(376B, 글 저장 4경로)
+  - 룰 없음(A): 3.3.10은 D·S 모두 403 점수 5(941310 `ARGS:content`), 4.25.2는 통과.
+  - 10104를 둔 본 측정 8회: 모두 통과.
+  - T1e의 `ARGS:excerpt`도 3.3.10에서 941310에 걸렸다. 10111로 푼다(4.5).
+  - 10104·10111 경로 밖의 한국어 입력 필드에서 941310이 걸리는지는 확인 못 함.
+
+**트랙백 charset (920480)**
+- 외부 블로그가 `charset=euc-kr` 등으로 보내면 920480이 잡는다.
+- 기본 허용 charset은 `utf-8`, `iso-8859-1`, `iso-8859-15`, `windows-1252`다(901168, 바꿀 자리는 crs-setup 900280).
+- 920480은 캡처한 값을 소문자로 바꿔 비교한다. 그래서 `EUC-KR`도 `euc-kr`로 비교된다.
+- 앱은 Content-Type의 charset을 읽어 변환한다(`interface/blog/trackback/index.php` 31~35).
+- 대응: 10107(선택).
+
+**첨부 내려받기 (920440)**
+- `/attach/{blogid}/{10자리}.{확장자}`는 Apache가 정적 파일로 준다.
+- 확장자가 restricted_extensions(.sql·.log·.bak·.conf·.ini·.db 등)에 들면 920440이 막는다.
+- 4.x는 목록이 더 넓다(.sh·.sqlite·.sqlite3·.tmp·.pem·.crt·.bk·.bkp 등).
+- 대응: 10108(선택).
+
+**업로드 파일 이름 (920120)**
+- multipart 파일 이름에 `'`·`"`·`;`·`=`가 있으면 920120이 잡는다. 3.3.6부터는 `\`도 잡는다.
+- 대상: 블로그 아이콘, 첨부, 백업 가져오기, OPML 가져오기.
+- 대응: 파일 이름에서 이 글자를 빼고 올린다.
+
+**multipart 경계 오류 (200003)**
+- 운영 서버의 200003은 `status:44`로 응답한다. 비표준 상태 코드다. 실제 응답은 확인 못 함.
+- 대응: 6.5절.
+
+**XML-RPC (`/api`)**
+- useBlogAPI=1일 때만 열린다. 아니면 404다.
+- text/xml 본문은 200000이 XML 처리기로 넘긴다. 그러면 `XML:/*`에 941·933이 돈다.
+- 대응: 10109(선택).
+
+**사이드바·표지 플러그인 설정 (setPlugin)**
+- SB_Banner의 `text`(HTML)가 941에 걸릴 수 있다.
+- 본문이 비면 text/plain으로 가서 920420에 걸린다. 이것은 v3.207로 고쳤다(부록 A.2 E25·E26).
+- 대응: 10105.
+
+**플러그인 설정 저장 (receiveConfig)**
+- v3.216부터 `DATA`는 설정 XML의 UTF-8 바이트를 base64로 바꾸고 끝 `=`를 뗀 값이다(바깥은 encodeURIComponent). 플러그인 설정 14종(`N_*`)과 화면 크기 XML 12종(`NM01`–`NM12`)이 CRS 3.3.10·4.25.2 D·S PL1 4구성 모두 통과했다(탐지 0, 점수 0).
+- 새 형식에서도 934100(3.3.10·4.25.2)·934160(4.25.2)은 base64를 풀어 짧은 XML의 JS 꼴 값을 PL1에서 403으로 잡을 수 있다(NS01–NS06, 4.25.2는 NS08·NS09도). 걸리는지는 그 값 앞 base64의 '+' 개수에 따라 달라지고, 실제 화면 크기 XML(`NM01`–`NM12`)은 4구성 모두 통과했다(v3.216 측정).
+- v3.216 이전 판: `DATA`는 XML 문자열이다. 재시험 P3(ST_TeamBlogSettings 기본값)에서 941100·941180에 걸렸다. 같은 14종을 옛 형식(`O_*`)으로 보내면 PL1 4구성 모두 403이다(941100·941180·942190 계열, 5–20점).
+- 대응: v3.216부터 없음(10106 필요 없음). v3.216 이전 판은 10106(선택, 로그에 걸릴 때만).
+
+**재시험 결과(이 절 항목의 대응)**
+- 점수는 D 기준이다. 경우 이름과 요청은 부록 A.3.
+- P1·P2(SB_Banner CodeBanner의 text, sidebar·coverpage)
+  - 룰 없음(A): 403 점수 20(932130·941100·941110·941160).
+  - 10105를 둔 본 측정 8회: 모두 통과.
+- P3(receiveConfig DATA, ST_TeamBlogSettings 기본값, HTML 태그 포함)
+  - A: 403 점수 10(941100·941180 `ARGS:DATA`).
+  - 10106을 둔 본 측정 8회: 모두 통과.
+  - v3.216 새 형식(base64, 끝 `=` 없음, `N_ST_TeamBlogSettings`): CRS 3.3.10·4.25.2 D·S PL1 4구성 모두 통과(탐지 0, 점수 0).
+  - 끝 `=`를 떼는 이유: 4.25.2 PL2에서 942120이 base64 끝 `==`에 걸렸다(떼기 전 942120 탐지 줄 수 4.25.2 D·S PL2 각 18(기제 확인용 X1–X3을 포함한 44경우 기준, 같은 41경우 기준으로는 15), 3.3.10 PL2 0). 뗀 뒤 다시 잰 8구성(3.3.10·4.25.2 × D·S × PL1·PL2)에서 942120은 0건이고 새로 생긴 룰은 없다(PL1 164칸 앞 결과와 같음).
+- T1e(트랙백, charset=euc-kr)
+  - A: 3.3.10 403 점수 10(920480·941310 `ARGS:excerpt`), 4.25.2 403 점수 5(920480).
+  - CRS 앞: 3.3.10 403 점수 5(941310), 4.25.2 통과.
+  - CRS 앞 + 10111(v2): 3.3.10 D·S 모두 통과.
+  - CRS 뒤: 3.3.10 403 점수 10, 4.25.2 403 점수 5. 920480이 phase 1이라 10107이 늦다(5.3).
+  - S에서는 941160 실행 오류가 1개 난다(6.2).
+- T1u(같은 트랙백, utf-8 대조): 모든 구성에서 통과.
+- F1l·F1s(`/attach/1/1234567890.log`·`.sql`)
+  - A: 403 점수 5(920440 `TX:extension`).
+  - 10108: CRS 앞 4회는 모두 통과. CRS 뒤는 3.3.10만 통과하고 4.25.2는 403(920440이 phase 1).
+  - F1j(`.jpg` 대조)는 모든 구성에서 통과.
+- X1(XML-RPC newPost, description에 img·iframe)
+  - A: 3.3.10 403 점수 10(941100·941160), 4.25.2 403 점수 20(934110·934190 추가).
+  - 10109를 둔 측정: 3.3.10은 모두 통과, 4.25.2는 모두 403 점수 10(934110·934190). 시험 자료의 img 주소가 `http://localhost`였기 때문이다.
+  - X1h(주소만 example.com으로 바꿈): A 403 점수 10(941100·941160). 10109를 두면 CRS 앞·뒤, D·S 모두 통과.
+- C1(정상 댓글): 모든 구성에서 통과.
+
+### 3.7 방문자 입력에는 예외를 두지 않는다
+
+- 댓글 `/comment/add/{id}`, 방명록 `/comment/add/0`, 댓글 답글·수정 `/comment/comment/{id}`·`/comment/modify/{id}`는 방문자가 쓰는 입력이다.
+- 941·942 등에 걸려도 로컬룰 예외를 두지 않는다.
+
+### 3.8 현 로컬룰 LocationMatch 블록의 문제
+
+- 대상: 기존 `<LocationMatch "/owner/entry/(finish|draft)/">` 블록(SecRuleRemoveById 941310·941160·941100·941140).
+- `^`가 없다. 공개 인터페이스 요청에도 예외가 걸린다(2.3절, 정적 추적).
+- 941 4개를 모든 대상에서 끈다. 쿠키·User-Agent·Referer·ARGS_NAMES도 들어간다(정적 추적).
+- add/가 빠졌다(1차 재현).
+- 932130·941110이 남는다(1차 재현 B4). 933·942도 남는다(정적 추적).
+- 4.x에서 phase 1 룰(920420 등)에는 듣지 않는다(2.1절).
+- 대응: 지우고 10104로 바꾼다(4.7).
+
+## 4. 권장 로컬룰
+
+### 4.1 단계와 보안 약화
+
+| ID | 단계 | 보안 약화 | 대상 |
+|---|---|---|---|
+| 10101·10102 | 기존(10101은 921110 추가) | 중간 | 소유자 전용, 인자 1~2개, CRS 전체. 10101은 REQUEST_BODY의 921110도 |
+| 10103 | 필수(임시) | 매우 낮음 | 920420 하나, 본문 0바이트 |
+| 10104 | 권장 | 중간 | 소유자 전용, ARGS:content, CRS 전체 |
+| 10105 | 권장 | 낮음~중간 | 소유자 전용, ARGS:text, CRS 전체 |
+| 10106 | 선택(v3.216 이전 판만) | 낮음 | 소유자 전용, ARGS:DATA, attack-xss |
+| 없음(v3.216) | 필요 없음 | 10106보다 넓음 | 소유자 전용 `ARGS:DATA`. DATA가 base64라 WAF의 941xxx·942xxx가 안을 보지 못한다. 앱 방어: `/owner/` ACL·CSRF(v3.147)·XMLStruct·`updatePluginConfig` escape(SECURITY.md v3.216) |
+| 10107 | 선택 | 낮음 | 공개(트랙백), charset 이름 하나 |
+| 10111 | 선택(3.3.x 전용) | 낮음 | 공개(트랙백), euc-kr일 때 title·excerpt·blog_name의 941310 하나 |
+| 10108 | 선택 | 중간 | 공개(첨부), 920440 하나 |
+| 10109 | 선택 | 중간~높음 | 공개(API), XML:/*, attack-xss |
+| 10112 | 선택 | 중간 | 서비스 관리자 전용, ARGS:body, CRS 전체 |
+| 10113 | 선택 | 낮음 | 소유자 전용, ARGS:description, attack-xss |
+| 10114 | 선택 | 중간 | 소유자 전용(ST_Pages 관리 화면), ARGS:content, CRS 전체 |
+| 기존 LocationMatch 블록 | 지울 것 | 지우면 약화가 줄어듦 | 지금은 공개 인터페이스까지 941 4개를 모든 대상에서 끔 |
+
+- "보안 약화"는 그 룰이 검사에서 빼는 범위를 뜻한다.
+- "소유자 전용"은 블로그 관리자 로그인이 필요한 `/owner/` 경로다.
+- "서비스 관리자 전용"은 서비스 관리자(group.creators) 로그인이 필요한 `/control/` 경로다.
+- "전용"의 로그인 확인은 앱이 한다. 로컬룰은 로그인 여부를 보지 않으므로 로그인하지 않은 요청에도 예외가 적용된다(4.9).
+- 선택 룰은 그 기능을 쓰고, 로그에 해당 룰이 걸릴 때만 넣는다.
+
+### 4.2 공통
+
+- id 10101~은 ModSecurity 로컬 범위(1–99,999)다. CRS 범위(900,000–999,999)와 겹치지 않는다.
+  - 참고: RHEL 패키지의 200000~200004는 Comodo 범위(200,000–299,999)와 겹친다.
+- 모두 phase 1, `pass,nolog`다. 막지 않고, 뒤에 도는 검사의 대상만 바꾼다.
+- chain에서 ctl은 마지막 룰에 둔다. 앞 룰이 모두 맞을 때만 실행된다.
+- 접두어는 루트 설치 기준이다. 2.3절대로 바꾼다.
+- 1차 재현에서 현 로컬룰의 10101·10102(phase 1 ctl)는 CRS 뒤에 두어도 3.3.10·4.25.2 모두에서 작동했다.
+- 재시험에서는 CRS 뒤에 둔 룰이 phase 1 대상(920480, 4.x의 920420·920440)을 빼지 못했다. 그래서 로컬룰 파일 전체를 CRS 앞에 둔다(5.3).
+
+### 4.3 룰 본문 (CRS 3.3.x)
+
+```
+# 10101 스킨 편집(기존 + REQUEST_BODY의 921110)
+SecRule REQUEST_FILENAME "@beginsWith /owner/skin/edit/skin/" "id:10101,phase:1,pass,nolog,t:none,ctl:ruleRemoveTargetByTag=OWASP_CRS;ARGS:body,ctl:ruleRemoveTargetById=921110;REQUEST_BODY"
+
+# 10102 스킨 잘라 편집(기존 그대로)
+SecRule REQUEST_FILENAME "@beginsWith /owner/skin/edit/crop/" "id:10102,phase:1,pass,nolog,t:none,ctl:ruleRemoveTargetByTag=OWASP_CRS;ARGS:skinCode,ctl:ruleRemoveTargetByTag=OWASP_CRS;ARGS:currentCode"
+
+# 10103 (필수, 임시) 본문 0바이트 POST의 text/plain만 920420에서 뺀다
+SecRule REQUEST_METHOD "@streq POST" "id:10103,phase:1,pass,nolog,t:none,chain"
+	SecRule REQUEST_FILENAME "@rx ^/(?:owner/|trackback/delete/)" "t:none,chain"
+		SecRule REQUEST_HEADERS:Content-Type "@rx ^text/plain\s*(?:;|$)" "t:none,t:lowercase,chain"
+			SecRule REQUEST_HEADERS:Content-Length "@streq 0" "t:none,chain"
+				SecRule &REQUEST_HEADERS:Transfer-Encoding "@eq 0" "t:none,ctl:ruleRemoveById=920420"
+
+# 10104 (권장) 글 본문. 기존 LocationMatch 블록을 바꾼다
+SecRule REQUEST_FILENAME "@rx ^/owner/entry/(?:add|draft|finish)/" "id:10104,phase:1,pass,nolog,t:none,ctl:ruleRemoveTargetByTag=OWASP_CRS;ARGS:content"
+
+# 10105 (권장) 사이드바·표지 플러그인 설정
+SecRule REQUEST_FILENAME "@rx ^/owner/skin/(?:sidebar|coverpage)/setPlugin/?$" "id:10105,phase:1,pass,nolog,t:none,ctl:ruleRemoveTargetByTag=OWASP_CRS;ARGS:text"
+
+# 10106 (선택, v3.216 이전 판만) 플러그인 설정 저장 DATA(XML 문자열). v3.216부터는 DATA가 base64라 필요 없다
+SecRule REQUEST_FILENAME "@rx ^/owner/plugin/receiveConfig/?$" "id:10106,phase:1,pass,nolog,t:none,ctl:ruleRemoveTargetByTag=attack-xss;ARGS:DATA"
+
+# 10107 (선택) 트랙백 euc-kr. CRS 앞에 둔다. 3.3.x 형식
+SecRule REQUEST_FILENAME "@rx ^/trackback/" "id:10107,phase:1,pass,nolog,t:none,setvar:'tx.allowed_request_content_type_charset=utf-8|iso-8859-1|iso-8859-15|windows-1252|euc-kr'"
+
+# 10111 (선택, 3.3.x 전용) euc-kr 트랙백의 세 항목에서 941310을 뺀다
+SecRule REQUEST_FILENAME "@rx ^/trackback/" "id:10111,phase:1,pass,nolog,t:none,chain"
+	SecRule REQUEST_HEADERS:Content-Type "@rx charset\s*=\s*\"?euc-kr" "t:none,t:lowercase,ctl:ruleRemoveTargetById=941310;ARGS:title,ctl:ruleRemoveTargetById=941310;ARGS:excerpt,ctl:ruleRemoveTargetById=941310;ARGS:blog_name"
+
+# 10108 (선택) 첨부 내려받기
+SecRule REQUEST_FILENAME "@rx ^/attach/[0-9]+/[0-9]{10}\.[a-z0-9]{1,6}$" "id:10108,phase:1,pass,nolog,t:none,t:lowercase,ctl:ruleRemoveById=920440"
+
+# 10109 (선택) XML-RPC
+SecRule REQUEST_FILENAME "@rx ^/api/?$" "id:10109,phase:1,pass,nolog,t:none,ctl:ruleRemoveTargetByTag=attack-xss;XML:/*"
+
+# 10112 (선택) 서비스 관리 화면의 .htaccess 저장 본문(4.9)
+SecRule REQUEST_FILENAME "@rx ^/control/server/rewrite/?$" "id:10112,phase:1,pass,nolog,t:none,chain"
+	SecRule REQUEST_METHOD "@streq POST" "t:none,ctl:ruleRemoveTargetByTag=OWASP_CRS;ARGS:body"
+
+# 10113 (선택) 블로그 설명(4.9)
+SecRule REQUEST_FILENAME "@rx ^/owner/setting/blog/description/?$" "id:10113,phase:1,pass,nolog,t:none,chain"
+	SecRule REQUEST_METHOD "@streq POST" "t:none,ctl:ruleRemoveTargetByTag=attack-xss;ARGS:description"
+
+# 10114 (선택) 페이지 플러그인(ST_Pages) 관리 화면의 페이지 본문(4.9)
+SecRule REQUEST_FILENAME "@rx ^/owner/plugin/adminMenu/?$" "id:10114,phase:2,pass,nolog,t:none,chain"
+	SecRule REQUEST_METHOD "@streq POST" "t:none,chain"
+		SecRule QUERY_STRING "@streq name=ST_Pages/ST_Pages_manage" "t:none,chain"
+			SecRule &ARGS_POST:/^[\s+]*name/ "@eq 0" "t:none,chain"
+				SecRule &REQUEST_COOKIES:/^[\s+]*name/ "@eq 0" "t:none,ctl:ruleRemoveTargetByTag=OWASP_CRS;ARGS:content"
+```
+
+### 4.4 CRS 4.x에서 다른 것
+
+- 10107만 형식이 다르다. 4.x의 charset 목록은 `|이름|` 꼴이다.
+
+```
+SecRule REQUEST_FILENAME "@rx ^/trackback/" "id:10107,phase:1,pass,nolog,t:none,setvar:'tx.allowed_request_content_type_charset=|utf-8| |iso-8859-1| |iso-8859-15| |windows-1252| |euc-kr|'"
+```
+
+- 4.x에서는 920420·920440·920480이 phase 1이다. 그래서 10103·10107·10108은 CRS 뒤에서 듣지 않는다(재시험). 3.3.x·4.x 모두 로컬룰 파일 전체를 CRS 앞에 둔다(5.3).
+- 10111은 4.x에 넣지 않는다. 4.25.2에서는 941310이 B6·T1e에 발동하지 않았고, T1e는 10111 없이 CRS 앞 배치에서 통과했다(재시험).
+- 10112~10114는 3.3.x와 4.x에서 같은 형식이다(4.9).
+
+### 4.5 룰별 설명
+
+**10101 (기존, 921110 추가)**
+- 기존 룰에 `ctl:ruleRemoveTargetById=921110;REQUEST_BODY`를 더했다.
+- 3.3.x에서 style.css를 저장할 때 `REQUEST_BODY`의 921110 하나가 남았다(3.3절).
+
+**10102 (기존 그대로)**
+- 인자 이름 `skinCode`·`currentCode`는 코드와 맞는다(`interface/owner/skin/edit/index.php` 57·105).
+- `currentTag`·`nextTag`의 값 모양은 확인 못 함.
+
+**10103 (필수, 임시)**
+- 다섯 조건이 모두 맞을 때만 920420을 뺀다: POST, 경로, Content-Type text/plain, Content-Length 0, Transfer-Encoding 없음.
+- 검사할 본문이 없다. 다른 룰은 그대로 돈다.
+- 1차 재현의 26곳(부록 A.2)은 모두 `/owner/`나 `/trackback/delete/` 아래다.
+- v3.207을 배포하고 옛 EAF4.js를 쓰는 브라우저가 없어지면 지운다.
+- 3.3.x에서는 920420이 phase 2라 CRS 뒤에서도 들었다. 4.x에서는 CRS 뒤에서 듣지 않았다(재시험). 둘 다 파일 전체를 CRS 앞에 둔다(5.3).
+
+**10104 (권장)**
+- 글 본문 인자 `content` 하나에서만 CRS 전체(941·933·942·932 등)를 끈다. 다른 인자·쿠키·헤더는 그대로다.
+- 기존 블록에 없던 add/를 더하고 `^`로 고정했다.
+- 더 좁은 대안: `attack-xss` 태그만 끈다. 그러면 기술 글이 933·942에 다시 걸릴 수 있다. 1차 재현의 B4는 932130에도 걸렸다.
+
+**10105 (권장)**
+- 인자 이름은 플러그인의 index.xml이 정한다.
+- textarea 항목은 본문으로, text 항목은 URL 쿼리로 간다(`resources/script/sidebar.js`). ARGS는 둘 다 본다.
+- 동봉 플러그인 가운데 확인한 것은 SB_Banner `text`(textarea)와 SB_Replacer `text`뿐이다. 전수는 확인 못 함.
+- 다른 플러그인이 HTML 인자를 쓰면 그 이름을 더한다.
+
+**10106 (선택)**
+- 걸린 로그가 있을 때만 넣는다. 태그는 로그에 찍힌 룰에 맞춰 넓힌다.
+
+**10107 (선택)**
+- 901168은 값이 없을 때만 기본값을 넣는다. 그래서 CRS보다 먼저 넣은 값이 쓰인다. 3.3.x·4.x 모두 CRS 앞에 둔다. 재시험에서도 CRS 뒤에 두면 3.3.10·4.25.2 모두 T1e가 920480으로 403이었다.
+- 트랙백을 받지 않으면 두지 않는다.
+
+**10108 (선택)**
+- 첨부 저장 이름은 `random_int(1000000000, 9999999999) . ".$extension"`이다. 실행형 확장자는 `xxx`로 바뀐다(`library/model/blog.attachment.php` 138~151·160·242).
+- 이미 공개한 첨부는 확장자와 관계없이 내려받을 수 있게 된다. 다른 경로의 .sql·.bak 등은 계속 막힌다.
+- 그런 첨부를 허용하지 않으면 두지 않는다.
+- 3.3.x에서는 920440이 phase 2라 CRS 뒤에서도 들었다. 4.x에서는 CRS 뒤에서 듣지 않았다(재시험). 둘 다 파일 전체를 CRS 앞에 둔다(5.3).
+
+**10109 (선택)**
+- useBlogAPI=1이고 외부 편집기를 쓸 때만 넣는다.
+- v2에서 `XML:/*` 대상을 빼는 것이 동작하는지는 확인 못 함. 3.3.10 규칙 파일 주석은 v2에서 `XML://@*`(속성값)를 뺄 수 없다고 적는다.
+- 공개 경로이고 API 비밀번호로 인증한다.
+- 재시험: 4.25.2의 X1은 10109를 두어도 934110·934190으로 403이었다. 시험 자료의 img 주소 `http://localhost` 때문이다. 주소만 바꾼 X1h는 통과했다(3.6).
+
+**10111 (선택, 3.3.x 전용)**
+- 3.3.10에서 T1e의 `ARGS:excerpt`가 euc-kr 한국어 바이트 때문에 941310에 걸렸다.
+- charset이 euc-kr일 때만 세 인자(title·excerpt·blog_name)에서 941310 하나를 뺀다. 다른 941 룰과 다른 인자는 그대로 돈다.
+- 재시험: 3.3.10 CRS 앞에 10111을 더하면 D·S 모두 정상 122/122. 악성 M13(euc-kr excerpt XSS)은 점수 15(941100·941110·941160)로 막혔다.
+- CRS 뒤에 두면 941310은 빠지지만 920480이 남아 T1e가 403(점수 5)이었다.
+- 4.x에는 넣지 않는다(4.4). 트랙백을 받지 않으면 두지 않는다.
+
+**재시험: 룰별 효과**
+- 경우 이름은 부록 A.3. "듣는다"는 그 룰을 두면 정상 경우가 통과했다는 뜻이다.
+- E p는 부록 A.2 26곳의 text/plain 경우(E01p~E26p), HC*는 잘라 편집 경우(3.4)다.
+
+| 룰 | 경우 | 3.3.10 CRS 앞 | 3.3.10 CRS 뒤 | 4.25.2 CRS 앞 | 4.25.2 CRS 뒤 |
+|---|---|---|---|---|---|
+| 10101 | HST | 듣는다 | 듣는다 | 듣는다 | 듣는다 |
+| 10102 | HC* | 듣는다 | 듣는다 | 듣는다 | 듣는다 |
+| 10103 | E p | 듣는다 | 듣는다 | 듣는다 | 안 듣는다 |
+| 10104 | B1~B7 | 듣는다 | 듣는다 | 듣는다 | 듣는다 |
+| 10105 | P1·P2 | 듣는다 | 듣는다 | 듣는다 | 듣는다 |
+| 10106 | P3 | 듣는다 | 듣는다 | 듣는다 | 듣는다 |
+| 10107 | T1e | 듣는다(920480 제거, 941310만 남음) | 안 듣는다 | 듣는다 | 안 듣는다 |
+| 10108 | F1l·F1s | 듣는다 | 듣는다 | 듣는다 | 안 듣는다 |
+| 10109 | X1·X1h | 듣는다 | 듣는다 | 듣는다 | 듣는다 |
+| 경로별 본문 한도(6.4) | HC1·B7·M15a | 듣는다 | 듣는다 | 듣는다 | 듣는다 |
+| 10111(v2) | T1e의 941310 | 듣는다 | 듣는다 | 해당 없음(941310 미발동) | 측정 안 함 |
+
+- 듣지 않은 원인은 모두 phase다. 대상 룰이 phase 1이라 CRS 뒤에 둔 제거 룰보다 먼저 돈다(5.2).
+  - 10103은 4.x의 920420, 10107은 3.3.x·4.x의 920480, 10108은 4.x의 920440 때문이다.
+  - 3.3.x에서는 920420·920440이 phase 2라 CRS 뒤에서도 들었다.
+- 10107은 3.3.10 CRS 앞에서 920480을 뺐지만 941310이 남았다. 이것을 10111이 뺀다.
+- 10109의 X1은 4.25.2에서 시험 자료의 `http://localhost` 때문에 403이 남았다. 주소만 바꾼 X1h로 들음을 확인했다.
+- 경로별 본문 한도의 M15a는 1 MiB를 넘는 악성 경우라 413이 맞다(6.4).
+
+### 4.6 악성 입력 대조
+
+- 예외를 넣은 경로에서 악성 입력이 어디까지 통과하는지 본다.
+- 재시험: 악성 18경우가 모든 구성에서 403 또는 413으로 막혔다. 통과한 악성은 없다.
+  - 18경우를 모두 넣은 측정: 본 측정 8회, v2 6회, 10110 변형 6회, 룰 없음(A) 4회.
+  - X1h 변형과 v2+10110 변형은 4경우(X1h·T1e·T1u·M13)만 넣었다. M13은 모두 막혔다. 10110 단독 4회에는 악성 경우를 넣지 않았다.
+- 칸의 값은 상태(점수)다. 점수는 D 기준이다. "CRS 앞"은 본 측정의 PRE이고, 남는 탐지는 그 구성의 것이다.
+
+| 경우 | 경로 | 입력 | A 3.3.10 / 4.25.2 | CRS 앞 3.3.10 | CRS 앞 4.25.2 | 남는 탐지 |
+|---|---|---|---|---|---|---|
+| M1 | `/owner/entry/finish/1` | title XSS(content는 정상) | 403(15) / 403(20) | 403(15) | 403(20) | 941100·941110·941160 `ARGS:title`. 4.25.2는 941390 추가 |
+| M2 | `/owner/entry/add/` | permalink SQLi | 403(20) / 403(20) | 403(20) | 403(20) | 942100·942190·942270·942360 `ARGS:permalink` |
+| M3 | `/comment/add/1` | 댓글 XSS | 403(15) / 403(20) | 403(15) | 403(20) | 941100·941110·941160 `ARGS:comment`(+941390) |
+| M4 | `/api/owner/entry/finish/` | content XSS(10104의 `^` 고정 확인) | 403(15) / 403(20) | 403(15) | 403(20) | 941100·941120·941160 `ARGS:content`(+941390) |
+| M5 | `/owner/skin/sidebar/order?…` | text/plain 1바이트 | 403(5) | 403(5) | 403(5) | 920420 |
+| M6 | `/comment/add/1` | text/plain 0바이트(10103 경로 밖) | 403(5) | 403(5) | 403(5) | 920420 |
+| M7 | `/owner/skin/sidebar/order?…` | chunked 빈 본문 | 403(5) | 403(5) | 403(5) | 920420 |
+| M8 | `/owner/skin/edit/skin/` | 정상 body + file XSS | 403(35) / 403(20) | 403(15) | 403(20) | 941100·941110·941160 `ARGS:file`(+941390) |
+| M9 | `/owner/skin/sidebar/setPlugin?…` | 쿼리 imgsrc XSS | 403(15) / 403(20) | 403(15) | 403(20) | 941100·941110·941160 `ARGS:imgsrc`(+941390) |
+| M10a | `/attach/1/backup.sql` | 첨부 이름 규칙 밖 | 403(5) | 403(5) | 403(5) | 920440 `TX:extension` |
+| M10b | `/attach/1/12345678901.sql` | 11자리 이름 | 403(5) | 403(5) | 403(5) | 920440 `TX:extension` |
+| M11 | `/api` | description SQLi | 403(30) | 403(30) | 403(30) | 942100·942190·942270 `XML` |
+| M12 | `/owner/plugin/receiveConfig` | DATA SQLi | 403(35) | 403(25) | 403(25) | 942100·942190·942270 `ARGS:DATA` |
+| M12(v3.216 새 형식) | `/owner/plugin/receiveConfig` | DATA XSS·SQLi(base64, NS10–NS12·NM10–NM12) | 503(0) / 503(0) | 측정 안 함 | 측정 안 함 | 없음. WAF(941xxx·942xxx)가 base64 안을 보지 못하고, 앱이 escape해 데이터로 저장(SECURITY.md v3.216) |
+| M13 | `/trackback/1` | euc-kr excerpt XSS | 403(25) | 403(20), v2 403(15) | 403(20) | 3.3.10 941100·941110·941160·941310(v2는 941310 빠짐), 4.25.2 941100·941110·941160·941390. CRS 뒤는 920480이 더해진다 |
+| M14a | `/owner/skin/edit/crop/` | nextTag XSS | 403(155) / 403(150) | 403(15) | 403(20) | 941100·941110·941160 `ARGS:nextTag`(+941390) |
+| M14b | `/owner/skin/edit/crop/` | currentTag XSS | 403(155) / 403(150) | 403(15) | 403(20) | `ARGS:currentTag`에 같은 룰 |
+| M15a | `/owner/entry/finish/1` | content 1,231,077B | 413 | 413 | 413 | 경로별 한도 1048576 초과. 4.25.2는 920450 경고 |
+| M15b | `/comment/add/1` | 댓글 164,439B | 413 | 413 | 413 | 경로 밖이라 전역 131072 초과 |
+
+- M5·M6·M7은 10103 조건(경로, 본문 0바이트, chunked 아님) 밖이라 920420이 막는다.
+- M10a·M10b는 10108 이름 규칙(10자리 숫자) 밖이라 920440이 막는다.
+- M8·M9·M14a·M14b는 예외 인자만 빠지고, 같은 요청의 다른 인자에 든 XSS로 막힌다.
+- M14a·M14b의 A 점수는 S에서 3.3.10 135, 4.25.2 130이다. PCRE 한도 1000에서 탐지가 빠졌다(6.2).
+
+### 4.7 지울 것
+
+- 기존 `<LocationMatch "/owner/entry/(finish|draft)/">` 블록을 지운다. 10104가 대신한다.
+- 지우면 보안 약화가 줄어든다. 지금 블록은 공개 인터페이스 요청까지 941 4개를 모든 대상에서 끈다(3.8).
+
+### 4.8 MSC_ 감시 룰 (선택 제시안, 10110)
+
+```
+SecRule TX:/^MSC_/ "!@streq 0" "id:10110,phase:2,deny,status:403,log,msg:'ModSecurity internal error flagged: %{MATCHED_VAR_NAME}'"
+```
+
+- 200004와 같은 검사를 CRS 뒤에서 한다(6.3).
+- CRS 뒤에 둔다. 같은 phase 안에서는 설정 순서대로 돌기 때문이다.
+- 넣으면 PCRE 한도를 넘은 요청은 막힌다. 선택 룰이다. PCRE 한도를 올린 뒤(6.2)에만 검토한다. 한도 1000을 유지하면 넣지 않는다.
+- 재시험 결과
+  - 10110만 둔 경우(로컬룰 없음, CRS 뒤)
+    - 3.3.10: HSK·HST·HC2·HC1p는 CRS 탐지로 먼저 403이 나서 10110이 발동하지 않았다. HC1은 413.
+    - 4.25.2: HST는 탐지 없이 PCRE 실행 오류(932230·932235·932250·932260·932340 등)만 났고, 10110이 403을 냈다. D(100000)에서도 같다.
+  - 권장 로컬룰과 10110을 함께 CRS 뒤에 둔 경우(S): 두 이미지 모두 10110이 없는 CRS 뒤 배치와 같았다. 10110 발동은 0이었다.
+  - 권장 로컬룰은 CRS 앞, 10110은 CRS 뒤: 3.3.10 D·S와 4.25.2 D는 10110이 없을 때와 같았다. 4.25.2 S는 정상 T1e가 10110으로 403이었다(120/122).
+  - v2(10111 포함)는 CRS 앞, 10110은 CRS 뒤: D는 T1e·T1u·X1h가 통과하고 M13은 403이었다. S는 두 이미지 모두 정상 T1e가 10110으로 403이었다.
+  - 정리: S(1000)에서는 정상 T1e에서 941160 실행 오류가 나고, 10110을 넣으면 이것이 차단으로 바뀐다. 한도를 100000으로 올린 S는 측정하지 않았다.
+
+### 4.9 관리 화면 저장과 403 안내 (r3-14)
+
+- 증상: 관리 화면(`/owner/`·`/control/`)에서 HTML·스크립트·CSS·.htaccess가 든 값을 저장하면 저장되지 않는다. r3-14 이전 판은 "실패했습니다." 같은 화면 문구만 보이거나 아무것도 보이지 않았다.
+  - r3-14부터 관리 화면의 Ajax 저장(아래 표의 "Ajax")은 응답이 403이면 "서버가 요청을 거부했습니다(HTTP 403)…" 안내를 먼저 띄운다. 그 화면의 실패 문구가 이어서 나올 수 있다.
+  - 앱은 EAF4.js의 HTTPRequest로 보내는 관리 요청에 403을 내지 않는다(권한 없음 404, 출처 확인 실패 412). 그 요청의 403은 서버나 웹 방화벽의 거부다. 안내도 이 요청에만 뜬다.
+  - 폼 전송(표의 "폼")은 브라우저가 서버의 403 화면을 그대로 보인다. 안내는 나오지 않는다.
+  - 안내는 관리 화면(관리 화면 머리말, 편집기 팝업, 플러그인 설정 창)에만 있다. 블로그 방문자 화면에는 없다.
+- 원인(정적 추정): 값 안의 꺾쇠 태그, 스크립트, `.user.ini`·`.htaccess` 같은 파일 이름, `RewriteRule` 정규식이 CRS의 attack-xss(941)·attack-lfi(930)·attack-rce(932)·attack-php(933)·attack-sqli(942) 검사에 걸릴 수 있다. 10112~10114 경로에서 어느 룰이 걸리는지는 재지 않았다.
+- 대응: audit 로그에서 경로·인자·룰 id·태그를 보고 아래 표의 룰을 넣는다. 경로 전체나 룰 전체를 끄지 않는다(8.2).
+
+| 경로 | 인자 | 내용 | 보내는 방법 | 걸릴 수 있는 룰(룰 읽기 추정) | 대응 |
+|---|---|---|---|---|---|
+| `/owner/entry/` 아래 add·draft·finish | content | 글 본문 HTML | Ajax | 941·933·942·932 | 10104 |
+| `/owner/skin/edit/skin/` | body | 스킨 HTML·CSS | Ajax | 941·933·932·921110 | 10101 |
+| `/owner/skin/edit/crop/` | skinCode, currentCode | 스킨 조각 | Ajax | 941·933 | 10102 |
+| `/owner/skin/sidebar/setPlugin`·`/owner/skin/coverpage/setPlugin` | text(플러그인 index.xml이 정함) | 플러그인 설정(HTML) | Ajax, 폼(설정 편집 화면) | 941 | 10105 |
+| `/owner/plugin/receiveConfig` | DATA | 플러그인 설정(v3.216부터 base64) | Ajax | v3.216부터 없음 | 필요 없음(이전 판 10106) |
+| `/owner/setting/blog/description/` | description | 블로그 설명(HTML을 넣을 수 있음) | Ajax | 941 | 10113(선택) |
+| `/owner/plugin/adminMenu?name=ST_Pages/ST_Pages_manage` | content | 페이지 플러그인의 페이지 본문 HTML | 폼 | 941·933·942·932 | 10114(선택) |
+| `/control/server/rewrite/` | body | .htaccess 전체 | Ajax | 941·930·932·933 | 10112(선택) |
+| `/owner/network/teamblog/invite/`·`/owner/setting/account/invite/` | comment | 초대 메일 문구(평문) | Ajax | 941(HTML을 넣으면) | 예외 두지 않음 |
+| `/control/server/config/` | serviceurl, externalResourceURL | 주소 | Ajax | 931100(IP 주소 URL) | 예외 두지 않음 |
+| `/control/server/rootredirect/` | rootRedirectURL | 주소 | Ajax | 931100(IP 주소 URL) | 예외 두지 않음 |
+| `/control/server/pathrouting/` | pathNotFoundRedirectURL | 주소 | Ajax | 931100(IP 주소 URL) | 예외 두지 않음 |
+| `/control/server/domainrouting/` | domainRootRedirectURL, domainMismatchRedirectURL | 주소 | Ajax | 931100(IP 주소 URL) | 예외 두지 않음 |
+
+- 10112: 관리 화면에서 .htaccess를 고칠 때만 넣는다. 서버에서 직접 .htaccess를 고치면 필요 없다. 넣지 않는 편이 더 안전하다.
+- 10113: 설명에 HTML을 넣고 941이 걸릴 때만 넣는다. attack-xss 태그만 뺀다.
+- 10114: 페이지 플러그인(ST_Pages)을 켜고 페이지 본문이 걸릴 때만 넣는다.
+  - 앱은 이 경로에서 `name` 값(쿼리·본문·쿠키 중 PHP가 `$_REQUEST`에 마지막으로 넣은 것)으로 플러그인 처리기를 고른다. 그래서 10114는 쿼리 문자열 전체가 정확히 `name=ST_Pages/ST_Pages_manage`(ST_Pages 폼이 보내는 값)이고, POST 본문과 쿠키에 이름이 `name`으로 시작하는 인자(앞 공백·`+` 포함)가 없을 때만 듣는다.
+  - PHP는 인자 이름 앞의 공백(쿠키는 탭 같은 공백 문자도)을 지우고, 이름 안 NUL(`%00`) 뒤를 버린다. 그래서 쿼리·본문의 `%20name`·`+name`·`name%00x`와 쿠키의 ` name`도 PHP에는 `name`이다. 10114는 쿼리를 디코드 전 원문 그대로 비교하고, 본문·쿠키는 `^[\s+]*name`(앞의 공백·`+` 뒤 `name`)으로 시작하는 이름을 모두 세어 이런 변형이 하나라도 있으면 듣지 않는다. `+`를 함께 세므로 ModSecurity가 본문 인자 이름의 `+`를 공백으로 바꾸는지와 관계없이 `+name`도 센다. `name`으로 시작하는 다른 이름이 있어도 듣지 않는다(막히는 쪽).
+  - 쿼리에 다른 인자를 더하거나, `name`을 둘 이상 보내거나, 같은 값을 다르게 인코딩한 요청에도 듣지 않는다.
+  - 본문 인자를 세므로 SecRequestBodyAccess On, SecRequestBodyLimitAction Reject(6.1의 운영 값)에서 쓴다. ProcessPartial이면 한도 뒤의 본문 인자를 세지 못한다.
+  - POST 본문 인자를 보려고 phase 2에서 돈다. 로컬룰 파일을 CRS 앞에 두므로(5.3) 같은 phase 2의 CRS 룰보다 먼저 돈다(5.1). CRS 뒤에 두면 듣지 않는다.
+  - 10114는 아래 전제에서만 이렇게 막는다. 하나라도 다르면 ModSecurity와 PHP가 인자를 다르게 나눠 `name`이 빠져나갈 수 있으므로 10114를 넣지 않는다.
+    - PHP `arg_separator.input`이 기본값 `&`이다. `;` 등을 더하면 본문 `a=1;name=X`가 ModSecurity에는 인자 `a` 하나로, PHP에는 `name`으로도 보인다.
+    - `SecCookieFormat 0`(기본값)이다. 1(v1 쿠키)이면 따옴표 안의 `;name=` 같은 쿠키를 두 쪽이 다르게 나눌 수 있다.
+    - modsecurity.conf-recommended의 본문 파싱 오류(`REQBODY_ERROR`)·multipart 엄격 검사(`MULTIPART_STRICT_ERROR`) 거부 룰(6.1 표의 200001·200002, 설정 판에 따라 id가 다를 수 있다)이 켜져 있다. 끄면 multipart 본문을 두 쪽이 다르게 읽을 수 있다.
+    - ModSecurity가 쓰는 PCRE가 8.34 이상(또는 PCRE2)이다. 그 아래에서는 `\s`가 세로 탭(0x0B)을 맞추지 않는데, PHP는 쿠키 이름 앞의 세로 탭도 지우므로 쿠키 `\vname`이 빠져나간다.
+- `/owner/entry/update/`는 화면에서 부르는 곳이 없어 10104에 넣지 않았다(부록 A.1 A4).
+- 주소 값은 도메인 이름으로 넣으면 931100에 걸리지 않는다. IP 주소 URL이 꼭 필요할 때만 아래 틀로 그 인자에서 931100 하나를 뺀다(`ctl:ruleRemoveTargetById=931100;ARGS:<인자>`).
+- 표에 없는 관리 입력이 걸리면 audit 로그의 경로·인자·태그로 아래 틀을 쓴다.
+
+```
+# 틀: <id>는 10115부터 쓴다. <경로>는 2.3절 접두어를 붙인 정규식, <태그>는 로그의 tag(예: attack-xss), <인자>는 로그의 ARGS 이름
+SecRule REQUEST_FILENAME "@rx ^<경로>/?$" "id:<id>,phase:1,pass,nolog,t:none,chain"
+	SecRule REQUEST_METHOD "@streq POST" "t:none,ctl:ruleRemoveTargetByTag=<태그>;ARGS:<인자>"
+```
+
+- 틀은 경로만으로 처리기가 정해지는 곳에 쓴다. 인자 값으로 처리기를 고르는 경로(예: `/owner/plugin/adminMenu`의 `name`)는 10114처럼 phase 2에서 쿼리 문자열 전체를 `@streq`로 비교하고, 본문·쿠키에 그 이름으로 시작하는 인자(`&ARGS_POST:/^[\s+]*<인자>/`, 앞 공백·`+` 포함)가 없을 때로 좁힌다. 4.9의 10114 전제도 같다.
+
+- 로그인 확인은 앱이 한다
+  - 로컬룰은 로그인 여부를 보지 않는다. 로그인하지 않은 요청도 경로와 메서드가 맞으면 그 인자가 검사에서 빠진다.
+  - 앱은 이 경로들에서 값을 쓰기 전에 권한(블로그 관리자, `/control/`은 서비스 관리자)과 출처(CSRF 토큰·Referer)를 확인한다. 실패하면 404·412로 끝나고 값은 쓰이지 않는다.
+  - 그래서 예외를 좁게 둔다. `^`로 고정한 경로, POST만, 인자 하나, 대상 제외(ctl, pass)만 쓴다. 같은 요청의 다른 인자·쿠키·헤더와 요청 형식 검사(920)는 그대로다.
+  - 공개 경로(`/api/owner/…` 등, 4.6 M4)에는 맞지 않게 한다. 하위 경로 설치면 2.3절 접두어를 붙인다.
+  - 쓰지 않는 기능의 예외는 넣지 않는다.
+  - 더 줄이려면 세션 쿠키가 있는 요청에만 예외를 둔다. 쿠키 이름은 `TSSESSION`에 서비스 도메인과 경로를 붙여 영문·숫자만 남긴 것이다. `service.session_cookie`를 정했으면 그 값이다. 쿠키는 꾸며 보낼 수 있으므로 인증이 아니다. 이 형식은 재지 않았다.
+
+```
+# 세션 쿠키 확인을 더한 꼴(10112 예). TSSESSION_LOGINID(로그인 아이디 기억 쿠키)는 세지 않는다
+SecRule REQUEST_FILENAME "@rx ^/control/server/rewrite/?$" "id:10112,phase:1,pass,nolog,t:none,chain"
+	SecRule REQUEST_METHOD "@streq POST" "t:none,chain"
+		SecRule &REQUEST_COOKIES:/^TSSESSION(?!_LOGINID)/ "@gt 0" "t:none,ctl:ruleRemoveTargetByTag=OWASP_CRS;ARGS:body"
+```
+
+## 5. 룰 파일 위치와 순서
+
+### 5.1 실행 순서
+
+- 같은 phase 안에서는 설정 순서대로 돈다.
+- RHEL 계열 패키지의 Include 순서
+  - `modsecurity.d/*.conf` → `modsecurity.d/activated_rules/*.conf` → `modsecurity.d/local_rules/*.conf`
+- 컨테이너 이미지(`owasp/modsecurity-crs`)의 순서(참고)
+  - `modsecurity.conf` → `modsecurity-override.conf` → `crs-setup.conf` → `rules/*.conf`
+  - 4.x 플러그인 순서: crs-setup → `plugins/*-config.conf` → `plugins/*-before.conf` → rules → `plugins/*-after.conf`
+
+### 5.2 phase 1 ctl이 듣는 범위
+
+- ctl은 실행된 뒤에 도는 룰에만 듣는다. ruleRemoveById는 매뉴얼에서 "should be specified before the rule in which it is disabling"이다.
+- CRS 뒤(local_rules)에 둔 phase 1 ctl
+  - CRS의 phase 2 룰에는 듣는다: 941·933·942·932·921, 3.3.x의 920420·920440·920120.
+  - CRS의 phase 1 룰에는 늦다: 920470·920480·920620, 4.x의 920420·920440.
+- 설정 시점에 쓰는 `SecRuleRemoveById`·`SecRuleUpdateTargetById`는 대상 룰보다 뒤에 와야 한다.
+- `<LocationMatch>` 안의 지시는 phase 2 이후 룰에만 듣는다(2.1).
+
+### 5.3 룰별 위치
+
+- CRS 3.3.x·4.x 공통
+  - 로컬룰 파일 전체(10101~10109, 3.3.x의 10111, 10112~10114)를 CRS 앞에 둔다. 자리는 crs-setup.conf 뒤, REQUEST-901 앞(재시험의 REQUEST-900 자리)이다.
+  - 4.x는 `REQUEST-900-EXCLUSION-RULES-BEFORE-CRS.conf` 또는 `plugins/*-before.conf` 자리다.
+  - RHEL 배치의 `local_rules/`는 activated_rules 뒤라 CRS 뒤다. 그래서 그 자리에 두지 않는다(5.1).
+  - 10110만 CRS 뒤에 둔다(4.8).
+- 1차 재현에서 확인한 것
+  - 현 로컬룰을 CRS 뒤(RESPONSE-999 자리)에 두었을 때 10101·10102·LocationMatch 블록이 3.3.10·4.25.2 모두에서 작동했다(3.2~3.4).
+- 재시험에서 확인한 것(같은 룰 파일을 CRS 앞·뒤에 둠, 1.3)
+  - 3.3.10 CRS 앞: 정상 121/122(T1e 403 점수 5, 941310 `ARGS:excerpt`). 10111을 더한 v2는 122/122.
+  - 3.3.10 CRS 뒤: 121/122(T1e 403 점수 10, 920480+941310). v2도 920480이 남아 점수 5로 403.
+  - 4.25.2 CRS 앞: 121/122(X1만, 시험 자료의 `http://localhost` img 때문, 4.5).
+  - 4.25.2 CRS 뒤: 92/122(E01p~E26p 920420, T1e 920480, F1l·F1s 920440, X1).
+  - 악성 18경우는 모든 구성에서 막혔다(4.6).
+  - 룰별 차이는 4.5 표에 적었다. 원인은 phase 1 룰(920480, 4.x의 920420·920440)이다(5.2).
+- 운영 서버의 Include 순서는 보고된 메인 설정대로 5.1의 RHEL 순서와 같다. 로컬룰 파일 위치와 crs-setup.conf를 읽는 위치는 확인 못 함. 적용 전에 확인한다.
+
+## 6. 메인 설정 값
+
+### 6.1 보고된 운영 서버 값과 제시안
+
+| 설정 | 운영 서버 값 | 기본값·근거 | 제시안 |
+|---|---|---|---|
+| SecRequestBodyNoFilesLimit | 131072 | 엔진 기본 1048576. 넘으면 413 | 올리는 것을 검토(6.4) |
+| SecRequestBodyLimit | 13107200 | 12.5MiB. 넘으면 413 | 그대로. PHP upload_max_filesize·post_max_size와 함께 맞춘다 |
+| SecRequestBodyInMemoryLimit | 131072 | 넘는 multipart는 디스크 임시 파일로 보낸다 | 오류가 아니다. 임시 디렉토리 쓰기 권한이 필요하다 |
+| SecPcreMatchLimit·SecPcreMatchLimitRecursion | 1000·1000 | 엔진 기본 1500. 1차 재현 이미지 기본 100000 | 100000으로 올리는 것을 검토(6.2) |
+| 200000 | text/xml → XML 처리기 | 패키지 설정 | 그대로. XML-RPC를 쓰면 10109 |
+| 200001·200002 | REQBODY_ERROR·MULTIPART_STRICT → 400 | 패키지 설정 | 그대로 |
+| 200003 | MULTIPART_UNMATCHED_BOUNDARY → deny, status:44 | 비표준 상태 코드 | status:400(6.5) |
+| 200004 | TX:/^MSC_/ !@streq 0 → deny | 패키지 설정 | 위치 확인. 한도를 올린 뒤 10110(선택, 6.3) |
+
+- 운영 서버의 그 밖의 값: SecRuleEngine On, SecRequestBodyAccess On, SecResponseBodyAccess Off, SecRequestBodyLimitAction Reject, SecStatusEngine On.
+- 큰 백업은 업로드 대신 서버 파일(`cache/backup/{blogid}.xml`)이나 web으로 가져온다(`interface/owner/data/import/index.php` 251~253).
+- 서버의 SecTmpDir 값은 확인 못 함.
+
+### 6.2 PCRE 한도 1000: 넘은 룰은 맞지 않은 것이 된다(fail-open)
+
+- `@rx`가 한도를 넘으면 그 룰의 결과는 no match다.
+  - 이때 `TX:MSC_PCRE_LIMITS_EXCEEDED=1`이 서고, 로그에 `Execution error - PCRE limits exceeded (-47)`이 남는다(re_operators.c, 1차 재현 로그).
+- 1차 재현(로컬룰 없음, D→S)
+  - 상태가 바뀐 경우는 없었다.
+  - 실행 오류 줄: 3.3.10 4 → 32, 4.25.2 29 → 65.
+  - 글 본문 B1~B5, 본문 없는 POST 26곳, 정상 대조에서는 D·S 모두 실행 오류가 0이었다.
+  - 점수는 아래처럼 줄었다.
+
+| 경우 | 3.3.10 D→S | 3.3.10에서 빠진 탐지 | 4.25.2 D→S | 4.25.2에서 빠진 탐지 |
+|---|---|---|---|---|
+| HSK | 70→60 | 932130·932140 | 65→60 | 932140 |
+| HST | 20→20 | 없음(실행 오류 0→3) | 통과→통과 | 없음(실행 오류 5→12) |
+| HC2 | 100→85 | 932130·932140 | 100→95 | 932140 |
+| HC1p | 140→120 | 932140·941160 | 130→110 | 932140·932235 |
+
+- 뜻
+  - 한도를 넘은 룰은 탐지를 잃는다.
+  - 이번에는 모든 경우가 임계 5를 크게 넘어 상태가 같았다. 점수가 임계에 가까운 요청이라면 빠진 탐지 때문에 통과할 수 있다.
+- 4.25.2의 932230·932235·932250·932260·932340은 이미지 기본값 100000(D)에서도 실행 오류를 냈다.
+- 1차 재현 B 구성(현 로컬룰)에서는 D·S의 차이가 0건이었다. 로컬룰이 빼는 인자가 실행 오류가 나던 인자와 같았기 때문이다.
+- 제시안: SecPcreMatchLimit·SecPcreMatchLimitRecursion을 100000으로 올린다(운영 서버에는 제시만 한다).
+  - 근거(재시험): 권장 로컬룰을 둔 D(100000) 구성에서는 정상 122 가운데 실행 오류가 난 경우가 0이었다. S(1000) 구성에서는 T1e에서 941160 실행 오류가 1개 났다.
+  - 올리면 요청당 CPU 부담과 ReDoS 위험이 커진다.
+  - 100000은 1차 재현·재시험 이미지의 기본값이다. PCRE 한도의 공식 권장값은 확인 못 함.
+  - S에 PCRE 한도만 100000으로 넣은 구성은 측정하지 않았다.
+  - 4.25.2는 100000에서도 932230 등이 실행 오류를 낸다(위).
+- 한도를 넘은 요청을 막는 감시 룰(10110)은 한도를 올린 뒤의 선택이다(6.3, 4.8). 1000을 유지하면 10110을 넣지 않는다.
+
+### 6.3 200004가 발동하지 않는다
+
+- 운영 서버의 200004는 `TX:/^MSC_/`가 0이 아니면 deny한다. PCRE 한도를 넘은 요청을 막는 룰이다.
+- 1차 재현
+  - 200004(S)와 이미지의 같은 꼴 룰 200005(D)는 한 번도 발동하지 않았다.
+  - 같은 요청에서 측정 전용 phase 5 기록 룰은 `TX:MSC_PCRE_LIMITS_EXCEEDED=1`을 기록했다.
+- 원인
+  - 200004는 `modsecurity.conf` 안의 phase 2 룰이고 CRS보다 앞에 있다.
+  - 같은 phase 안에서는 설정 순서대로 돈다. 그래서 CRS phase 2 룰이 변수를 세우기 전에 200004의 평가가 끝난다.
+- 보고된 운영 서버 메인 설정에서도 200004는 CRS Include 줄보다 앞에 있다. 그래서 같은 일이 생긴다(1차 재현 S).
+- 제시안: PCRE 한도를 올린 뒤 같은 검사를 CRS 뒤에 둔다(10110, 선택, 4.8). 한도 1000을 유지하면 넣지 않는다.
+- 재시험: 4.25.2는 로컬룰이 없는 HST에서 10110이 발동했다(D·S). 권장 로컬룰과 함께 두면 D에서는 정상 경우를 막지 않았다. S에서는 4.25.2와, 10111을 둔 3.3.10에서 정상 T1e가 10110으로 403이 됐다(4.8). 10111이 없는 3.3.10 S에서는 T1e가 이미 941310으로 403이었다.
+
+### 6.4 413과 SecRequestBodyNoFilesLimit
+
+- 원인과 1차 재현 결과는 3.5절에 적었다.
+- 제시안 1: 전역 값을 1048576(엔진 기본값)으로 올린다. 검사할 본문과 메모리가 늘어난다.
+- 제시안 2: 글·스킨 편집 경로만 올린다.
+
+```
+<LocationMatch "^/owner/(?:entry/(?:add|draft|finish)|skin/edit/(?:skin|crop))/">
+	SecRequestBodyNoFilesLimit 1048576
+</LocationMatch>
+```
+
+- 접두어는 2.3절대로 바꾼다.
+- `<LocationMatch>` 안에서 이 지시는 효과가 있었다(재시험, 위 블록과 같은 내용, 본 측정 8회).
+  - HC1(146,889B)·B7(176,079B)은 통과(503).
+  - M15a(글 본문 1,231,077B, 1 MiB 초과)는 413. 4.25.2는 920450 경고가 함께 났다.
+  - 경로 밖 M15b(댓글 164,439B)는 전역 131072로 413.
+- XML-RPC 본문도 이 한도를 받는다(3.5).
+
+### 6.5 200003의 status:44
+
+- 운영 서버의 200003은 `deny,status:44`다. 1차 재현 이미지(ModSecurity 2.9.15)의 upstream 설정 사본에서 같은 꼴 룰(이미지 id 200004, `@eq 1`)은 상태를 지정하지 않은 deny다(기본 403). status:44는 없다.
+- 업로드(아이콘·첨부·백업·OPML)에서 걸리면 비표준 상태 코드로 응답한다. 실제 응답은 확인 못 함.
+- 제시안: 200001·200002와 같이 `status:400`으로 바꾼다.
+- MULTIPART_UNMATCHED_BOUNDARY 변수의 위키 정의는 확인 못 함.
+
+## 7. CRS 버전별 차이
+
+### 7.1 배포판별 CRS 판 (조사 시점 기준)
+
+| 배포판 | CRS |
+|---|---|
+| EL8 | 3.3.4 |
+| EL9 | 3.3.5 |
+| CentOS Stream 10 | 4.22.0 |
+| Ubuntu 24.04 | 3.3.5 |
+| Ubuntu 25.04·25.10 | 3.3.7 |
+| Ubuntu 26.04 | 3.3.8 |
+| Ubuntu 26.10 | 3.3.9 |
+| Debian 12 | 3.3.4 |
+| Debian 13 | 3.3.7 |
+| Debian sid | 3.3.9 |
+| Fedora 43 | 4.15.0 |
+
+### 7.2 3.3.4 대비 3.3.5~3.3.10
+
+- 3.3.5(2023-07-18)
+  - 920620 신설(CVE-2023-38199, Content-Type 헤더가 둘 이상이면 잡음, phase 1). EAF4·jQuery·form은 Content-Type을 하나만 보낸다. 영향 없음(정적 추적).
+  - 921422 점수 수정. 영향은 확인 못 함.
+- 3.3.6(2024-08-27)
+  - 922130 신설(multipart 파트 헤더). 파일 이름 `회의 10:30.txt`처럼 공백·한글 뒤에 `:`가 오는 드문 경우만 걸린다(정규식 읽기만 함). 보통의 한글 파일 이름은 걸리지 않는다.
+  - 920120(PL1)·920121(PL2)이 파일 이름의 `\`도 막는다. 브라우저가 파일 이름에 경로를 붙이면 막힌다. 현대 브라우저가 이름만 보내는지는 확인 못 함.
+- 3.3.7(날짜 확인 못 함)·3.3.8(2026-01-05)·3.3.9(2026-03-28)
+  - 보안 수정이며 룰 ID 변화는 없다. 로컬룰 ID에는 영향이 없다. 세부 내용은 확인 못 함.
+- 3.3.10(2026-07-01)
+  - GHSA-6jp8-c2w2-x7wr: 공격 탐지 룰 대상에 `XML://@*`(속성값)를 더했다. 901180·901181이 기본으로 끈다. 켜는 자리는 crs-setup 900510이다.
+  - 규칙 파일 주석: ModSecurity v2에서 `ctl:ruleRemoveTargetByTag`로 `XML://@*`를 뺄 수 없다(ModSecurity issue 3591). v2 2.9.14 이상, v3 3.0.16 이상이 필요하다.
+  - XML-RPC 본문에는 보통 속성이 없다. 클라이언트별로는 확인 못 함.
+  - GHSA-f5qm-3h4p-8qhg: 내용은 확인 못 함.
+  - 3.3.10 이미지에서도 901162 기본값에 text/plain이 없고, 920420은 phase 2, 920480은 phase 1이다. 1차 재현에서 3.3.10의 920420 판정은 운영 서버(3.3.4) 로그와 같았다(3.1).
+
+### 7.3 1차 재현: 3.3.10과 4.25.2의 차이 (로컬룰 없음, 이미지 기본 설정)
+
+| 항목 | 3.3.10 | 4.25.2 | 영향 |
+|---|---|---|---|
+| 920420 | phase 2 | phase 1 | 결과 같음 |
+| 921110 | CSS의 `post img,` 뒤 줄바꿈에 걸림 | 메서드 뒤 `http/숫자`가 있어야 걸림 | 3.3.10은 HST를 막고, 4.25.2는 통과시킴 |
+| 934110·934190 | 없음 | 있음 | localhost img가 든 B2에 점수 10 추가 |
+| HSK·HC 계열 탐지 | 932150·941140 탐지 | 이 둘이 없고 932235 탐지 | 70→65, 140→130 |
+| PCRE 실행 오류(이미지 기본) | 4줄(942240) | 29줄(932230·932235·932250·932260·932340·942240) | 4.x의 새 RCE 룰은 기본 한도에서도 실행 오류를 냄 |
+| 상관 로그 | 980130 | 980170 | 8.1절 |
+
+### 7.4 4.x 메모 (4.25.2 이미지의 규칙 파일 기준)
+
+- 파일 구성
+  - REQUEST-903.900x 파일이 없다. 대신 `plugins/`가 있다.
+  - `REQUEST-999-COMMON-EXCEPTIONS-AFTER.conf`가 새로 있다.
+- phase 1로 옮긴 룰: 920420·920440·920480. 예외는 CRS 앞에 둔다(5.3).
+- 920440: restricted_extensions가 늘었다(.sh·.sqlite·.sqlite3·.tmp·.temp·.pem·.crt·.copy·.save·.sav·.swap·.bk·.bkp·.back·.bck·.dist·.inf·.reg 등).
+- 920480: 기본 charset 목록이 `|utf-8| |iso-8859-1| |iso-8859-15| |windows-1252|` 꼴이다. 10107의 4.x 형식이 다른 이유다(4.4).
+- 920120: 허용 목록 꼴로 바뀌었다. `"`·`'`·`;`·`=`·`\`는 허용 목록 밖이다.
+- 941100: 대상에 `XML://@*`가 더해졌다. `__utm` 쿠키 예외가 빠졌다.
+- 941140: CSS `url(javascript` 꼴로 바뀌었다. 대상에 REQUEST_FILENAME, 변환에 t:removeWhitespace가 더해졌다.
+- 941160·941310: 대상에 REQUEST_FILENAME이 더해졌다.
+- 941310: 정규식의 `\x{bc}`는 PCRE 비UTF 모드에서 바이트 0xBC다. 그러면 3.6절의 한국어 결과와 같다. 엔진이 UTF 모드로 컴파일하는지는 확인 못 함. 재시험에서 4.25.2는 B6·T1e에 941310이 발동하지 않았다(3.6). 원인은 확인 못 함.
+- 922160: 새로 있다. 내용은 확인 못 함.
+- 4.x에서 v2의 XML 속성 known issue가 고쳐졌는지는 확인 못 함. 4.25.2 파일 주석에는 그 문구가 없다.
+- 배포판의 4.22.0(CentOS Stream 10)·4.15.0(Fedora 43)과 4.25.2의 차이는 확인 못 함.
+- 로컬룰 ID 10101~은 4.x에서도 그대로 쓸 수 있다.
+
+## 8. 문제 찾기
+
+### 8.1 로그 읽기
+
+- Apache error_log의 ModSecurity 줄에서 다음을 본다: `[id "…"]`, `[msg "…"]`, `[data "…"]`, `[uri "…"]`, `[unique_id "…"]`.
+- 같은 요청의 줄은 unique_id가 같다. 차단 줄에서 시작해 같은 unique_id의 탐지 줄을 모은다.
+- 920420 탐지 줄의 꼴(줄여 적음)
+
+```
+[client <client>] ModSecurity: Warning. Match of "within %{tx.allowed_request_content_type}" against "TX:content_type" required. [file "…/REQUEST-920-PROTOCOL-ENFORCEMENT.conf"] [line "…"] [id "920420"] [msg "Request content type is not allowed by policy"] [data "|text/plain|"] … [hostname "<host>"] [uri "/owner/skin/sidebar/order"] [unique_id "…"]
+```
+
+- 차단 줄(949110)
+  - 3.3.x: `Access denied with code 403 (phase 2). Operator GE matched 5 at TX:anomaly_score.` msg에 Total Score가 찍힌다.
+  - 4.25.2: 비교 변수가 `TX:blocking_inbound_anomaly_score`다.
+- 상관 줄
+  - 3.3.x: 980130 "Inbound Anomaly Score Exceeded (Total Inbound Score: 5 - SQLI=0,XSS=0,…)"
+  - 4.25.2: 980170 "Anomaly Scores: (Inbound Scores: blocking=5, …"
+- PCRE 한도: `Execution error - PCRE limits exceeded (-47)`. 이 룰은 탐지를 잃은 것이다(6.2).
+- 본문 한도: `Request body no files data length is larger than the configured limit (131072).`(3.5)
+- 운영 서버의 audit 로그는 RelevantOnly `^(?:5|4(?!04))`다. 400·403·413은 기록되고 404는 기록되지 않는다.
+
+### 8.2 분류별 대응
+
+- 920420, data `|text/plain|`, `/owner/…`·`/trackback/delete/…`의 POST
+  - EAF4.js 수정판이 쓰이는지 본다(8.3). 그동안 10103을 둔다.
+- 941·932·933·942, `ARGS:content`, `/owner/entry/` 아래 add·draft·finish
+  - 10104.
+- `ARGS:body`, `/owner/skin/edit/skin/`
+  - 10101. `REQUEST_BODY`의 921110이면 바꾼 10101.
+- `ARGS:skinCode`·`ARGS:currentCode`, `/owner/skin/edit/crop/`
+  - 10102.
+- `ARGS:text`, `/owner/skin/sidebar/setPlugin`·`/owner/skin/coverpage/setPlugin`
+  - 10105. 다른 인자 이름이면 10105에 더한다.
+- `ARGS:DATA`, `/owner/plugin/receiveConfig`
+  - 10106(v3.216 이전 판만). v3.216부터는 DATA가 base64라 필요 없다.
+- 920480, `/trackback/{id}`
+  - 10107.
+- 920440, `/attach/…`
+  - 10108.
+- `XML:/*`, `/api`
+  - 10109.
+- 920120
+  - 파일 이름에서 `'`·`"`·`;`·`=`·`\`를 빼고 올린다.
+- 413, no files 문구
+  - 6.4.
+- 413, 업로드
+  - SecRequestBodyLimit(13107200)와 PHP 한도를 본다. 큰 백업은 서버 파일이나 web으로 가져온다(6.1).
+- PCRE 실행 오류
+  - 6.2·6.3.
+- 상태 코드 44
+  - 6.5.
+- 댓글·방명록에서 941·942
+  - 예외를 두지 않는다(3.7).
+- `ARGS:body`, `/control/server/rewrite/`(관리 화면 .htaccess 저장, 화면에 "HTTP 403" 안내)
+  - 10112.
+- 941, `ARGS:description`, `/owner/setting/blog/description/`
+  - 10113.
+- `ARGS:content`, `/owner/plugin/adminMenu?name=ST_Pages/ST_Pages_manage`(페이지 플러그인 저장)
+  - 10114.
+- 위에 없는 `/owner/`·`/control/` 요청이 막히면(관리 화면 Ajax 저장이면 화면에 "HTTP 403" 안내, 4.9)
+  - 경로·인자·룰 id를 모아 그 인자에만 듣는 예외를 만든다. URL 전체나 룰 전체를 끄지 않는다.
+
+### 8.3 EAF4.js 수정판이 쓰이는지 확인
+
+- 수정판 EAF4.js의 480행에는 `(v3.207)`로 끝나는 `Textcube-NG` 주석이 있다.
+- r3-14부터는 관리 화면 403 안내 함수 `HTTPRequest.prototype._ngNotifyForbidden`도 있다(4.9).
+- `library/view/view.php` 84와 `interface/login/index.php` 161은 EAF4.js 주소 뒤에 `?v=`와 파일 수정 시각을 붙여 부른다. 파일을 바꾸면 부르는 주소도 바뀐다.
+- `externalresources`가 true면 EAF4.js를 외부 리소스 주소(`TEXTCUBE_RESOURCE_URL`, 1.10.9 판)에서 읽는다. 이때는 수정판이 쓰이지 않는다. 기본값은 false다(`framework/id/textcube/config.default.php` 90).
+- 적용 뒤에는 사이드바 순서 바꾸기·댓글 삭제 등을 하고, audit 로그에 920420이 더 나지 않는지 본다.
+
+## 9. 점검 목록
+
+### 9.1 적용 순서
+
+1. 설치 형태를 확인하고 접두어를 정한다(2절).
+2. CRS 판과 Include 순서, 로컬룰 파일의 위치를 확인한다(5.1, 7.1).
+3. EAF4.js 수정판(v3.207)이 쓰이는지 확인한다(8.3).
+4. 10103을 넣는다. 옛 EAF4.js를 쓰는 브라우저가 없어지면 지운다.
+5. 기존 LocationMatch 블록을 지우고 10104를 넣는다.
+6. 10101에 921110 `REQUEST_BODY` 제외를 더한다(3.3.x).
+7. 10105를 넣는다.
+8. 선택 룰(10106~10109, 3.3.x의 10111, 10112~10114)은 그 기능을 쓰고 로그에 걸릴 때만 넣는다.
+9. 로컬룰 파일 전체를 CRS 앞(crs-setup.conf 뒤, REQUEST-901 앞)에 둔다. `local_rules/`에 두지 않는다. 10110만 CRS 뒤에 둔다(5.3).
+10. SecRequestBodyNoFilesLimit을 정한다(6.4).
+11. PCRE 한도를 100000으로 올리는 것을 검토한다(6.2). 올린 뒤 200004가 CRS보다 앞이면 10110을 검토한다. 1000을 유지하면 10110을 넣지 않는다(6.3).
+12. 200003을 status:400으로 바꾸는 것을 검토한다(6.5).
+13. 설정을 다시 읽은 뒤 글 저장(add·draft·finish), 스킨 편집·잘라 편집, 사이드바 순서 바꾸기, 댓글 삭제를 해 보고 로그를 본다(8.1).
+
+### 9.2 확인 못 한 것
+
+1. mod_rewrite fixup 훅과 ModSecurity phase 2 훅의 순서. 판정이 원 요청 기준이라는 점은 소스와 운영 서버 로그로 확인했다.
+2. fancyURL 0을 주는 설정 위치. fancyURL 0·1에서 REQUEST_URI 룰이 실제로 맞는지.
+3. Fetch 규격의 extract 원문(text/plain;charset=UTF-8). 운영 서버 로그(data `|text/plain|`)로 대신 확인했다.
+4. 잘라 편집의 currentTag·nextTag 값 모양.
+5. setPlugin 인자 이름 전수(동봉 플러그인 전체 index.xml).
+6. 플러그인별로 receiveConfig `DATA`가 941에 걸리는지: v3.216으로 해소. 새 형식은 설정 14종(`N_*`)과 화면 크기 XML 12종(`NM01`–`NM12`)이 CRS 3.3.10·4.25.2 D·S PL1 4구성 모두 통과(옛 형식 대조는 모두 403). v3.216 이전 판 재시험은 ST_TeamBlogSettings 기본값(P3) 하나만 쟀다.
+7. 본문 없는 `.send()` 39곳(REL, tinymce.min.js 1곳 포함)의 분류. 이 문서는 EAF4 리뷰가 정리한 POST 26곳(부록 A.2)을 따른다. 나머지 호출은 이 문서에서 다시 확인하지 않았다. 39곳 가운데 `/owner/`·`/trackback/delete/` 밖 경로가 있는지는 확인 못 함. 있으면 10103 접두어에 더한다.
+8. MULTIPART_UNMATCHED_BOUNDARY 변수의 위키 정의. 200003 `status:44`의 실제 응답.
+9. PCRE 한도의 공식 권장값. S에 100000만 넣은 구성은 재지 않았다.
+10. 921422 변경의 PL1 영향. 3.3.7~3.3.9 보안 수정의 세부. GHSA-f5qm-3h4p-8qhg 내용.
+11. 현대 브라우저가 multipart 파일 이름에 경로를 붙이는지(920120 `\`).
+12. XML-RPC 클라이언트가 속성을 보내는지. v2에서 `XML:/*` 대상 제외가 동작하는지.
+13. 4.25.2의 922160 내용. 4.x에서 v2 XML 속성 known issue가 고쳐졌는지. 4.15·4.22와 4.25.2의 차이.
+14. 3.3.4 restricted_extensions를 3.3.10 목록과 한 줄씩 대조하지 않았다.
+15. 서버의 SecTmpDir 값.
+16. 엔진 판정. 920420(8구성)과 PCRE 1000의 영향은 1차 재현으로 확인했다. 941310 한국어 판정은 재시험 B6로 확인했다(3.3.10은 403 점수 5 `ARGS:content`, 4.25.2는 통과). 10104·10111 경로 밖의 한국어 필드는 확인 못 함.
+17. 운영 서버의 CRS 3.3.4 백포트와 3.3.10의 룰 차이. 운영 서버의 ModSecurity 버전·crs-setup·로컬룰 파일 위치.
+18. 1차 재현에서 재지 않은 것: 응답 단계, multipart·JSON·XML 요청, PL2 이상, periwinkle 밖 스킨.
+19. 재시험에서 재지 않은 것: S에 PCRE 한도만 100000으로 넣은 구성, 4.25.2 CRS 뒤의 v2와 phase 1 대상 제거 룰만 앞으로 나눈 변형, 응답 단계, 대표 요청 밖의 입력(1.3).
+20. 10112~10114(4.9): 대상 경로에서 실제로 걸리는 룰과 룰을 넣은 뒤의 통과. 세션 쿠키 확인을 더한 꼴의 동작. 10114의 이름 변형(앞 공백·`+`·NUL) 요청. ModSecurity v3에서 정규식 이름 개수 조건(`&ARGS_POST:/…/`)의 동작.
+
+## 부록 A. 요청 전수 표
+
+### A.1 요청별 요약 (루트 설치 기준, REL 코드 기준)
+
+- "관련 룰"은 3.3.4 PL1에서 걸릴 수 있는 룰이다(룰 읽기 기준). 1차 재현에서 잰 것은 3.1~3.5절에 적었다.
+- 요청 번호 B1~B8은 3절의 글 본문 B1~B5와 다르다.
+
+| # | URL | 메서드 | Content-Type | 매개변수 | 관련 룰 | 대응 |
+|---|---|---|---|---|---|---|
+| A1 | `/owner/entry/add/` | POST | urlencoded | content(HTML), title, tag 등 15개 | 941·933·942, 932(1차 재현) | 10104 |
+| A2 | `/owner/entry/draft/` | POST | urlencoded | A1 + draft | 같음 | 10104 |
+| A3 | `/owner/entry/finish/` | POST | urlencoded | A1과 같음 | 같음 | 10104 |
+| A4 | `/owner/entry/update/` | — | — | — | UI 호출 없음 | 대상 아님 |
+| A5 | 공지·키워드·서식 `/owner/entry/post?category=-2/-1/-4` | GET(편집 화면) | — | — | 저장은 A1~A3 | A1~A3에 따름 |
+| B1 | `/owner/skin/edit/skin/` | POST | urlencoded | body(스킨 HTML·CSS), mode, file | 941·933·932·921110 | 10101 |
+| B2 | `/owner/skin/edit/crop/` | POST | urlencoded | skinCode, currentCode, currentTag, nextTag | 941·933, 413 | 10102, 6.4 |
+| B3 | `/owner/skin/sidebar/setPlugin?…` | POST | 본문이 있으면 urlencoded, 비면 text/plain | 플러그인 index.xml이 정함 | 941(SB_Banner text), 920420 | 10105, v3.207 |
+| B4 | `/owner/skin/coverpage/setPlugin?…` | POST | 같음 | 같음 | 같음 | 10105, v3.207 |
+| B5 | `/owner/skin/sidebar/order?…`, `/owner/skin/coverpage/order?…` | POST | text/plain(본문 없음) | 쿼리만 | 920420 | v3.207, 10103 |
+| B6 | `/owner/skin/sidebar/register?…`, `/owner/skin/coverpage/register?…` | POST | text/plain(본문 없음) | 쿼리만 | 920420 | v3.207, 10103 |
+| B7 | 사이드바·표지 화면의 form(order·register) | form POST | urlencoded | — | 920420 아님 | 대상 아님 |
+| B8 | 사이드바·표지 preview | GET | — | 번호만 | — | 대상 아님 |
+| C1 | 본문 없는 `.send()` 39곳(REL) | GET·POST | POST이면 text/plain(수정 전) | — | 920420(POST인 것) | v3.207, 10103 |
+| D1 | `/owner/plugin/receiveConfig` | POST | urlencoded | Name, DATA(v3.216부터 base64, 이전 판은 XML 문자열) | v3.216 없음(PL1 4구성 통과), 이전 판 941(재시험 P3) | v3.216 없음, 이전 판 10106(선택) |
+| D2 | `/owner/setting/blog/` 아래 title·description | POST | urlencoded | title, description | 941(HTML을 넣으면) | description은 10113(선택, `/owner/setting/blog/description/`). title은 보통 평문 |
+| D3 | 블로그 아이콘 | POST | multipart | FILES logo·favicon·blogIcon | 920120, 200003 | 파일 이름 바꾸기 |
+| E1 | `/comment/add/{id}` | POST | urlencoded | 댓글 본문 등 | 941·942 등 | 예외 두지 않음 |
+| E2 | `/comment/add/0`(방명록) | POST | urlencoded | 같음 | 같음 | 예외 두지 않음 |
+| E3 | `/comment/comment/{id}`, `/comment/modify/{id}` | POST | urlencoded | 같음 | 같음 | 예외 두지 않음 |
+| E4 | `/trackback/{id}` | POST | urlencoded; charset=… | url, title, excerpt, blog_name | 920480, 941(excerpt) | 10107(선택) |
+| E5 | `/api`(XML-RPC) | POST | text/xml | XML 본문 | 200000 뒤 XML:/*에 941·933, 413 | 10109(선택), 6.4 |
+| E6 | `/line` | GET·POST | urlencoded | key, mode, content, category, page | 941(content HTML) | 영향 작음 |
+| E7 | `/attach/{blogid}/{10자리}.{확장자}` | GET(정적 파일) | — | — | 920440 | 10108(선택) |
+| F1 | `/owner/data/import/` | POST | multipart / urlencoded | importFrom, backupURL, correctData, FILES backupPath | 413(13107200), 920120, 200003 | 큰 백업은 server·web |
+| F2 | `/owner/entry/attach/{id}`, `/owner/entry/attachmulti/` | POST | multipart | FILES attachment / Filedata | 920120, 413(13107200), 200003 | 파일 이름·크기 안내 |
+| F3 | `/owner/reader/opml/import/file/` | POST | multipart | FILES opmlFile | 920120 | 파일 이름 안내 |
+| F4 | `/owner/entry/attachmulti/orphandelete/` | POST | 없음(body null) | — | 920420 아님 | 대상 아님 |
+| G1 | `/control/server/rewrite/` | POST | urlencoded | body(.htaccess 전체) | 941·930·932·933(룰 읽기 추정) | 10112(선택) |
+| G2 | `/control/server/` 아래 config·rootredirect·pathrouting·domainrouting | POST | urlencoded | 주소 값(4.9 표) | 931100(IP 주소 URL을 넣으면) | 예외 두지 않음 |
+| G3 | `/owner/network/teamblog/invite/`, `/owner/setting/account/invite/` | POST | urlencoded | comment | 941(HTML을 넣으면) | 예외 두지 않음 |
+| G4 | `/owner/plugin/adminMenu?name=ST_Pages/ST_Pages_manage` | form POST | urlencoded | content(페이지 본문 HTML), title, path 등 | 941·933·942·932(룰 읽기 추정) | 10114(선택) |
+
+- 스킨·플러그인 파일을 올리는 화면은 없다.
+
+### A.2 본문 없는 POST 26곳 (EAF4.js v3.207 대상, 1차 재현 경우)
+
+- 1차 재현에서 수정 전 text/plain은 26곳 모두 403, 수정 후 urlencoded는 26곳 모두 통과였다(8구성).
+- 같은 URL을 호출처가 달라 따로 센 것: E10·E14·E20, E19·E23.
+
+| 번호 | URL |
+|---|---|
+| E01 | `/owner/data/backup?includeFileContents=true` |
+| E02 | `/owner/plugin/tableSetting/delete?name=Example&type=table` |
+| E03 | `/owner/entry/attachmulti/refresh/1` |
+| E04 | `/owner/entry/size?parent=1` |
+| E05 | `/owner/skin/coverpage/order?…` |
+| E06 | `/owner/skin/coverpage/register?…` |
+| E07 | `/owner/reader/action/mark/allread/` |
+| E08 | `/owner/skin/sidebar/order?…` |
+| E09 | `/owner/skin/sidebar/register?…` |
+| E10 | `/owner/communication/trackback/log/remove/1` |
+| E11 | `/owner/communication/comment/delete/1` |
+| E12 | `/owner/communication/notify/delete/1` |
+| E13 | `/owner/communication/trackback/delete/1` |
+| E14 | `/owner/communication/trackback/log/remove/1` |
+| E15 | `/owner/communication/trash/comment/delete/1` |
+| E16 | `/owner/communication/trash/comment/revert/1` |
+| E17 | `/owner/communication/trash/trackback/delete/1` |
+| E18 | `/owner/communication/trash/trackback/revert/1` |
+| E19 | `/owner/entry/delete/1` |
+| E20 | `/owner/communication/trackback/log/remove/1` |
+| E21 | `/owner/network/link/delete/1` |
+| E22 | `/trackback/delete/1` |
+| E23 | `/owner/entry/delete/1` |
+| E24 | `/owner/reader/update/1` |
+| E25 | `/owner/skin/sidebar/setPlugin?…`(설정 값이 없을 때만 본문이 빈다) |
+| E26 | `/owner/skin/coverpage/setPlugin?…`(같음) |
+
+### A.3 재시험 경우와 표의 대응
+
+- 재시험 경우 이름은 A.1 표 행 번호와 겹치므로 `R:` 접두어를 붙인다(예: `R:F1`, `R:C1`).
+- 상태·점수의 자세한 내용은 3.2~3.6, 4.5, 4.6에 적었다. 아래 상태는 D 기준이고, 괄호 안은 점수다.
+- 1차 재현 105경우는 이 표에 넣지 않았다. 권장 로컬룰을 CRS 앞에 두면 두 이미지 모두 기대값과 같았다(5.3).
+
+| 재시험 경우 | 요청 | A.1 행 | 룰 없음(A) | CRS 앞 |
+|---|---|---|---|---|
+| `R:B6` | 글 저장 4경로(`/owner/entry/finish/1`·`/owner/entry/finish/`·`/owner/entry/draft/1`·`/owner/entry/add/`), 376B | A1~A3 | 3.3.10 403(5), 4.25.2 503 | 503 |
+| `R:B7` | 글 저장 3경로(`finish/1`·`draft/1`·`add/`), 한글 17,081자 176,079B | A1~A3 | 413 | 503 |
+| `R:P1` | `/owner/skin/sidebar/setPlugin?…` | B3 | 403(20) | 503 |
+| `R:P2` | `/owner/skin/coverpage/setPlugin?…` | B4 | 403(20) | 503 |
+| `R:P3` | `/owner/plugin/receiveConfig` | D1 | 403(10) | 503 |
+| `R:P3`(v3.216 새 형식) | `/owner/plugin/receiveConfig` | D1 | 503(0) | 측정 안 함 |
+| `R:T1e` | `/trackback/1`, charset=euc-kr | E4 | 3.3.10 403(10), 4.25.2 403(5) | 3.3.10 403(5)(v2는 503), 4.25.2 503 |
+| `R:T1u` | `/trackback/1`, utf-8 | E4 | 503 | 503 |
+| `R:F1l`·`R:F1s` | `/attach/1/1234567890.log`·`.sql` | E7 | 403(5) | 503 |
+| `R:F1j` | `/attach/1/1234567890.jpg` | E7 | 503 | 503 |
+| `R:X1` | `/api` newPost(img 주소 `http://localhost`) | E5 | 3.3.10 403(10), 4.25.2 403(20) | 3.3.10 503, 4.25.2 403(10) |
+| `R:X1h` | `/api` newPost(img 주소 example.com) | E5 | 403(10) | 503 |
+| `R:C1` | `/comment/add/1` | E1 | 503 | 503 |
+
+- 악성 경우와 A.1 행의 대응(요청과 상태는 4.6 표)
+  - A1: `R:M2`
+  - A3: `R:M1`·`R:M15a`
+  - B1: `R:M8`
+  - B2: `R:M14a`·`R:M14b`
+  - B3: `R:M9`
+  - B5: `R:M5`·`R:M7`
+  - D1: `R:M12`
+  - E1: `R:M3`·`R:M6`·`R:M15b`
+  - E4: `R:M13`
+  - E5: `R:M11`
+  - E7: `R:M10a`·`R:M10b`
+  - A.1 밖: `R:M4`(`/api/owner/entry/finish/`, 10104의 `^` 고정 확인)

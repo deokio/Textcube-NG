@@ -1,0 +1,33 @@
+@charset "utf-8";
+/* PHP port(Textcube-NG): r3-11 편집기 되돌림 CSS(사용자 결정 11-08 B1·B2, 원본에 없는 새 파일).
+   ED_tinyMCE·ST_Pages 편집기의 설정 skinstyle 이 local·cdn 일 때 블로그 화면용 CSS(skin.html 의 로컬 CSS) 뒤, 스킨 wysiwyg.css(없으면 default-wysiwyg.css) 앞에 읽는다
+   (library/model/blog.skin.php getSkinEditorStyles, 사용자 결정 11-08 (a)). none(기본값)에서는 읽지 않는다.
+   편집기 본문(body.mce-content-body)에 스킨 본문 자리를 감싼 요소들의 class(body 안쪽, 바깥 → 안쪽)를 모두 주므로(B2),
+   그 class 와 body 에 걸린 배치 규칙(위치·float·너비·높이·바깥 여백·변형)이 편집 구역을 깨지 않도록 그것만 되돌린다(예: standard .article 의 width 500px·overflow hidden).
+   또 블로그 화면용 CSS 가 html 에 준 글자 크기(예: periwinkle css/bootstrap.css 의 html font-size 62.5%)를 브라우저 기본값 100% 로 되돌린다(사용자 결정 11-08 B2).
+   그 뒤 편집기 JS(ED_tinyMCE/index.php·ST_Pages/index.php, 사용자 결정 11-08 18:4x)가 블로그 화면에서 본문이 받는 글자 크기를 편집기 안에서 재어 html 에 inline
+   font-size(!important)를 주어 편집 구역 본문 글자 크기를 맞춘다. 재지 못하면 이 100% 그대로 둔다. rem 으로 정한 글자 크기는 맞추지 못한다.
+   배경·글자 색·글꼴 종류·안쪽 여백·테두리 등 모양은 넣지 않아 블로그 화면용 CSS·wysiwyg.css 값이 그대로 걸린다. margin 8px 은 지금 편집기 본문(브라우저 기본 body 여백)과 같은 값이다.
+   overflow 는 TinyMCE autoresize 가 body 에 style 로 주는 overflow-y 를 이기지 않도록 !important 없이 선택자 세기(0,1,2)로만 되돌린다 */
+html {
+	font-size:100%!important;
+}
+
+html body.mce-content-body {
+	position:static!important;
+	top:auto!important;
+	right:auto!important;
+	bottom:auto!important;
+	left:auto!important;
+	float:none!important;
+	clear:none!important;
+	width:auto!important;
+	min-width:0!important;
+	max-width:none!important;
+	height:auto!important;
+	min-height:0!important;
+	max-height:none!important;
+	margin:8px!important;
+	transform:none!important;
+	overflow:visible;
+}

@@ -1,0 +1,101 @@
+
+Textcube 1.10 Simple task flow
+=========================
+                                                                        By J.K.Shin (inureyes@gmail.com)
+
+------------
+Requesting
+                                                        interface/~
+------------                                                 |
+Dispatching                                           +------+------+
+                                                      |             |
+                                                   index.php    .htaccess
+                                    (without rewrite module)    (with rewrite module)
+                                                      |             |
+                                                      +------+------+
+                                                             |
+                                                        rewrite.php
+                                                             |
+                                                        /framework/Dispatcher.php
+                                                             |
+                                                        /framework/id/textcube/config.default.php
+                                                             |
+                                          (Context / URL / configuration loading)
+                                                             |
+                                                      interface/*.php
+                                                    (Interface loading)
+                                                             |
+           -------------------------------------- library/preprocessor.php   (Preprocessing) -----------------
+                                                             |
+                                          Base components loading ( /framework/boot )
+                                              + Environment Normalization (Unification)
+                                              + Core component loading
+                                              + Component / library autoload setting
+                                              + Authenticating settings
+                                                             |
+                                          Validation
+                                              + Basic POST/GET value validation
+                                              + System environmental parameter validation
+                                              + URI information validation
+                                                             |
+                                          Config, context object initialization.
+                                                (Automatic initialization via first instanciation)
+                                                             |
+------------                                                 |
+Initializing                                                 |
+                                                             |
+                                                    If database needed,
+                              +------------------------------+-----------------------------+
+                              |                                                            |
+                              |  Initializing database I/O                                 |
+                              |    + /framework/data/DBModel.php                           |
+                              |                                                            |
+                              |  Loading memcache module (if use)                          |
+                              |  Creating Session (if requested)                           |
+                              |     +  /framework/legacy/Textcube.Data.Session.XXX.php     |
+                              +------------------------------+-----------------------------+
+                                                             |
+                                          Loading required components / libraries
+                                              + library/include.XXX.php
+                                                (specific library list due to interface)
+                                              + library/include.php
+                                                (actual library loading occurs.
+                                                 if there is library cache, loading them instead.)
+                                                    /library/include.php
+                                                             |     + /config.php (override)
+                                                             |     + /library/model/~
+                                                             |     + /library/view/~
+                                                             |
+                                                 If initialization needed,
+                                   +-------------------------+------------------------+
+                                   |   Loading basic information (blog/user)          |
+                                   |   Loading and initializing timezone              |
+                                   |                                                  |
+                                   |                                                  |
+                                   |   Loading locale resource                        |
+                                   |     (if locale information is needed)            |
+                                   |   Administrator locales if needed                |
+                                   +-------------------------+------------------------+
+                                                             |
+                                                             |
+                                                     If plugin needed,
+                                   +--------------------------------------------------+
+                                   |    Loading plugin module (if needed)             |
+                                   |      +  /library/plugins.php                     |
+                                   +-------------------------+------------------------+
+                                                             |
+                                                 Access privilege checking
+                                                             |
+           --------------------------------------------------|------------------------------------------------
+------------                                                 |
+Quilting                                   +-----------------+-----------------+
+                      (Sequence defined at each interface path)      /interface/common/owner/header.php
+                           /interface/common/blog/begin.php                    |
+                                           |                                   |
+                           /interface/common/blog/XXX.php                Interface code
+                                           |                                   |
+                           /interface/common/blog/end.php               /interface/common/owner/footer.php
+------------                               |                                   |
+Finalizing                                 +-----------------+-----------------+
+                                                             |
+                                                            End

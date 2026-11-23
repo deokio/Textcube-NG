@@ -1,0 +1,491 @@
+<?php
+/// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
+/// All rights reserved. Licensed under the GPL.
+/// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 5.5 - 7.3 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
+
+global $__gCacheBlogSettings, $__serviceSetting; // share blog.service.php
+$__serviceSetting = array();
+class Setting {
+	static function fetchConfigVal( $DATA ){
+		// Textcube-NG: r3-43 R-577 플러그인 설정(Plugins.settings)은 문자열 배열이므로 객체를 되살리지 않는다(allowed_classes, PHP 7.0+) — 매직 메서드 실행 방지
+		return is_null($DATA) ? null:safeUnserialize($DATA);	// Textcube-NG: unserialize 의 allowed_classes 인자는 PHP 7.0 — safeUnserialize()(00-Compat.php)로 객체 주입 방어를 같게(r4-4)
+//		if (is_null($DATA)) return null; // Compartibility. If data is stored as array (new method), return it.		
+//		if (is_array($DATA)) return $DATA;
+//		return Setting::fetchConfigVal_Legacy($DATA);
+	}
+
+	static function fetchConfigXML( $DATA ){
+		$xmls = new XMLStruct();		// else, parse them...
+		$outVal = array();
+		if( ! $xmls->open($DATA) ) {
+			unset($xmls);	
+			return null;
+		}
+		if( is_null(  $xmls->selectNodes('/config/field') )){
+			unset($xmls);	
+			return null;
+		}
+		foreach ($xmls->selectNodes('/config/field') as $field) {
+			if( empty( $field['.attributes']['name'] )  || empty( $field['.attributes']['type'] ) ){
+				unset($xmls);	
+				return null;
+			}
+			// Textcube-NG: 자식 요소가 있는 field 는 XMLStruct 가 '.value' 를 지운다 — 원본은 Notice(PHP 8 은 Warning) 뒤 null 을 넣었다. 같은 null 을 경고 없이 넣는다(XMLStruct::getValue() 와 같은 방식, v3.221)
+			$outVal[$field['.attributes']['name']] = isset($field['.value']) ? $field['.value'] : null;
+		}
+		unset($xmls);	
+		return ( $outVal);
+	}
+	
+	// For Blog-scope setting
+	static function getBlogSettingGlobal($name, $default = null, $blogid = null, $directAccess = false) {
+		if(is_null($blogid)) $blogid = getBlogId();
+		if($directAccess == true) {
+			$query = DBModel::getInstance();
+			$query->reset('BlogSettings');
+			$query->setQualifier('blogid', 'equals', intval($blogid));
+			$query->setQualifier('name', 'equals', $name, true);
+			return $query->getCell('value');
+		}
+		$settings = Setting::getBlogSettingsGlobal(($blogid == null ? getBlogId() : $blogid)); 
+		if ($settings === false) return $default;
+		if( isset($settings[$name]) ) {
+			return $settings[$name];
+		}
+		return $default;
+	}
+
+	static function getBlogSettingsGlobal($blogid = null) {
+		global $database, $service, $__gCacheBlogSettings, $gCacheStorage;
+		if(empty($__gCacheBlogSettings)) $__gCacheBlogSettings = array();
+		$context = Model_Context::getInstance();
+		if(is_null($blogid)) $blogid = $context->getProperty('blog.id');//getBlogId();
+		if (array_key_exists($blogid, $__gCacheBlogSettings) && !empty($__gCacheBlogSettings[$blogid])) {
+			return $__gCacheBlogSettings[$blogid];
+		}
+		if($blogid == $context->getProperty('blog.id')) { //getBlogId()) {
+			$result = $gCacheStorage->getContent('BlogSettings');
+			if(!empty($result)) { 
+				$__gCacheBlogSettings[$blogid] = $result;
+				return $result;
+			}
+		}
+		$query = DBModel::getInstance();
+		$query->reset('BlogSettings');
+		$query->setQualifier('blogid', 'equals', intval($blogid));
+		$blogSettings = $query->getAll();
+		if( $blogSettings ) {
+			$result = array();
+			$blogSettingFields = array();
+			$defaultValues = array(
+					'name'                     => '',
+					'defaultDomain'            => 0,
+					'title'                    => '', 
+					'description'              => '', 
+					'logo'                     => '', 
+					'logoLabel'                => '', 
+					'logoWidth'                => 0,
+					'logoHeight'               => 0,
+					'frontpage'                => 'entry',
+					'useFeedViewOnCategory'    => 1,
+					'useSloganOnPost'          => 1,
+					'useSloganOnCategory'      => 1,
+					'useSloganOnTag'           => 1,
+					'entriesOnPage'            => 10, 
+					'entriesOnList'            => 10, 
+					'entriesOnRSS'             => 10, 
+					'commentsOnRSS'            => 10, 
+					'publishWholeOnRSS'        => 1,
+					'publishEolinSyncOnRSS'    => 1,
+					'allowWriteOnGuestbook'    => 1,
+					'allowWriteDblCommentOnGuestbook' => 1,
+					'visibility'               => 2,
+					'language'     => $service['language'],
+					'blogLanguage' => $service['language'],
+					'timezone'     => $service['timezone'],
+					'noneCommentMessage'       => '',
+					'singleCommentMessage'     => '',
+					'noneTrackbackMessage'     => '',
+					'singleTrackbackMessage'   => '');
+			foreach($blogSettings as $blogSetting) {
+				$result[$blogSetting['name']] = $blogSetting['value'];
+				if(array_key_exists($blogSetting['name'],$defaultValues)) {
+					array_push($blogSettingFields, $blogSetting['name']);
+				}
+			}
+			foreach($defaultValues as $name => $value) {
+				if(!in_array($name,$blogSettingFields)) {
+					$result[$name] = $value;
+					Setting::setBlogSettingDefault($name,$value,$blogid);
+				}
+			}
+			$__gCacheBlogSettings[$blogid] = $result;
+			if($blogid == $context->getProperty('blog.id')) $gCacheStorage->setContent('BlogSettings', $result);
+			return $result;
+		}
+		$__gCacheBlogSettings[$blogid] = false;
+		return false;
+	}
+	
+	static function setBlogSettingGlobal($name, $value, $blogid = null) {
+		global $__gCacheBlogSettings;
+		global $gCacheStorage;
+	
+		if (is_null($blogid)) $blogid = getBlogId();
+		if (!is_numeric($blogid)) return null;
+	
+		if (!array_key_exists($blogid, $__gCacheBlogSettings)) {
+			// force loading
+			Setting::getBlogSettingsGlobal($blogid);
+		}
+		if ($__gCacheBlogSettings[$blogid] === false) {
+			return null;
+		}
+		
+		$gCacheStorage->purge();
+		if (array_key_exists($name, $__gCacheBlogSettings[$blogid])) {
+			// overwrite value
+			$__gCacheBlogSettings[$blogid][$name] = $value;
+			$query = DBModel::getInstance();
+			$query->reset('BlogSettings');
+			$query->setQualifier('blogid', 'equals', $blogid);
+			$query->setQualifier('name', 'equals', $name, true);
+			$query->setAttribute('blogid', $blogid);
+			$query->setAttribute('name', $name, true);
+			$query->setAttribute('value',$value, true);
+			return $query->replace();
+		} 
+		
+		// insert new value
+		$__gCacheBlogSettings[$blogid][$name] = $value;
+		$query = DBModel::getInstance();
+		$query->reset('BlogSettings');
+		$query->setAttribute('blogid', $blogid);
+		$query->setAttribute('name',$name, true);
+		$query->setAttribute('value',$value, true);
+		return $query->insert();
+	}
+
+	static function setBlogSettingDefault($name, $value, $blogid = null) {
+		global $database;
+		if(is_null($blogid)) $blogid = getBlogId();
+		$query = DBModel::getInstance();
+		$query->reset('BlogSettings');
+		$query->setQualifier('blogid', 'equals', $blogid);
+		$query->setQualifier('name', 'equals', $name, true);
+		$query->setAttribute('blogid', $blogid);
+		$query->setAttribute('name', $name, true);
+		$query->setAttribute('value',$value, true);
+		return $query->replace();
+	}
+
+	static function removeBlogSettingGlobal($name, $blogid = null) {
+		global $database;
+		global $__gCacheBlogSettings; // share blog.service.php
+		global $gCacheStorage;
+
+		if (is_null($blogid)) $blogid = getBlogId();
+		if (!is_numeric($blogid)) return null;
+	
+		if (!array_key_exists($blogid, $__gCacheBlogSettings)) {
+			// force loading
+			Setting::getBlogSettingsGlobal($blogid);
+		}
+		if ($__gCacheBlogSettings[$blogid] === false) {
+			return null;
+		}
+		
+		$escape_name = POD::escapeString($name);
+
+		if (array_key_exists($name, $__gCacheBlogSettings[$blogid])) {
+			// overwrite value
+			$gCacheStorage->purge();
+			unset($__gCacheBlogSettings[$blogid][$name]);
+			$query = DBModel::getInstance();
+			$query->reset('BlogSettings');
+			$query->setQualifier('blogid','equals', $blogid);
+			$query->setQualifier('name','equals', $name, true);	// Textcube-NG: r3-44 R-578 name 조건도 escape 한다(같은 클래스의 다른 name 조건과 맞춤, 본 포트 DBModel 은 escape 인자가 없으면 escape 하지 않음)
+			return $query->delete();
+		}
+		
+		// already not exist
+		return true;
+	}
+
+	// For plugin-specific use.
+	static function getBlogSetting($name, $default = null, $global = null) {
+		if(is_null($global)) $name = 'plugin_' . $name;
+		return Setting::getBlogSettingGlobal($name, $default, getBlogId(), false);
+	}
+	
+	static function setBlogSetting($name, $value, $global = null) {
+		global $database, $blogid;
+		if(is_null($global)) $name = 'plugin_' . $name;
+		return Setting::setBlogSettingGlobal($name, $value);
+	}
+	
+	static function removeBlogSetting($name, $global = null) {
+		global $database, $blogid;
+		if(is_null($global)) $name = 'plugin_' . $name;
+		return Setting::removeBlogSettingGlobal($name);
+	}
+
+	// For User
+	static function getUserSetting($name, $default = null, $global = null) {
+		global $database, $userSetting;
+		if(is_null($global)) $name = 'plugin_' . $name;
+		return Setting::getUserSettingGlobal($name, $default);
+	}
+
+	static function getUserSettingGlobal($name, $default = null, $userid = null, $directAccess = false) {
+		global $userSetting;
+		if($directAccess !== false) {
+			$query = DBModel::getInstance();
+			$query->reset('UserSettings');
+			$query->setQualifier('userid','equals', $userid);
+			$query->setQualifier('name','equals', $name, true);
+			return $query->getCell('value');
+		}
+		/* PHP 8.5: null 을 배열 키로 쓰는 것이 deprecated. 원본은 $userid 가 null(현재 사용자)이면 아래 isset($userSetting[$userid]) 에서
+		   null 을 키로 썼고(빈 문자열 키로 처리돼 캐시를 찾지 못해 매번 다시 읽음), 그 뒤에야 getUserId() 로 바꿨다.
+		   캐시 확인 전에 현재 사용자 ID 로 정한다(읽는 행·반환값 같음, 설정 변경 시 캐시는 clearUserSettingCache() 로 비워짐). */
+		if (is_null($userid)) $userid = getUserId();
+		if( empty($userSetting) || !isset($userSetting[$userid])) {
+			$query = DBModel::getInstance();
+			$query->reset('UserSettings');
+			$query->setQualifier('userid','equals', $userid);
+			$settings = $query->getAll('name, value');	
+			foreach( $settings as $k => $v ) {
+				$userSetting[$userid][ $v[0] ] = $v[1];
+			}
+		}
+		if( isset($userSetting[$userid][$name]) ) {
+			return $userSetting[$userid][$name];
+		}
+		return $default;
+	}
+	
+	static function setUserSetting($name, $value, $global = null) {
+		global $database;
+		if(is_null($global)) $name = 'plugin_' . $name;
+		return Setting::setUserSettingGlobal($name, $value);
+	}
+	
+	static function setUserSettingGlobal($name, $value, $userid = null) {
+		global $database;
+		if(is_null($userid)) $userid = getUserId();
+		clearUserSettingCache();
+		$query = DBModel::getInstance();
+		$query->reset('UserSettings');
+		$query->setQualifier('userid', 'equals', $userid);
+		$query->setQualifier('name', 'equals', $name, true);
+		$query->setAttribute('userid', $userid);
+		$query->setAttribute('name', $name, true);
+		$query->setAttribute('value',$value, true);
+		return $query->replace();
+	}
+	
+	static function removeUserSetting($name, $global = null) {
+		if(is_null($global)) $name = 'plugin_' . $name;
+		return Setting::removeUserSettingGlobal($name, null, null);
+	}
+
+	static function removeUserSettingGlobal($name, $userid = null, $global = null) {
+		clearUserSettingCache();
+		$query = DBModel::getInstance();
+		$query->reset('UserSettings');
+		$query->setQualifier('userid', 'equals', (is_null($userid) ? getUserId() : $userid));
+		$query->setQualifier('name','equals', $name,true);
+		return $query->delete();
+	}
+
+	static function getServiceSetting($name, $default = null, $global = null) {
+		global $__serviceSetting;
+		if(is_null($global)) $name = 'plugin_' . $name;
+		// Textcube-NG: setServiceSetting() 과 같이 이름을 32바이트(ServiceSettings.name varchar(32))로 줄인다. 원본은 저장할 때만 줄여 긴 이름은 다시 읽거나 지울 수 없었다(r3-5)
+		$name = UTF8::lessenAsEncoding($name, 32);
+		if( empty($__serviceSetting) ) {
+			$query = DBModel::getInstance();
+			$query->reset('ServiceSettings');
+			$settings = $query->getAll('name, value');
+			foreach( $settings as $k => $v ) {
+				$__serviceSetting[ $v[0] ] = $v[1];
+			}
+		}
+		if( isset($__serviceSetting[$name]) ) {
+			return $__serviceSetting[$name];
+		}
+		return $default;
+	}
+		
+	static function setServiceSetting($name, $value, $global = null) {
+		global $__serviceSetting;
+		if(is_null($global)) $name = 'plugin_' . $name;
+		$name = UTF8::lessenAsEncoding($name, 32);
+		$query = DBModel::getInstance();
+		$query->reset('ServiceSettings');
+		$query->setQualifier('name', 'equals', $name, true);
+		$query->setAttribute('name', $name, true);
+		$query->setAttribute('value',$value, true);
+		if(!empty($__serviceSetting)) $__serviceSetting[$name] = $value;
+		return $query->replace();
+	}
+
+	static function removeServiceSetting($name, $global = null) {
+		if(is_null($global)) $name = 'plugin_' . $name;
+		// Textcube-NG: setServiceSetting() 과 같이 이름을 32바이트(ServiceSettings.name varchar(32))로 줄인다. 원본은 저장할 때만 줄여 긴 이름은 다시 읽거나 지울 수 없었다(r3-5)
+		$name = UTF8::lessenAsEncoding($name, 32);
+		$query = DBModel::getInstance();
+		$query->reset('ServiceSettings');
+		$query->setQualifier('name','like', $name,true);
+		return $query->delete();
+	}
+
+	static function getServiceSettingGlobal($name, $default = null) {
+		return Setting::getServiceSetting($name, $default, true);
+	}
+
+	static function setServiceSettingGlobal($name, $value) {
+		return Setting::setServiceSetting($name, $value, true);
+	}
+
+	static function removeServiceSettingGlobal($name) {
+		return Setting::removeServiceSetting($name, true);
+	}
+	
+	static function getSkinSettings($blogid, $forceReload = false) {
+		global $database, $service, $__gCacheSkinSettings, $gCacheStorage;
+		$context = Model_Context::getInstance();
+		if(empty($__gCacheSkinSettings)) $__gCacheSkinSettings = array();
+		if(is_null($blogid)) $blogid = getBlogId();
+		if (array_key_exists($blogid, $__gCacheSkinSettings) && !empty($__gCacheSkinSettings[$blogid])) {
+			return $__gCacheSkinSettings[$blogid];
+		}
+		if($blogid == $context->getProperty('blog.id')) { //$blogid == getBlogId()) {
+			$result = $gCacheStorage->getContent('SkinSettings');
+			if(!empty($result)) { 
+				$__gCacheSkinSettings[$blogid] = $result;
+				return $result;
+			}
+		}
+		$query = DBModel::getInstance();
+		$query->reset('SkinSettings');
+		$query->setQualifier('blogid', 'equals', intval($blogid));
+		$skinSettings = $query->getAll();
+		if( $skinSettings ) {
+			$result = array();
+			$skinSettingFields = array();
+			$defaultValues = array(
+				'blogid' => $blogid , 
+				'skin' => $service['skin'], 
+				'entriesOnRecent' => 5, 
+				'noticesOnRecent' => 5, 
+				'commentsOnRecent' => 5, 
+				'commentsOnGuestbook' => 5, 
+				'commentsOnEntry' => 15, 
+//				'contentWidth' => 550, 
+				'archivesOnPage' => 5,
+				'tagsOnTagbox' => 30, 
+				'tagboxAlign' => 3, 
+				'trackbacksOnRecent' => 5, 
+				'expandComment' => 1, 
+				'expandTrackback' => 1, 
+				'sortCommentsBy' => 'ASC', 
+				'recentNoticeLength' => 25, 
+				'recentEntryLength' => 30, 
+				'recentCommentLength' => 30, 
+				'recentTrackbackLength' => 30, 
+				'linkLength' => 30, 
+				'showListOnCategory' => 1, 
+				'showListOnArchive' => 1, 
+				'showListOnTag' => 1, 
+				'showListOnAuthor' => 1, 
+				'showListOnSearch' => 1, 
+				'tree' => 'base', 
+				'colorOnTree' => '000000', 
+				'bgColorOnTree' => '', 
+				'activeColorOnTree' => 'FFFFFF', 
+				'activeBgColorOnTree' => '00ADEF', 
+				'labelLengthOnTree' => 27, 
+				'showValueOnTree' => 1 );						
+			foreach($skinSettings as $skinSetting) {
+				$result[$skinSetting['name']] = $skinSetting['value'];
+				if(array_key_exists($skinSetting['name'],$defaultValues)) {
+					array_push($skinSettingFields, $skinSetting['name']);
+				}
+			}
+			foreach($defaultValues as $name => $value) {
+				if(!in_array($name,$skinSettingFields)) {
+					$result[$name] = $value;
+					Setting::setSkinSettingDefault($name,$value,$blogid);
+				}
+			}
+			$__gCacheSkinSettings[$blogid] = $result;
+			if($blogid == $context->getProperty('blog.id')) $gCacheStorage->setContent('SkinSettings', $result);
+			return $result;
+		}
+		$__gCacheSkinSettings[$blogid] = false;
+		return false;
+	}
+	static function setSkinSettingDefault($name, $value, $blogid = null) {
+		global $database;
+		if(is_null($blogid)) $blogid = getBlogId();
+		$query = DBModel::getInstance();
+		$query->reset('SkinSettings');
+		$query->setQualifier('blogid', 'equals', $blogid);
+		$query->setQualifier('name', 'equals', $name, true);
+		$query->setAttribute('blogid', $blogid);
+		$query->setAttribute('name', $name, true);
+		$query->setAttribute('value',$value, true);
+		return $query->replace();
+	}	
+	
+	static function setSkinSetting($name, $value, $blogid = null) {
+		global $database;
+		global $__gCacheSkinSettings, $__gCacheBlogSettings;
+		global $gCacheStorage;
+		if (is_null($blogid)) $blogid = getBlogId();
+		if (!is_numeric($blogid)) return null;
+	
+		if(empty($__gCacheBlogSettings)) Setting::getBlogSettingsGlobal($blogid);
+		if (!array_key_exists($blogid, $__gCacheSkinSettings)) {
+			// force loading
+			Setting::getSkinSettings($blogid,false);
+		}
+		if ($__gCacheBlogSettings[$blogid] === false) {
+			return null;
+		}
+		
+		$gCacheStorage->purge();
+		if (array_key_exists($name, $__gCacheSkinSettings[$blogid])) {
+			// overwrite value
+			$__gCacheSkinSettings[$blogid][$name] = $value;
+			$query = DBModel::getInstance();
+			$query->reset('SkinSettings');
+			$query->setQualifier('blogid', 'equals', $blogid);
+			$query->setQualifier('name', 'equals', $name, true);
+			$query->setAttribute('blogid', $blogid);
+			$query->setAttribute('name', $name, true);
+			$query->setAttribute('value',$value, true);
+			return $query->replace();
+		}
+		
+		// insert new value
+		$__gCacheSkinSettings[$blogid][$name] = $value;
+		$query = DBModel::getInstance();
+		$query->reset('SkinSettings');
+		$query->setAttribute('blogid', $blogid);
+		$query->setAttribute('name',$name, true);
+		$query->setAttribute('value',$value, true);
+		return $query->insert();
+	}
+}
+?>

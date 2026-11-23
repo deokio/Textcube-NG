@@ -1,0 +1,110 @@
+//
+// Textcube service-wide configurable options via config.php
+// ---------------------------------------------------------
+//
+// This document explains about the available options at config.php
+//
+<?php
+ini_set('display_errors', 'off');
+$database['server'] = 'localhost';  // Location of DBMS server
+$database['database'] = 'noname';   // Database name
+$database['username'] = 'noname';   // user name to estiblish database connection
+$database['password'] = 'noname';   // password to establish database connection
+$database['prefix'] = 'tt_';        // prefix (useful when you try to install two or more textcubes in one database.
+$service['type'] = 'path';          // Service type. 
+// 'path'   : path-based    e.g.) http://www.example.com/blog1 , 
+// 'domain' : domain-based. e.g.) http://blog1.example.com
+// If you installed Textcube on http://www.example.com/tc, )
+$service['domain'] = 'domain.ext';  // Default service domain. (e.g.) http://www.example.com 
+$service['path'] = '/path1/path2';  // URI path where textcube is installed (e.g.) /tc
+$service['skin'] = 'periwinkle';     // Default blog skin name.
+$service['timeout'] = 3600;                 // Session timeout limit (sec.)
+$service['disableEolinSuggestion'] = false; // Disable auto-suggestion using EOLIN server. 
+//Usually it searches local tag by default.
+// From Tattertools 1.1
+$service['useEncodedURL'] = false; // URL encoding using RFC1738
+$serviceURL = ''; // Useful if using other web program under the same domain
+// $serviceURL: leave it '' (or unset) -- the recommended default. The service URL is then computed per request
+//   from the scheme (https detection; X-Forwarded-Proto is honored only from trusted proxies), the request Host,
+//   the server port (or $service['port'] when useConfigPort is set or the server port is 80/443) and
+//   $service['path']; in domain mode a mismatched Host is normalized to the blog's canonical host.
+//   Set it only as a compatibility fallback when something goes wrong (e.g. behind NAT/port-forwarding,
+//   especially with $service['memcached'] = true).
+//   When set, prefer the scheme-less form '//host[:port]/path' (e.g. '//example.com:8080'): page URLs keep it
+//   as-is, so no scheme is baked into page/skin caches; feeds, mail and the reader Referer get the scheme from
+//   $service['useSSL'], and the social login callback gets it from the request.
+//   A value with a scheme ('http://...' or 'https://...') is used as-is everywhere.
+//   Any set value skips https/port detection and Host normalization. It is used for skin/attach/resource URLs
+//   ($service['useServiceURLonSkin'], 'useServiceURLonAttach', 'useServiceURLonResources'), feed logo/enclosure/
+//   attachment URLs and mail links.
+//   If the site is served over https (including TLS terminated at a proxy), set $service['useSSL'] = true.
+// From Textcube 1.5
+$service['fancyURL'] = 2;    // fancy-URL control when web server does not support rewrite engine.
+// 0 : Do not use fancy-URL,   e.g.) http://www.example.com/index.php?tag
+// 1 : Use php direction only. e.g.) http://www.example.com/?tag
+// 2 : Use full fancy-URL.     e.g.) http://www.example.com/tag
+$service['useNumericURLonRSS'] = false; // Can force permalink to numeric format on RSS output.
+$service['useLegacySupport'] = false;   // Uses legacy support (for tattertools plugins) function.
+// From Textcube 1.6
+$service['flashuploader'] = true;  // Use Flash uploader to upload multiple files.
+$service['clipboardpoter'] = true;  // Use Flash clipboard copy to support one-click trackback address copy.
+$service['reader'] = true;     // Use Textcube reader. You can set it to false if you do not use Textcube reader, and want to decrease DB load.
+$service['pagecache'] = true;  // pagecache function. (changed from disablePageCache option at TC 1.5)
+$service['debugmode'] = false; // Textcube debug mode. (for core / plugin debug or optimization)
+$service['debug_session_dump'] = false;   // session info debuging.
+$service['debug_rewrite_module'] = false; // rewrite handling module info debuging.
+$service['allowBlogVisibilitySetting'] = true; // Allow service users to change blog visibility
+$service['externalresources'] = false;  // Loads resources from external storage.
+$service['resourcepath'] = 'http://example.com/resource';	// Specify the full URI of external resource.
+$service['favicon_daily_traffic'] = 10; // Set favicon traffic limitation. default is 10MB.
+// From Textcube 1.7
+$service['skincache'] = true;        // Use skin pre-fetching. 
+// Textcube will parse static elements (blog name, title…) only when you change skin.
+// From Textcube 1.8
+$database['port'] = 3639;            // Database port number
+$database['dbms'] = 'MySQL';         // DBMS. (MySQL, MySQLi, PostgreSQL, Cubrid.)
+$service['memcached'] = false;       // Using memcache to handle session and cache
+$memcached['server'] = 'localhost';  // Where memcache server is.
+// From Textcube 1.8.4
+$service['requirelogin'] = false;    // Force log-in process to every blogs. (for private blog service)
+// From Textcube 1.9.3
+$service['useSSL'] = false;			// Use SSL connection. Every http:// will be replaced with https://
+// From Textcube-NG (optional; a missing key uses the default shown here)
+$service['useServiceURLonSkin'] = true;       // Use the service URL for skin paths in blog output (false: $service['path'])
+$service['useServiceURLonAttach'] = true;     // Use the service URL for the blog logo (attach) URL (false: $service['path'])
+$service['useServiceURLonResources'] = true;  // Use the service URL for the blank image used when there is no logo (false: $service['path'])
+$service['hsts'] = false;                     // Send Strict-Transport-Security on https requests
+$service['hstsMaxAge'] = 31536000;            // HSTS max-age (sec.). 0 clears an HSTS policy the browser remembers
+$service['hstsIncludeSubDomains'] = false;    // HSTS includeSubDomains
+$service['hstsPreload'] = false;              // HSTS preload (hard to undo once listed by browsers)
+$service['trustedProxies'] = array();         // Proxy IPs/CIDRs whose X-Forwarded-For / Client-IP / X-Forwarded-Proto are trusted
+$service['passwordHash'] = 'md5';             // Password storage: 'md5' (same as original), 'multi', 'migrate' (password_hash)
+$service['authTokenLifetime'] = 604800;       // Lifetime of auth tokens (invitation link, temporary password) in sec. 0 = no expiry
+$service['useLoginProxy'] = false;            // Use environment proxy (https_proxy) for OIDC / social login server requests
+$service['loginFailureLimit'] = 5;            // Failed logins per account before a 15-minute lock
+$service['passwordConfirmFailureLimit'] = 5;  // Wrong current-password confirmations per session before logout
+$service['loginLockScope'] = 'account';       // 'ip' also locks a client IP for 15 minutes after loginIpFailureLimit failures
+$service['loginLockShowRemaining'] = false;   // 'ip' scope: show remaining lock minutes on the login page
+$service['loginIpFailureLimit'] = 5;          // 'ip' scope: failures allowed per IP
+$service['loginIpRecordLimit'] = 500;         // 'ip' scope: max IP failure records kept (1-10000)
+$service['hostAliases'] = array();            // Extra Host names ('host' or 'host:port') accepted for this service
+$service['hostMismatchBehavior'] = '';        // single/path type, unregistered Host: '' (as is), 'redirect' (GET/HEAD 302), '404'
+$service['useConfigPort'] = false;            // Build URLs with $service['port'] instead of the request port
+$service['noticeFeedURL'] = 'https://github.com/deokio/Textcube-NG/releases.atom'; // Admin dashboard notice feed ({lang} replaced). '' disables it
+$service['helpURL'] = 'http://help.tattertools.com/{lang}/Textcube/Menu/'; // Prefix of the admin help links
+$service['httpRequestMaxSize'] = 10485760;    // Max bytes of a fetched response (ping, RSS, reader...). 0 = no limit
+$service['httpRequestMaxTime'] = 60;          // Max seconds of a fetched response. 0 = no limit
+$service['httpRequestMaxSaveSize'] = 536870912; // Max bytes of a response saved to a file (backup import from the web). 0 = no limit
+$service['httpRequestMaxSaveTime'] = 600;     // Max seconds of a response saved to a file. 0 = no limit
+$service['cronRequestPublicOnly'] = false;    // true: scheduled publishing calls its own blog URL only via public IPv4 80/443
+$service['pingPublicOnly'] = true;            // false: also send XML-RPC pings to internal addresses
+$service['allowPasswordAsAPIKey'] = false;    // true: accounts without an API key may use the account password as API key (original behavior)
+$memcached['cache_ttl'] = 0;                  // memcached cache item expiry (sec.). 0 = no expiry, max 2592000
+$service['imageMaxBytes'] = 10485760;         // Max size of an uploaded image (bytes). 0 = no check. svg 1MB and 4096px are fixed
+$service['svgMaxDepth'] = 30;                 // SVG sanitizer: max element depth
+$service['svgMaxNodes'] = 20000;              // SVG sanitizer: max element count
+$service['svgMaxUse'] = 256;                  // SVG sanitizer: max remaining <use> elements
+$service['svgRasterize'] = false;             // Convert sanitized SVG to PNG with Imagick (see setup_nginx.txt)
+$service['svgRasterizeTimeLimit'] = 10;       // Imagick time limit for the conversion (sec.). 0 = none
+$service['imageReencode'] = false;            // Re-save uploaded images with GD (animated GIF keeps the first frame, JPEG EXIF is lost)
+?>

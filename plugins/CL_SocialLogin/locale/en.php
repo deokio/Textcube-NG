@@ -1,0 +1,35 @@
+<?php
+$__text["%1 (으)로 로그인"] = "Sign in with %1";
+$__text["%1 계정으로 작성하였습니다"] = "Posted with a %1 account";
+$__text["관리자 계정과 연결된 소셜 계정"] = "Social account linked with the admin. account";
+$__text["%1 계정으로 로그인됨"] = "Signed in with a %1 account";
+$__text["로그아웃"] = "Logout";
+$__text["소셜 로그인 — 기본 비활성. 사용할 프로바이더만 활성으로 바꾸고 Client ID/Secret 을 입력하세요. Redirect URI(콜백): %1 — 이 주소를 각 프로바이더 개발자콘솔에 등록하세요."] = "Social login — disabled by default. Enable only the providers you use and enter the Client ID/Secret. Redirect URI (callback): %1 — register this address in the developer console of each provider.";
+$__text["%1 활성화"] = "Enable %1";
+$__text["비활성 (기본)"] = "Disabled (default)";
+$__text["활성"] = "Enabled";
+$__text["%1 개발자콘솔의 앱 키(REST API 키 / Client ID)."] = "App key from the %1 developer console (REST API key / Client ID).";
+$__text["%1 Client Secret. (네이버=Client Secret, 카카오=보안 Client Secret, 페이스북=앱 시크릿)"] = "%1 Client Secret. (Naver = Client Secret, Kakao = Secure Client Secret, Facebook = App Secret)";
+$__text["Kakao Developers에서 앱을 만들고 카카오 로그인과 OpenID Connect를 켜세요. 이 플러그인은 카카오 로그인(OAuth 2.0 + OpenID Connect)의 ID 토큰으로 사용자를 확인하고, ID 토큰이 없을 때만 사용자 정보 가져오기 API v2(/v2/user/me)를 씁니다. 카카오 로그인에는 따로 고를 API 버전이 없습니다. 위의 Redirect URI를 카카오 로그인의 Redirect URI에 등록하세요. 동의 항목: 닉네임, 카카오계정(이메일) — 이메일은 앱 설정에 따라 별도 권한이 필요할 수 있습니다. 이메일 동의가 없어도 로그인 판정에는 영향이 없습니다(이 플러그인은 이메일을 쓰지 않습니다)."] = "Create an app in Kakao Developers and turn on Kakao Login and OpenID Connect. This plugin verifies the user with the ID token of Kakao Login (OAuth 2.0 + OpenID Connect) and uses the user information API v2 (/v2/user/me) only when no ID token is returned. Kakao Login has no API version to choose. Register the Redirect URI above as a Kakao Login Redirect URI. Consent items: nickname, Kakao Account (email) — email may require separate permission depending on the app settings. Login works without email consent (this plugin does not use the email address).";
+$__text["Kakao Developers 앱의 REST API 키입니다."] = "The REST API key of the app in Kakao Developers.";
+$__text["카카오 로그인 보안 설정에서 만든 Client Secret 코드입니다. 이 플러그인은 Client Secret이 있어야 동작하므로 사용 상태로 두세요."] = "The Client Secret code created in the Kakao Login security settings. This plugin requires a Client Secret, so keep it enabled.";
+$__text["네이버 개발자센터에서 애플리케이션을 등록하고 사용 API로 네이버 로그인을 고르세요. 이 플러그인은 네이버 로그인(OAuth 2.0)과 회원 프로필 조회 API v1(/v1/nid/me)을 씁니다. 네이버 로그인에는 따로 고를 API 버전이 없습니다. 제공 정보에서 이메일 주소와 이름(또는 별명)을 고르고, 서비스 URL에 블로그 주소를, Callback URL에 위의 Redirect URI를 넣으세요."] = "Register an application in NAVER Developers and choose NAVER Login as the API to use. This plugin uses NAVER Login (OAuth 2.0) and the member profile API v1 (/v1/nid/me). NAVER Login has no API version to choose. In the provided information, choose email address and name (or nickname), and enter the blog address as the Service URL and the Redirect URI above as the Callback URL.";
+$__text["네이버 개발자센터 애플리케이션 정보의 Client ID입니다."] = "The Client ID shown in the application information in NAVER Developers.";
+$__text["네이버 개발자센터 애플리케이션 정보의 Client Secret입니다."] = "The Client Secret shown in the application information in NAVER Developers.";
+$__text["Meta for Developers에서 앱을 만들고 Facebook 로그인을 추가하세요. 이 플러그인은 Facebook 로그인(OAuth 2.0)과 Graph API의 /me(필드 id, name, email)를 쓰며, 버전은 아래 Graph API 버전 칸의 값을 씁니다. 위의 Redirect URI를 Facebook 로그인 설정의 유효한 OAuth 리디렉션 URI에 등록하세요. 요청 권한: email, public_profile."] = "Create an app in Meta for Developers and add Facebook Login. This plugin uses Facebook Login (OAuth 2.0) and /me of the Graph API (fields id, name, email), with the version given in the Graph API version field below. Register the Redirect URI above as a Valid OAuth Redirect URI in the Facebook Login settings. Requested permissions: email, public_profile.";
+$__text["Meta for Developers 앱의 앱 ID입니다."] = "The App ID of the app in Meta for Developers.";
+$__text["Meta for Developers 앱의 앱 시크릿 코드입니다."] = "The App Secret of the app in Meta for Developers.";
+$__text["Graph API 버전. 형식은 vN.N(예: %1)입니다. 비우거나 형식이 맞지 않으면 %1을 씁니다. Graph API는 버전마다 사용 기한(만료일)이 있으므로 Meta 개발자 문서의 Graph API 버전 목록(Changelog)에서 만료일을 확인하고, 쓰는 버전이 만료되기 전에 새 버전으로 바꾸세요."] = "Graph API version. The format is vN.N (e.g. %1). If empty or not in this format, %1 is used. Each Graph API version has an expiration date, so check it in the Graph API version list (Changelog) of the Meta developer documentation, and change to a newer version before the version in use expires.";
+$__text["Graph API 버전"] = "Graph API version";
+$__text["댓글·방명록 입력 폼"] = "Comment and guestbook forms";
+$__text["소셜 로그인 버튼 자동 표시"] = "Show social login buttons automatically";
+$__text["표시 (기본)"] = "Show (default)";
+$__text["표시하지 않음"] = "Do not show";
+$__text["활성화한 공급자의 로그인 버튼을 댓글·방명록의 방문자 입력 칸 위에 자동으로 넣습니다. 소셜 계정으로 로그인한 방문자에게는 로그인 상태와 로그아웃 링크를 보여 줍니다. 스킨에 소셜 로그인 치환자를 따로 넣어 쓰고 있다면 버튼이 두 번 나오지 않도록 표시하지 않음으로 바꾸세요."] = "Automatically adds the login buttons of the enabled providers above the visitor input fields of comment and guestbook forms. Visitors signed in with a social account see their sign-in state and a logout link instead. If your skin already contains the social login tag, change this to Do not show so that the buttons do not appear twice.";
+$__text["소셜 계정으로 로그인 후 댓글 쓰기"] = "Sign in with a social account to comment";
+$__text["소셜 계정으로 로그인 후 방명록 쓰기"] = "Sign in with a social account to sign the guestbook";
+$__text["소셜 계정으로 로그인"] = "Sign in with a social account";
+$__text["소셜 계정으로 글쓰기"] = "Write with a social account";
+$__text["소셜 계정으로 로그인해 주십시오."] = "Please sign in with a social account.";
+$__text["이름/비밀번호로 글쓰기"] = "Write post with name/password";
+?>
