@@ -331,12 +331,53 @@ if (!$xmls->openFile($backup, Validator::getBool(@$_POST['correctData']))) {
 
 $xmls->close();
 importAttachmentRelinkEntries();
+requireModel('blog.category');	// Textcube-NG: R-592 — 가져온 분류·글로 블로그 전체 글 수(자손 합산)·경로를 한 번 다시 센다
+clearCategoryCache();
+updateEntriesOfCategory($blogid);
 if (file_exists(__TEXTCUBE_CACHE_DIR__."/import/$blogid.xml"))
 	@unlink(__TEXTCUBE_CACHE_DIR__."/import/$blogid.xml");
 setProgress(100, _t('완료되었습니다.'));
 finish();
 
 /*@callback@*/
+// Textcube-NG: R-592 — 새 백업(r4 이후)에 든 분류 공개 설정·body id(사용자 결정 ⑩ 안 A). 옛 백업에는 없어 기본값(공개·tt-body-category) 그대로
+function importCategoryExtra($category, &$node) {
+	if (isset($node['visibility'][0]['.value']) && in_array((string)$node['visibility'][0]['.value'], array('1', '2'), true))
+		$category->visibility = (int)$node['visibility'][0]['.value'];
+	// body id 는 스킨 <body id="...">·글 class 에 나간다. 출력은 r4-16 부터 escape 하지만, 분류 관리(r4-16)와 같은 규칙으로 영문·숫자·_·- 1~20자만 받고, 아니면 버린다(기본 tt-body-category, RC3 1-2. 주석은 11-24 dojoref 2.7 에 따라 고침)
+	if (isset($node['bodyId'][0]['.value']) && is_string($node['bodyId'][0]['.value']) && preg_match('/\A[A-Za-z0-9_-]{1,20}\z/', $node['bodyId'][0]['.value']))
+		$category->bodyid = $node['bodyId'][0]['.value'];
+}
+
+// Textcube-NG: R-592 — 하위 분류를 깊이만큼 재귀로 복원. 경로(label)가 255자를 넘는 분류와 10단을 넘는 분류는 건너뛰고 기록한다(그 분류의 글은 분류 없음으로 들어감)
+function importCategoryChildren(&$node, $parentId, $depth) {
+	requireModel('blog.category');
+	for ($i = 0; $i < count($node['category']); $i++) {
+		$cursor = & $node['category'][$i];
+		if ($depth > 10) {
+			user_error(__LINE__ . ' category depth');
+			continue;
+		}
+		$childCategory = new Category();
+		$childCategory->parent = $parentId;
+		$childCategory->name = $cursor['name'][0]['.value'];
+		$childCategory->priority = $cursor['priority'][0]['.value'];
+		importCategoryExtra($childCategory, $cursor);
+		$parentLabel = Category::getLabel($parentId);
+		if (!is_null($parentLabel) && isCategoryLabelTooLong($parentLabel . '/' . UTF8::lessenAsEncoding(trim($childCategory->name), 127))) {
+			user_error(__LINE__ . ' category label');
+			continue;
+		}
+		if (!$childCategory->add()) {
+			user_error(__LINE__ . $childCategory->error);
+			continue;
+		}
+		if ($depth > getCategoryMaxDepth(getBlogId()))
+			Setting::setBlogSettingGlobal('categoryMaxDepth', $depth);
+		if (isset($cursor['category']))
+			importCategoryChildren($cursor, $childCategory->id, $depth + 1);
+	}
+}
 function scanner($path, $node, $line) {
 	global $migrational, $items;
 	switch ($path) {
@@ -442,20 +483,12 @@ function importer($path, $node, $line) {
 			$category->name = $node['name'][0]['.value'];
 			$category->priority = $node['priority'][0]['.value'];
 			if (isset($node['root'][0]['.value'])) $category->id = 0;
+			importCategoryExtra($category, $node);
 			if (!$category->add())
 				user_error(__LINE__ . $category->error);
-			if (isset($node['category'])) {
-				for ($i = 0; $i < count($node['category']); $i++) {
-					$childCategory = new Category();
-					$childCategory->parent = $category->id;
-					$cursor = & $node['category'][$i];
-					$childCategory->name = $cursor['name'][0]['.value'];
-					$childCategory->priority = $cursor['priority'][0]['.value'];
-					if (!$childCategory->add()) {
-						user_error(__LINE__ . $childCategory->error);
-					}
-				}
-			}
+			// Textcube-NG: R-592 — 하위 분류를 깊이만큼 재귀로 복원한다(옛 2단 백업도 같은 길로 읽는다). 백업이 설정 깊이보다 깊으면 모두 가져오고 설정을 올린다(사용자 결정 Q2, 10단을 넘는 분류는 건너뛰고 기록)
+			if (isset($node['category']))
+				importCategoryChildren($node, $category->id, 2);
 			return true;
 		case '/blog/post':
 			setProgress($item++ / $items * 100, _t('글을 복원하고 있습니다.'));

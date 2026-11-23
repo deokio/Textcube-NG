@@ -17,8 +17,8 @@ this is a volunteer-maintained community fork.
 
 ---
 
-최종 수정: 2026-11-19  
-대상 버전: Textcube-NG 1.10.10+php85.r3
+최종 수정: 2026-11-24  
+대상 버전: Textcube-NG 1.10.10+php85.r4
 
 판별 수정 내용은 [CHANGELOG.md](CHANGELOG.md), 이전·되돌리기 절차와 원본과 달라진 운영·호환성 사항은 [MIGRATION.md](MIGRATION.md)(8절)를 본다.
 
@@ -33,7 +33,8 @@ this is a volunteer-maintained community fork.
 - Bootstrap 3.4.1(스킨 lucid·periwinkle)은 유지보수가 끝났다. carousel·button `data-loading-text` XSS 는 4.x 에서만 고쳐졌으며, 두 스킨은 이 기능을 쓰지 않는다.
 - reCAPTCHA `api.js`·Google Maps JS 는 응답이 바뀌는 동적 스크립트라 SRI 를 붙일 수 없다.
 - jQuery 3.3 에서 deprecated 된 API(`jQuery.isFunction`·`jQuery.proxy`·`bind`/`unbind`·`delegate`/`undelegate`)는 3.7.1 에서 동작하지만 jQuery 4 로 옮길 때 정리해야 한다.
-- 덮어써 올린 설치에 남는 옛 파일(쓰지 않는 정적 자산, PHPMailer 5.x, OpenID 2.0 라이브러리 `library/contrib/phpopenid/`, 웹에서 직접 열리는 jpgraph `plugins/StatGraph/count/`)은 루트의 `cleanup_legacy_assets.php` 로 지운다. 내용이 바뀐 파일은 건너뛰므로 직접 지운다(MIGRATION 3절).
+- 덮어써 올린 설치에 남는 옛 파일(쓰지 않는 정적 자산, PHPMailer 5.x, OpenID 2.0 라이브러리 `library/contrib/phpopenid/`, 웹에서 직접 열리는 jpgraph `plugins/StatGraph/count/`, CodeMirror 의 node.js 전용 파일)은 루트의 `cleanup_legacy_assets.php` 로 지운다. 내용이 바뀐 파일은 건너뛰므로 직접 지운다(MIGRATION 3절).
+- CodeMirror 의 node.js 전용 파일(`package.json`·`bin/source-highlight`·`addon/runmode/runmode.node.js`)은 편집기가 쓰지 않는데 저장소 의존성 경고의 대상이 되어 r4 에서 뺐다. 정리 스크립트로 지운 뒤에는 ED_tinyMCE 플러그인이 무결성 검사에 한 번 막히므로 플러그인 화면에서 '다시 검사하고 풀기'를 한다(MIGRATION 10절).
 
 ## [INFO] 참고 사항
 
@@ -41,7 +42,7 @@ this is a volunteer-maintained community fork.
 
 ## 해소 항목
 
-원본 Textcube 1.10.10 대비 보안 변경을 성격별로 나눈다. **[패치]** 는 원본에 있던 취약점·결함을 고친 것이고, **[도입]** 은 원본에 없던 방어 기능·설정을 새로 넣은 것이다(선택 기능이면 '선택'이라고 적는다). 항목 끝의 (r1)·(r2)·(r3)는 해소한 판이다.
+원본 Textcube 1.10.10 대비 보안 변경을 성격별로 나눈다. **[패치]** 는 원본에 있던 취약점·결함을 고친 것이고, **[도입]** 은 원본에 없던 방어 기능·설정을 새로 넣은 것이다(선택 기능이면 '선택'이라고 적는다). 항목 끝의 (r1)·(r2)·(r3)·(r4)는 해소한 판이다.
 
 ### 인증·세션
 
@@ -80,6 +81,9 @@ this is a volunteer-maintained community fork.
 - [도입] 테이블 복구 같은 점검 작업에는 일회용 점검 키를 요구한다. (r3)
 - [패치] 비공개·예약 글이 목록·검색·캐시로 방문자에게 노출되던 문제를 고쳤다. 비공개 분류의 글이 쓰는 태그·위치 정보도 숨긴다. (r3)
 - [패치] 손님용 스킨 캐시에 로그인 사용자 이름이 저장되어 다른 방문자에게 보일 수 있던 문제를 고쳤다. (r3)
+- [패치] 공개 상위 분류의 RSS·ATOM 피드에 비공개 하위 분류의 공개 글이 방문자에게 나가던 문제를 고쳤다. 분류 피드는 방문자가 볼 수 있는 하위 분류의 글만 담는다. (r4)
+- [패치] 글을 비공개로 바꾸거나 지우거나 다른 분류로 옮긴 뒤에도 그 분류·상위 분류 피드의 페이지 캐시에 글이 남아 방문자에게 보이던 문제를 고쳤다. (r4)
+- [패치] 플러그인 데이터 관리 화면에서 코어 휴지통 표(`TrashComments`·`TrashRemoteResponses`)가 등록되지 않은 표로 보여 서비스 관리자가 지울 수 있던 문제를 고쳤다. (r4)
 
 ### CSRF·요청 형식
 
@@ -94,6 +98,9 @@ this is a volunteer-maintained community fork.
 - [패치] 원본의 수동 escape 로 이어 붙이던 주요 쿼리를 준비 문장(prepared statement)으로 바꿨다. (r1)
 - [패치] 사용자 찾기(`/control` suggest)를 비롯해 위도·경도, 분류 id, 블로그 소유자·사용자 삭제, 세션 정리, 블로그 설정 지우기, slogan 중복 검사, 게스트 세션 같은 여러 화면의 SQL 삽입 가능 지점을 정수 변환·escape·바인딩으로 막았다. (r2, r3)
 - [패치] DB 어댑터(MySQL 외 PostgreSQL·SQLite3·Cubrid)에서 준비 문장이 제대로 동작하지 않거나 값을 SQL 에 직접 넣던 부분을 드라이버 바인딩으로 고쳤다. (r3)
+- [패치] PostgreSQL·Cubrid 에서 IP 필터 조건 값을 큰따옴표로 넣어 질의가 늘 실패해 손님 IP 차단이 꺼져 있던 문제를 고쳤다. 값은 작은따옴표 리터럴로 escape 한다. (r4)
+- [패치] SQLite 3.44 미만에서 스팸 필터 질의(`CONCAT`)가 실패해 이름·홈페이지·본문 차단과 화이트리스트가 적용되지 않던 문제를 고쳤다. (r4)
+- [패치] PostgreSQL·Cubrid 어댑터의 `CONCAT` 변환이 따옴표 수의 제곱만큼 시간이 걸려 긴 입력 하나로 요청이 오래 걸리던 문제를 고쳤다. (r4)
 
 ### XSS·출력 escape
 
@@ -104,6 +111,8 @@ this is a volunteer-maintained community fork.
 - [패치] Jukebox 모바일 출력, 첨부 동영상 바인더, 편집기가 삽입하는 주소의 출력을 escape 했다. (r3)
 - [패치] 관리 화면에 표시하는 로그인 ID 를 escape 했다. (r3)
 - [패치] 리더 본문의 HTML 을 블랙리스트 필터 대신 허용 목록 방식의 정화기로 걸러 낸다. (r3)
+- [패치] 휴지통 화면의 분류 선택 상자가 분류 이름을 JS 문자열에 HTML escape 만 거쳐 넣어, 역슬래시 꼴(`\x3c` 등)로 쓴 이름이 관리자 화면에서 태그로 풀리던 저장형 XSS 를 고쳤다. 분류를 만들 수 있는 편집자 이상의 입력이다. (r4)
+- [패치] 분류 body id 가 escape 없이 스킨 `<body id>`·글 목록 class 로 나가던 문제를 고쳤다. 저장할 때 영문·숫자·`_`·`-` 20자 이하만 받고(백업 가져오기의 분류 body id·공개 값도 같은 검사), 출력할 때도 escape 한다. (r4)
 
 ### 역직렬화·객체 주입
 
@@ -121,7 +130,7 @@ this is a volunteer-maintained community fork.
 - [패치] 첨부 경로 순회와 임시 파일(pickle) 경로 순회로 의도하지 않은 파일을 읽거나 쓸 수 있던 문제를 고쳤다. 백업 가져오기의 첨부 경로 검사와 도움말 화면의 언어 값을 이용한 경로 순회도 고쳤다. (r2, r3)
 - [패치] 설치 마법사가 `config.php` 에 값을 그대로 써서 코드가 주입될 수 있던 문제를 고쳤다. (r3)
 - [패치] 서버 설정을 `config.php` 에 쓸 때 따옴표·역슬래시를 escape 하지 않아 파일이 깨지거나 코드가 주입될 수 있던 문제를 고쳤다. (r3)
-- [패치] 플러그인 locale 파일과 플러그인·스킨 `index.xml`, `.user.ini` 를 웹에서 직접 열 수 있던 것을 막았다. (r3)
+- [패치] 플러그인 locale 파일과 플러그인·스킨 `index.xml`, `.user.ini` 를 웹에서 직접 열 수 있던 것을 막았다. (r3) `.user.ini` 차단은 `AllowOverride FileInfo` 만 허용한 Apache 에서도 동작하는 규칙으로 바꾸고, 경로 뒤에 PATH_INFO 가 붙은 요청과 설치 마법사의 IIS 템플릿까지 같은 범위로 막는다. (r4)
 - [패치] `plugins/` 와 `attach/` 아래에 올린 PHP 가 실행되던 문제를 중간 확장자(`.php.jpg` 형태)와 `php` 숫자 확장자까지 포함해 막았다. (r3)
 - [패치] 첨부로 올린 SVG 의 스크립트·이벤트 속성·외부 참조·`attr(` 를 걸러 내는 정화를 적용하고, SVG 변환 시간에 한도를 둔다. (r3)
 - [패치] 첨부 응답에 안전한 헤더를 붙이고, `.html` 첨부가 인라인으로 실행되던 문제를 고쳤다. (r3)

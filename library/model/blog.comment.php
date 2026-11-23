@@ -101,7 +101,7 @@ function getCommentsWithPagingForOwner($blogid, $category, $name, $ip, $search, 
 		LEFT JOIN {$database['prefix']}Comments c2 ON c.parent = c2.id AND c.blogid = c2.blogid
 		WHERE c.blogid = $blogid AND c.isfiltered = 0";
 	if ($category > 0) {
-		$categories = POD::queryColumn("SELECT id FROM {$database['prefix']}Categories WHERE parent = $category");
+		requireModel('blog.category'); $categories = getCategoryDescendantIds($blogid, $category);	// Textcube-NG: R-592 — 직계 자식 대신 자손 전체(사용자 결정 ②, 블로그 범위)
 		array_push($categories, $category);
 		$sql .= ' AND e.category IN (' . implode(', ', $categories) . ')';
 		$postfix .= '&amp;category=' . rawurlencode($category);

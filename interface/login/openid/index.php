@@ -3,6 +3,14 @@
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
 ///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
+///
 /// ---- Modification Notice ----
 /// OpenID 2.0 (EOL) 제거 → OIDC 전용 진입점. 인증 시작(try_auth)과 로그아웃(logout)만 처리하며,
 /// provider 콜백은 /login/openid/callback 에서 받는다. OIDC 미설정 시 로그인은 동작하지 않는다(이중 옵트인).

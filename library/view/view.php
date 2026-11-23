@@ -524,51 +524,47 @@ function getCategoriesView($totalPosts, $categories, $selected, $xhtml = false) 
 	requireModel('blog.category');
 	requireLibrary('blog.skin');
 	$blogid = getBlogId();
-	$categoryCount = 0;
-	$categoryCountAll = 0;
-	$parentCategoryCount = 0;
+	// Textcube-NG: R-592 글갈래 다단계 — 원본의 1·2단 이중 반복을 재귀(__buildCategoriesViewNode)로 바꿨다. 볼 수 없는 분류는 자손째 빼고,
+	//   글 수는 '자기 글 + 보이는 자손의 글'(원본 식 '부모 자기 글 + 보이는 자식 합'을 깊이만큼 넓힘 — 2단 결과는 같다, 사용자 결정 ③)
 	$tree = array('id' => 0, 'label' => getCategoryNameById($blogid, 0), 'value' => $totalPosts, 'link' => "$blogURL/category", 'children' => array());
+	$owner = doesHaveOwnership();
 	foreach ($categories as $category1) {
-		$children = array();
-		if(doesHaveOwnership() || getCategoryVisibility($blogid, $category1['id']) > 1) {
-			foreach ($category1['children'] as $category2) {
-				if( doesHaveOwnership() || getCategoryVisibility($blogid, $category2['id']) > 1) {
-					array_push($children,
-						array('id' => $category2['id'],
-							'label' => $category2['name'],
-							'value' => (doesHaveOwnership() ? $category2['entriesinlogin'] : $category2['entries']),
-							'link' => "$blogURL/category/" . ($blog['useSloganOnCategory'] ? URL::encode($category2['label'],$service['useEncodedURL']) : $category2['id']),
-							'rsslink' => "$blogURL/rss/category/" . ($blog['useSloganOnCategory'] ? URL::encode($category2['label'],$service['useEncodedURL']) : $category2['id']),
-							'atomlink' => "$blogURL/atom/category/" . ($blog['useSloganOnCategory'] ? URL::encode($category2['label'],$service['useEncodedURL']) : $category2['id']),
-							'children' => array()
-						)
-					);
-					$categoryCount = $categoryCount + (doesHaveOwnership() ? $category2['entriesinlogin'] : $category2['entries']);
-				}
-				$categoryCountAll = $categoryCountAll + (doesHaveOwnership() ? $category2['entriesinlogin'] : $category2['entries']);
-			}
-			$parentCategoryCount = (doesHaveOwnership() ? $category1['entriesinlogin'] - $categoryCountAll : $category1['entries'] - $categoryCountAll);
-			if($category1['id'] != 0) {
-				array_push($tree['children'],
-					array('id' => $category1['id'],
-						'label' => $category1['name'],
-						'value' => $categoryCount + $parentCategoryCount,
-						'link' => "$blogURL/category/" . ($blog['useSloganOnCategory'] ? URL::encode($category1['label'],$service['useEncodedURL']) : $category1['id']),
-						'rsslink' => "$blogURL/rss/category/" . ($blog['useSloganOnCategory'] ? URL::encode($category1['label'],$service['useEncodedURL']) : $category1['id']),
-						'atomlink' => "$blogURL/atom/category/" . ($blog['useSloganOnCategory'] ? URL::encode($category1['label'],$service['useEncodedURL']) : $category1['id']),
-						'children' => $children)
-				);
-			}
-			$categoryCount = 0;
-			$categoryCountAll = 0;
-			$parentCategoryCount = 0;
-		}
+		$node = __buildCategoriesViewNode($blogid, $category1, $owner, 0);
+		if ($node !== null && $category1['id'] != 0)
+			array_push($tree['children'], $node);
 	}
 	ob_start();
 	printTreeView($tree, $selected, false, $xhtml);
 	$view = ob_get_contents();
 	ob_end_clean();
 	return $view;
+}
+
+function __buildCategoriesViewNode($blogid, $category, $owner, $level) {
+	global $blogURL, $service, $blog;
+	if ($level > 64)
+		return null;
+	if (!$owner && !(getCategoryVisibility($blogid, $category['id']) > 1))
+		return null;
+	$children = array();
+	$value = ($owner ? $category['entriesinlogin'] : $category['entries']);
+	if (isset($category['children'])) {
+		foreach ($category['children'] as $child) {
+			$value = $value - ($owner ? $child['entriesinlogin'] : $child['entries']);
+			$node = __buildCategoriesViewNode($blogid, $child, $owner, $level + 1);
+			if ($node !== null) {
+				array_push($children, $node);
+				$value = $value + $node['value'];
+			}
+		}
+	}
+	return array('id' => $category['id'],
+		'label' => $category['name'],
+		'value' => $value,
+		'link' => "$blogURL/category/" . ($blog['useSloganOnCategory'] ? URL::encode($category['label'],$service['useEncodedURL']) : $category['id']),
+		'rsslink' => "$blogURL/rss/category/" . ($blog['useSloganOnCategory'] ? URL::encode($category['label'],$service['useEncodedURL']) : $category['id']),
+		'atomlink' => "$blogURL/atom/category/" . ($blog['useSloganOnCategory'] ? URL::encode($category['label'],$service['useEncodedURL']) : $category['id']),
+		'children' => $children);
 }
 
 function getCategoriesViewInOwner($totalPosts, $categories, $selected) {
@@ -578,18 +574,10 @@ function getCategoriesViewInOwner($totalPosts, $categories, $selected) {
 	requireLibrary('blog.skin');
 	// Initialize root category.
 	$tree = array('id' => 0, 'label' => getCategoryNameById(getBlogId(), 0), 'value' => $totalPosts, 'link' => "$blogURL/owner/entry/category", 'children' => array());
+	// Textcube-NG: R-592 — 깊이만큼 재귀로 그린다. 링크는 id 로 고르고 name1·name2 는 붙이지 않는다(관리 화면이 깊이를 분류 캐시로 셈). [!] = 조상 가운데 비공개
 	foreach ($categories as $category1) {
-		$children = array();
-		foreach ($category1['children'] as $category2) {
-			if(getCategoryVisibility($blogid, $category1['id']) == 2) {
-				array_push($children, array('id' => $category2['id'], 'label' => (getCategoryVisibility($blogid, $category2['id'])==2 ? $category2['name'] : _t('(비공개)').' '.$category2['name']), 'value' =>  $category2['entriesinlogin'], 'link' => "$blogURL/owner/entry/category/?id={$category2['id']}&entries={$category2['entries']}&priority={$category1['priority']}&name1=" . rawurlencode($category2['name']) . "&name2=" . rawurlencode($category2['name']), 'children' => array()));
-			} else {
-				array_push($children, array('id' => $category2['id'], 'label' => '[!] '.(getCategoryVisibility($blogid, $category2['id'])==2 ? $category2['name'] : _t('(비공개)').' '.$category2['name']), 'value' =>  $category2['entriesinlogin'], 'link' => "$blogURL/owner/entry/category/?id={$category2['id']}&entries={$category2['entries']}&priority={$category1['priority']}&name1=" . rawurlencode($category2['name']) . "&name2=" . rawurlencode($category2['name']), 'children' => array()));
-			}
-		}
-		if($category1['id'] != 0) {
-			array_push($tree['children'], array('id' => $category1['id'], 'label' => (getCategoryVisibility($blogid, $category1['id'])==2 ? $category1['name'] : _t('(비공개)').' '.$category1['name']), 'value' => $category1['entriesinlogin'], 'link' => "$blogURL/owner/entry/category/?&id={$category1['id']}&entries={$category1['entries']}&priority={$category1['priority']}&name1=" . rawurlencode($category1['name']), 'children' => $children));
-		}
+		if($category1['id'] != 0)
+			array_push($tree['children'], __buildCategoriesViewInOwnerNode($blogid, $category1, false, 0));
 	}
 	ob_start();
 	printTreeView($tree, $selected);
@@ -598,25 +586,91 @@ function getCategoriesViewInOwner($totalPosts, $categories, $selected) {
 	return $view;
 }
 
+function __buildCategoriesViewInOwnerNode($blogid, $category, $hiddenAbove, $level) {
+	global $blogURL;
+	$selfPublic = (getCategoryVisibility($blogid, $category['id']) == 2);
+	$children = array();
+	if ($level < 64 && isset($category['children'])) {
+		foreach ($category['children'] as $child)
+			array_push($children, __buildCategoriesViewInOwnerNode($blogid, $child, $hiddenAbove || !$selfPublic, $level + 1));
+	}
+	return array('id' => $category['id'],
+		'label' => ($hiddenAbove ? '[!] ' : '') . ($selfPublic ? $category['name'] : _t('(비공개)').' '.$category['name']),
+		'value' => $category['entriesinlogin'],
+		'link' => "$blogURL/owner/entry/category/?id={$category['id']}&entries={$category['entries']}&priority={$category['priority']}",
+		'children' => $children);
+}
+
 function getCategoriesViewInSkinSetting($totalPosts, $categories, $selected) {
 	requireModel('blog.category');
 	requireLibrary('blog.skin');
 
 	$tree = array('id' => 0, 'label' => getCategoryNameById(getBlogId(), 0), 'value' => $totalPosts, 'link' => "", 'children' => array());
+	// Textcube-NG: R-592 — 깊이만큼 재귀로
 	foreach ($categories as $category1) {
-		$children = array();
-		foreach ($category1['children'] as $category2) {
-			array_push($children, array('id' => $category2['id'], 'label' => $category2['name'], 'value' => (doesHaveOwnership() ? $category2['entriesinlogin'] : $category2['entries']), 'link' => "", 'children' => array()));
-		}
-		if($category1['id'] != 0) {
-			array_push($tree['children'], array('id' => $category1['id'], 'label' => $category1['name'], 'value' => (doesHaveOwnership() ? $category1['entriesinlogin'] : $category1['entries']), 'link' => "", 'children' => $children));
-		}
+		if($category1['id'] != 0)
+			array_push($tree['children'], __buildCategoriesViewInSkinSettingNode($category1, 0));
 	}
 	ob_start();
 	printTreeView($tree, $selected, true);
 	$view = ob_get_contents();
 	ob_end_clean();
 	return $view;
+}
+
+function __buildCategoriesViewInSkinSettingNode($category, $level) {
+	$children = array();
+	if ($level < 64 && isset($category['children'])) {
+		foreach ($category['children'] as $child)
+			array_push($children, __buildCategoriesViewInSkinSettingNode($child, $level + 1));
+	}
+	return array('id' => $category['id'], 'label' => $category['name'], 'value' => (doesHaveOwnership() ? $category['entriesinlogin'] : $category['entries']), 'link' => "", 'children' => $children);
+}
+
+/* Textcube-NG: R-592 글갈래 다단계 — printTreeView xhtml(category_list) 의 하위 목록을 깊이만큼 재귀로 쓴다.
+   줄마다 쓰는 문자열은 원본 1단·2단 출력과 같다(1단 ATOM 링크만 앞 공백이 있던 것도 그대로 — 2단 이하 트리는 바뀌기 전과 바이트까지 같다, 사용자 결정 ⑦) */
+function __printTreeViewXhtmlChildren($children, $selected, $skin, $blog, $depth) {
+	echo '<ul>'.CRLF;
+	foreach($children as $child) {
+		$classNames = array();
+		if ($child['id'] === $selected)
+			array_push($classNames, 'selected');
+		if ($child == end($children))
+			array_push($classNames, 'lastChild');
+		$isSelected = count($classNames) > 0 ? ' class="' . implode(' ', $classNames) . '"' : '';
+
+		echo "<li$isSelected>".CRLF;
+		if ($blog['useFeedViewOnCategory'])
+			echo ($depth == 1 ? ' ' : '').'<a href="'.$child['atomlink'].'" class="categoryFeed"><span class="text">ATOM</span></a>'.CRLF;
+		echo "<a href=\"", htmlspecialchars($child['link']), '" class="categoryItem">', htmlspecialchars($child['label']);
+		if ($skin['showValue'])
+			echo " <span class=\"c_cnt\">{$child['value']}</span>";
+		echo "</a>".CRLF;
+		if ($depth < 64 && isset($child['children']) && sizeof($child['children']) > 0)
+			__printTreeViewXhtmlChildren($child['children'], $selected, $skin, $blog, $depth + 1);
+		echo '</li>'.CRLF;
+	}
+	echo '</ul>'.CRLF;
+}
+
+/* Textcube-NG: R-592 — printTreeView JS 트리에서 1단 분류 아래 줄을 깊이 우선 순서로 편다(__depth = 단(2부터), __last = 형제 가운데 마지막).
+   3단 아래는 1단을 펼치면 함께 보이고 따로 접지 않는다(새 그림 없이 들여쓰기 칸만 — 사용자 결정 ⑦) */
+function __flattenTreeViewChildren($children, $depth) {
+	$flat = array();
+	if ($depth > 64)
+		return $flat;
+	$count = count($children);
+	$n = 0;
+	foreach ($children as $child) {
+		$n++;
+		$grandChildren = isset($child['children']) ? $child['children'] : array();
+		$child['__depth'] = $depth;
+		$child['__last'] = ($n == $count);
+		array_push($flat, $child);
+		if (!empty($grandChildren))
+			$flat = array_merge($flat, __flattenTreeViewChildren($grandChildren, $depth + 1));
+	}
+	return $flat;
 }
 
 function printTreeView($tree, $selected, $embedJava = false, $xhtml=false) {
@@ -638,49 +692,8 @@ function printTreeView($tree, $selected, $embedJava = false, $xhtml=false) {
 		if ($skin['showValue'])
 			echo " <span class=\"c_cnt\">{$tree['value']}</span>";
 		echo "</a>".CRLF;
-		if (sizeof($tree['children']) > 0) {
-			echo '<ul>'.CRLF;
-			foreach($tree['children'] as $child) {
-				$classNames = array();
-				if ($child['id'] === $selected)
-					array_push($classNames, 'selected');
-				if ($child == end($tree['children']))
-					array_push($classNames, 'lastChild');
-				$isSelected = count($classNames) > 0 ? ' class="' . implode(' ', $classNames) . '"' : '';
-
-				echo "<li$isSelected>".CRLF;
-				if ($blog['useFeedViewOnCategory'])
-					echo ' <a href="'.$child['atomlink'].'" class="categoryFeed"><span class="text">ATOM</span></a>'.CRLF;
-				echo "<a href=\"", htmlspecialchars($child['link']), '" class="categoryItem">', htmlspecialchars($child['label']);
-				if ($skin['showValue'])
-					echo " <span class=\"c_cnt\">{$child['value']}</span>";
-				echo "</a>".CRLF;
-
-				if (sizeof($child['children']) > 0) {
-					echo '<ul>'.CRLF;
-					foreach($child['children'] as $leaf) {
-						$classNames = array();
-						if ($leaf['id'] === $selected)
-							array_push($classNames, 'selected');
-						if ($leaf == end($child['children']))
-							array_push($classNames, 'lastChild');
-						$isSelected = count($classNames) > 0 ? ' class="' . implode(' ', $classNames) . '"' : '';
-
-						echo "<li$isSelected>".CRLF;
-						if ($blog['useFeedViewOnCategory'])
-							echo '<a href="'.$leaf['atomlink'].'" class="categoryFeed"><span class="text">ATOM</span></a>'.CRLF;
-						echo "<a href=\"", htmlspecialchars($leaf['link']), '" class="categoryItem">', htmlspecialchars($leaf['label']);
-						if ($skin['showValue'])
-							echo " <span class=\"c_cnt\">{$leaf['value']}</span>";
-						echo "</a>".CRLF;
-						echo "</li>".CRLF;
-					}
-					echo '</ul>'.CRLF;
-				}
-				echo '</li>'.CRLF;
-			}
-			echo "</ul>".CRLF;
-		}
+		if (sizeof($tree['children']) > 0)	// Textcube-NG: R-592 — 깊이만큼 재귀(__printTreeViewXhtmlChildren)
+			__printTreeViewXhtmlChildren($tree['children'], $selected, $skin, $blog, 1);
 		echo '</li>'.CRLF.'</ul>'.CRLF;
 		return;
 	}
@@ -858,11 +871,10 @@ function printTreeView($tree, $selected, $embedJava = false, $xhtml=false) {
 		</tr></table>
 		<div id="category_<?php echo $row['id'];?>_children" style="display:none">
 <?php
-		$j = count($row['children']);
-		foreach ($row['children'] as $irow) {
+		// Textcube-NG: R-592 — 1단 아래 자손 전체를 깊이 우선으로(__flattenTreeViewChildren). __last 가 원본 $j(남은 형제 수 0)를 대신한다
+		foreach (__flattenTreeViewChildren($row['children'], 2) as $irow) {
 			if ($irow['id'] == $selected)
 				$parentOfSelected = $row['id'];
-			$j--;
 			if (empty($irow['link']))
 				$link = 'onclick="selectNode(' . $irow['id'] . ')"';
 			else
@@ -873,8 +885,8 @@ function printTreeView($tree, $selected, $embedJava = false, $xhtml=false) {
 				$link = 'onclick="window.location.href=\'' . escapeJSInAttribute($irow['link']) . '\'"';
 ?>
 				<table id="category_<?php echo $irow['id'];?>" <?php echo ($embedJava==true) ? 'name="treeNode"' : '';?> cellpadding="0" cellspacing="0"><tr>
-				<td style="width:39px; font-size: 1px"><img src="<?php echo $skin['url'];?>/navi_back_active<?php echo ($i ? '' : '_end');?>.gif" width="17" height="18" alt="" /><img src="<?php echo $skin['url'];?>/tab_treed<?php
-			if (!$j)
+				<td style="width:<?php echo 39 + 22 * ($irow['__depth'] - 2);?>px; font-size: 1px"><img src="<?php echo $skin['url'];?>/navi_back_active<?php echo ($i ? '' : '_end');?>.gif" width="17" height="18" alt="" /><?php echo str_repeat('<span style="display:inline-block;width:22px"></span>', $irow['__depth'] - 2);?><img src="<?php echo $skin['url'];?>/tab_treed<?php
+			if ($irow['__last'])
 				print "_end";
 ?>.gif" width="22" alt="" /></td>
 				<td>

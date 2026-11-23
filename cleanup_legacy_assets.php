@@ -11,6 +11,7 @@
 ///   - v3.127 목록에서 빠진 CodeMirror 데모 mode/rpm/changes/index.html (r3-36, R-542)
 ///   - r3 에서 뺀 PHPMailer 5.x(library/contrib/phpmailer/ 의 class.phpmailer.php·class.smtp.php·class.pop3.php·ChangeLog.txt·codeworxtech.html·README). 6.x(src/·legacy_shim.php·language/·LICENSE)는 남긴다
 ///   - 원본에 있던 OpenID 2.0 라이브러리(library/contrib/phpopenid/, v3.53)·jpgraph 그래프(plugins/StatGraph/count/, v3.52) — 웹에서 직접 열리는 PHP 가 남지 않게 지운다
+///   - r4 에서 뺀 CodeMirror node.js 전용 파일(package.json·bin/source-highlight·addon/runmode/runmode.node.js, 편집기는 쓰지 않음) — 지운 뒤 ED_tinyMCE 는 플러그인 화면 '다시 검사하고 풀기'
 /// 배포 내용과 같은 파일(sha256 일치)만 지우고, 내용이 바뀐 파일은 건너뛰어 목록만 보여 준다.
 /// 비게 된 디렉토리는 목록에 있는 것만 지운다. skin/customize·attach·cache 는 건드리지 않는다.
 ///
@@ -389,6 +390,10 @@ $files = array(
 	array('plugins/StatGraph/count/src/jpgraph_line.php', array('05669e6c558ef4121d994d910c6ee67de0fb3ee5873adbd3168d71ec1d598543', '704ddee4966dbe70c6a8b1a0b06b828ca9aee5e925257eb65e0d5f012df2a63a')),
 	array('plugins/StatGraph/count/src/jpgraph_plotmark.inc', array('051b2ab2ec745e55d3d2d5d47bd7a5c3c70c37d9fe735503a19b1b4de9f2c7d1')),
 	array('plugins/StatGraph/count/src/jpgraph_scatter.php', array('2cfee98e8da5d131f1c0291f42773e876cee0b439645ba87a388dc24a69bfd9e', 'c8e87a8fc5b580bb404239d2c7e09c4e4d8552a928c996eeb2c6faa870a92cc4')),
+	// Textcube-NG: r4-5 에서 뺀 CodeMirror node.js 전용 파일(편집기는 쓰지 않음, 저장소 의존성 경고 대상). 원본·r1·r2 판과 r3 판 내용
+	array('plugins/ED_tinyMCE/tinymce/plugins/codemirror/CodeMirror/package.json', array('a00803e2afcdf664720bc23494c7fb5038aa998dddb7611adf6fc4404eba6260', '95a808668722f226219643949ae753d88d730b370c8b3b6f5decdc802fb056c0')),
+	array('plugins/ED_tinyMCE/tinymce/plugins/codemirror/CodeMirror/bin/source-highlight', array('94aa1e0c0b0affbf13565a8bf861605b4dee99cca90890ece803c6013c32e517')),
+	array('plugins/ED_tinyMCE/tinymce/plugins/codemirror/CodeMirror/addon/runmode/runmode.node.js', array('d02fc2ed8e4981f89ba1807f9d1e9de27a3ddb8ced286f825f87afb4bada1fc0', 'e42b873d75f330a7a30bc325795827a883a18568a3f94be4fcd18a4125645089')),
 );
 
 // 비게 되면 지울 디렉토리(깊은 것부터). 다른 파일이 있으면 남는다.

@@ -2,6 +2,14 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 
 //require 'common.correctTT.php';
 
@@ -15,7 +23,7 @@ function getTrashTrackbackWithPagingForOwner($blogid, $category, $site, $url, $i
 		LEFT JOIN {$database['prefix']}Categories c ON t.blogid = c.blogid AND e.category = c.id 
 		WHERE t.blogid = $blogid AND t.isfiltered > 0 AND t.responsetype = 'trackback'";
 	if ($category > 0) {
-		$categories = POD::queryColumn("SELECT id FROM {$database['prefix']}Categories WHERE blogid = $blogid AND parent = $category");
+		requireModel('blog.category'); $categories = getCategoryDescendantIds($blogid, $category);	// Textcube-NG: R-592 — 직계 자식 대신 자손 전체(사용자 결정 ②, 블로그 범위)
 		array_push($categories, $category);
 		$sql .= ' AND e.category IN (' . implode(', ', $categories) . ')';
 		$postfix .= '&amp;category=' . rawurlencode($category);
@@ -57,7 +65,7 @@ function getTrashCommentsWithPagingForOwner($blogid, $category, $name, $ip, $sea
 
 	$postfix = '';	
 	if ($category > 0) {
-		$categories = POD::queryColumn("SELECT id FROM {$database['prefix']}Categories WHERE parent = $category");
+		requireModel('blog.category'); $categories = getCategoryDescendantIds($blogid, $category);	// Textcube-NG: R-592 — 직계 자식 대신 자손 전체(사용자 결정 ②, 블로그 범위)
 		array_push($categories, $category);
 		$sql .= ' AND e.category IN (' . implode(', ', $categories) . ')';
 		$postfix .= '&amp;category=' . rawurlencode($category);

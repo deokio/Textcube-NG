@@ -1,7 +1,7 @@
 Textcube-NG: Brand Yourself - Personalized web publishing platform
 ==================================================================
 
-**Version**: `1.10.10+php85.r3` · [한국어](./README.ko.md)
+**Version**: `1.10.10+php85.r4` · [한국어](./README.ko.md)
 
 > ## ⚠️ Security Notice — Read Before Deployment
 >
@@ -47,16 +47,22 @@ Textcube is based on online publishing platform 'Tattertools,' started by JH in 
 Textcube-NG is a community-maintained continuation of Textcube 1.10.10, porting the codebase from
 PHP 5.6 (the last version supported by upstream) to PHP 8.5. Ports for PHP 7.4, 8.2 and 8.4 are maintained
 alongside this one.
-The PHP 8.4 port and this PHP 8.5 package differ only in handling what PHP 8.5 deprecates. This package uses no
-PHP 8.5-only syntax, so it also runs unmodified on PHP 8.4 (its PDO driver constants use `Pdo\Mysql` and
-`Pdo\Pgsql`, introduced in PHP 8.4).
+This package requires PHP 8.5 (the installer checks for 8.5.0 or later). The PHP 8.4 port differs only in
+handling what PHP 8.5 deprecates.
+
+A **legacy edition for existing hosting on PHP 5.5 – 7.3** (MySQL 5.0+ / MariaDB 5.1+) is released separately
+with the same changes as `Textcube-NG-1.10.10+php55.r4.zip`.
 
 ### Key Changes from Upstream Textcube 1.10.10
 
 - **PHP 8.5 compliance**: deprecated/removed syntax fixed across the codebase (PHP4-style constructors,
   dynamic properties, `${}` interpolation, `strftime()`, brace array access, mysqli procedural API, etc.).
-- **Security fixes**: see [SECURITY.md](./documents/SECURITY.md) for the items resolved in r1–r3
+- **Security fixes**: see [SECURITY.md](./documents/SECURITY.md) for the items resolved in r1–r4
   (authorization, CSRF, SQL injection, XSS, SSRF, session handling, upload execution and more).
+- **Emoji (4-byte characters)**: new installs on MySQL 5.6+ / MariaDB 10.0+ use utf8mb4. Existing sites can
+  convert from the checkup page (back up the database first; see section 10 of [MIGRATION.md](./documents/MIGRATION.md)).
+- **Categories**: three or more levels (maximum depth set in category management, default 3), with category
+  lists, feeds and post counts covering all subcategories.
 - **Libraries**: PHPMailer 5.x → 6.9 (existing mail calls keep working); OpenID 2.0 removed and
   OpenID Connect added (opt-in, off by default); jpgraph → inline SVG chart; jQuery 3.7.1,
   jQuery UI 1.13.3, Lodash 4.18.1, TinyMCE 7.9.3, CodeMirror 5.65.21; Dojo and MooTools removed.
@@ -76,8 +82,13 @@ skins, plugins and attachments carry over. After replacing the files:
    `plugins/` and `attach/` execution-blocking rules to an existing `.htaccess`.
 2. Run `php cleanup_legacy_assets.php` in the root from the command line to preview, then `--apply`.
    It removes files that only older versions had (old static assets, PHPMailer 5.x, the OpenID 2.0
-   library, the jpgraph `plugins/StatGraph/count/` folder). Files whose content was changed are skipped;
-   delete those by hand. The script can be deleted afterwards.
+   library, the jpgraph `plugins/StatGraph/count/` folder, CodeMirror's node.js-only files). Files whose
+   content was changed are skipped; delete those by hand. The script can be deleted afterwards.
+
+Coming from an earlier Textcube-NG release (r3 or before): also follow section 10 of
+[MIGRATION.md](./documents/MIGRATION.md) — the `.user.ini` and cache rules in an existing `.htaccess` are not
+rewritten automatically, and CL_Moblog, ST_MediaLog (and ED_tinyMCE after the cleanup script) need
+"re-check and unblock" once on the plugin page.
 
 Step-by-step procedures (drop-in, migrating via backup import, moving back to upstream, checklist) are in
 [MIGRATION.md](./documents/MIGRATION.md) (Korean).
@@ -108,6 +119,7 @@ Resolved items, grouped by type and marked as vulnerability patches or newly add
 * Database Management System (Need at least one environment)
   * **MySQL 5.7.6+ or 8.0+** with UTF-8 character set and collation setting
   * MariaDB 10.2 or above
+  * (MySQL / MariaDB) new installs store emoji (utf8mb4); existing installs convert from the checkup page
   * PostgreSQL, Cubrid, SQLite 3 (with limits; SQLite is not recommended for production —
     see section 8 of [MIGRATION.md](./documents/MIGRATION.md))
     * For the Cubrid PHP 8.x modules (native and PDO), see

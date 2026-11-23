@@ -2,6 +2,14 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 
 // DB-related function. will be merged into DBMS unification function.
 function escapeSearchString($str) {
@@ -332,7 +340,7 @@ class DBModel extends Singleton implements IModel {
 	   (항상 null) 비어 있었고, length 는 읽지 않았고, 기본값은 큰따옴표(MySQL 이외에서는 식별자)로 감쌌다 — 어떤 DBMS 에서도 실패.
 	   structure 의 type(어댑터 fieldType() 형식표)·length(varchar/vartext)·isNull·default 로 CREATE TABLE 을 만든다.
 	   필드 이름은 식별자 형식만 받고(예약어는 다른 질의처럼 큰따옴표), 숫자형 기본값은 숫자만, 그 밖의 기본값은 escapeString() 후 작은따옴표.
-	   MySQL·MySQLi 는 설치 화면처럼 DEFAULT CHARSET=utf8. 알 수 없는 형식이면 false. */
+	   MySQL·MySQLi 는 설치 화면처럼 DEFAULT CHARSET=utf8(연결이 utf8mb4 면 utf8mb4·그 콜레이션, r4-10). 알 수 없는 형식이면 false. */
 	public function create() {
 		if(!isset($this->structure) || empty($this->structure) || !is_array($this->structure)) return false;
 		if(empty($this->table)) return false;
@@ -358,7 +366,7 @@ class DBModel extends Singleton implements IModel {
 			$fields[] = $definition;
 		}
 		$sql = 'CREATE TABLE '.$this->table.' ('.CRLF.implode(','.CRLF, $fields).CRLF.')';
-		if(in_array(POD::dbms(), array('MySQL', 'MySQLi')) && (POD::charset() == 'utf8')) $sql .= ' DEFAULT CHARSET=utf8';
+		if(in_array(POD::dbms(), array('MySQL', 'MySQLi')) && in_array(POD::charset(), array('utf8', 'utf8mb4'), true)) $sql .= ' ' . POD::tableCharsetClause();	// Textcube-NG: r4-10 — utf8mb4 연결이면 utf8mb4·그 콜레이션
 		return POD::execute($sql);
 	}
 

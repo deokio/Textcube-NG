@@ -747,9 +747,9 @@ function moblog_manage()
 														<option value="<?php echo $category['id'];?>" <?php echo $category['id'] == $pop3category ? 'selected':''?> >
 														<?php echo ($category['visibility'] > 1 ? '' : _t('(비공개)')).htmlspecialchars($category['name']);?></option>
 			<?php	endif ?>
-			<?php 	foreach ($category['children'] as $child): ?>
+			<?php 	foreach (getCategoryDescendantRows(getBlogId(), $category['id']) as $child): ?>
 			<?php 		if ($category['id'] != 0): ?>
-														<option value="<?php echo $child['id'];?>" <?php echo $child['id'] == $pop3category ? 'selected':''?> >&nbsp;― <?php echo ($category['visibility'] > 1 && $child['visibility'] > 1 ? '' : _t('(비공개)')).htmlspecialchars($child['name']);?></option>
+														<option value="<?php echo $child['id'];?>" <?php echo $child['id'] == $pop3category ? 'selected':''?> >&nbsp;― <?php echo str_repeat('&nbsp;― ', $child['depth'] - 2).($child['hiddenByAncestor'] ? _t('(비공개)') : '').htmlspecialchars($child['name']);?></option>
 			<?php 		endif ?>
 			<?php 	endforeach ?>
 			<?php endforeach ?>

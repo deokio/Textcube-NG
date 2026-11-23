@@ -171,12 +171,13 @@ if(!is_null($context->getProperty('database.database'))) {
 		Respond::MessagePage('Problem with connecting database.<br /><br />Please re-visit later.');
 		exit;
 	}
+	if (in_array(POD::dbms(), array('MySQL', 'MySQLi'), true)) POD::applyStoredCharset($context->getProperty('database.prefix'));	// Textcube-NG: r4-10 — 표 변환 완료 표시(ServiceSettings databaseCharset)가 있으면 연결을 utf8mb4 로 바꾼다(캐시 불러오기 전, 사용자 결정 11-23)
 	POD::cacheLoad();
 	register_shutdown_function( array('POD','cacheSave') );
 	$context->setProperty('database.connected',true);
 	//register_shutdown_function( array('POD','unbind') );
 }
-$database['utf8'] = (POD::charset() == 'utf8') ? true : false;
+$database['utf8'] = in_array(POD::charset(), array('utf8', 'utf8mb4'), true) ? true : false;	// Textcube-NG: r4-10 — utf8mb4 연결도 UTF-8
 /// Memcache module bind (if possible)
 global $memcache;
 $memcache = null;

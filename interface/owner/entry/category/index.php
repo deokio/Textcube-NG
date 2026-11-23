@@ -19,7 +19,9 @@ if(count($_POST) > 0) {
 			'newCategory' => array('string', 'mandatory' => false),
 			'modifyCategoryName' => array('string', 'mandatory' => false),
 			'modifyCategoryBodyId' => array('string', 'default' => 'tt-body-category'),
-			'visibility' => array('int', 'mandatory' => false)
+			'visibility' => array('int', 'mandatory' => false),
+			'newParent' => array('int', 0, 'mandatory' => false),	// Textcube-NG: R-592 — 상위 분류 바꾸기(0 = 최상위)
+			'maxDepth' => array('int', 2, 10, 'mandatory' => false)	// Textcube-NG: R-592 — 분류 깊이 설정
 		)
 	);
 }
@@ -47,20 +49,27 @@ if (!empty($_POST['deleteCategory'])) {
 	$selected = (is_null($parent)) ? 0 : $parent;
 	$_POST['modifyCategoryName'] = '';
 	$_POST['modifyCategoryBodyId'] = '';
-	deleteCategory($blogid, $_POST['deleteCategory']);
+	if (!deleteCategory($blogid, $_POST['deleteCategory']))	// Textcube-NG: R-592 — 하위 분류가 있으면 서버도 거부(사용자 결정 ⑧)
+		$errorMessage = getCategoryErrorMessage($blogid);
 }
 
 if (!empty($_POST['direction']))
 	moveCategory($blogid, $selected, $_POST['direction']);
 
-if ($selected == 0)
-	$depth = 0;
-else if (!empty($_GET['name1']) && !empty($_GET['name2']))
-	$depth = 2;
-else if (!empty($_GET['name1']) && empty($_GET['name2']))
-	$depth = 1;
-else
-	$depth = 0;
+// Textcube-NG: R-592 — 상위 분류 바꾸기(사용자 결정 ⑥)·분류 깊이 설정(①). 깊이($depth)는 아래에서 분류 캐시로 센다(원본은 GET name1·name2 로 1·2단만 정했다)
+if (isset($_POST['newParent']) && $_POST['newParent'] !== '' && $selected > 0) {
+	if (!setCategoryParent($blogid, $selected, (int)$_POST['newParent']))
+		$errorMessage = getCategoryErrorMessage($blogid);
+}
+if (isset($_POST['maxDepth']) && $_POST['maxDepth'] !== '') {
+	$newMaxDepth = (int)$_POST['maxDepth'];
+	if ($newMaxDepth >= 2 && $newMaxDepth <= 10) {
+		if ($newMaxDepth < getCategoryTreeMaxDepth($blogid))
+			$errorMessage = _f('지금 분류가 %1단까지 있어 줄일 수 없습니다', getCategoryTreeMaxDepth($blogid));
+		else
+			Setting::setBlogSettingGlobal('categoryMaxDepth', $newMaxDepth);
+	}
+}
 
 if (empty($_GET['entries']) || $_GET['entries'] == 0)
 	$entries = 0;
@@ -82,18 +91,17 @@ if ((!empty($_POST['newCategory']) && Misc::isSpace($_POST['newCategory'])) ||
 	$errorMessage = _t('물음표가 들어간 카테고리 이름은 사용할 수 없습니다');
 } elseif (!empty($_POST['newCategory'])) {
 	$history = addCategory($blogid, ($selected == 0) ? null : $_POST['id'], trim($_POST['newCategory'])) ? 'document.getElementById("newCategory").select();' : '';
-	if(empty($history)) $errorMessage = _t('같은 이름의 카테고리가 이미 존재합니다');
+	if(empty($history)) $errorMessage = getCategoryErrorMessage($blogid);	// Textcube-NG: R-592 — 깊이 한도·경로 길이·같은 이름 가운데 거부한 까닭
 } else if (!empty($_POST['modifyCategoryName']) || !empty($_POST['modifyCategoryBodyId'])) {
 	$history = modifyCategory($blogid, $_POST['id'], trim($_POST['modifyCategoryName']),trim($_POST['modifyCategoryBodyId'])) ? 'document.getElementById("modifyCategoryName").select();' : '';
-	$tempParentId = POD::queryCell("SELECT `parent` FROM `{$database['prefix']}Categories` WHERE `id` = {$_POST['id']} AND `blogid` = ".getBlogId());
-	if (preg_match('/^[0-9]+$/', $tempParentId, $temp)) {
-		$depth = 2;
-	} else {
-		$depth = 1;
-	}
+	// Textcube-NG: r4-16 — 이름은 저장하고 body id 만 거부했을 때(성공으로 돌아옴)도 안내한다(사용자 결정 11-24 00:4x)
+	if (getCategoryErrorMessage($blogid, '') !== '')	// Textcube-NG: R-592 — 경로가 255자를 넘어 이름을 바꾸지 않았을 때. 원본의 MySQL 전용(역따옴표) 깊이 판정 질의는 지움(깊이는 아래에서 셈)
+		$errorMessage = getCategoryErrorMessage($blogid, '');
 } else {
 	$history = '';
 }
+$depth = getCategoryDepth($blogid, $selected);	// Textcube-NG: R-592 — 0(전체)·1(최상위)·2·… 바꾼 뒤의 분류 캐시로 센다
+$categoryMaxDepth = getCategoryMaxDepth($blogid);
 $categories = getCategories($blogid);
 $name = getCategoryNameById($blogid, $selected) ? getCategoryNameById($blogid, $selected) : _t('전체');
 $bodyid = getCategoryBodyIdById($blogid, $selected);
@@ -147,6 +155,28 @@ require ROOT . '/interface/common/owner/header.php';
 									oform.submit()
 								}
 
+								// Textcube-NG: R-592 — 상위 분류 바꾸기·분류 깊이 저장. 값은 이 단추를 누를 때만 hidden 입력으로 더해 보낸다(다른 동작에는 보내지 않음)
+								function changeParent() {
+									var oform=document.forms[0];
+									var input=document.createElement('input');
+									input.type='hidden';
+									input.name='newParent';
+									input.value=document.getElementById('parentSelect').value;
+									oform.appendChild(input);
+									oform.id.value=<?php echo $selected;?>;
+									oform.submit()
+								}
+
+								function changeMaxDepth() {
+									var oform=document.forms[0];
+									var input=document.createElement('input');
+									input.type='hidden';
+									input.name='maxDepth';
+									input.value=document.getElementById('maxDepthSelect').value;
+									oform.appendChild(input);
+									oform.id.value=<?php echo $selected;?>;
+									oform.submit()
+								}
 								window.addEventListener("load", expandTreeInit, false);
 								function expandTreeInit() {
 									try {
@@ -194,7 +224,7 @@ require ROOT . '/interface/common/owner/header.php';
 										<dl id="label-create-line" class="line">
 											<dt><label for="newCategory"><?php echo _t('만들기');?></label></dt>
 <?php
-if ($depth <= 1) {
+if ($depth < $categoryMaxDepth) {	// Textcube-NG: R-592 — 깊이 한도(블로그 설정, 기본 3)까지 하위 분류를 만든다
 ?>
 											<dd>
 												<div class="field-box">
@@ -208,7 +238,7 @@ if ($depth <= 1) {
 <?php
 } else {
 ?>
-											<dd><p><?php echo _t('분류는 2단까지 허용됩니다.');?></p></dd>
+											<dd><p><?php echo _f('분류는 %1단까지 허용됩니다.', $categoryMaxDepth);?></p></dd>
 <?php
 }
 ?>
@@ -233,6 +263,60 @@ if ($depth <= 1) {
 												<p><?php echo _t('Body id는 블로그 스킨의 <acronym title="Cascading Style Sheet">CSS</acronym> 활용을 위해 사용합니다.<br /> 기본값인 "tt-body-category"를 그냥 사용하셔도 사용에 지장은 없습니다.');?></p>
 											</dd>
 										</dl>
+										<dl id="label-parent-line" class="line">
+											<dt><label for="parentSelect"><?php echo _t('상위 분류');?></label></dt>
+<?php
+// Textcube-NG: R-592 — 상위 분류 바꾸기(사용자 결정 ⑥). 자기와 자손은 목록에서 빼고, 옮기면 깊이 한도를 넘는 분류는 고를 수 없게 보인다(최종 검사는 서버 setCategoryParent())
+if ($selected > 0) {
+	$parentExcluded = array_merge(array($selected), getCategoryDescendantIds($blogid, $selected));
+	$parentCurrent = getParentCategoryId($blogid, $selected);
+	$parentSubtreeHeight = getCategorySubtreeHeight($blogid, $selected);
+?>
+											<dd>
+												<div class="field-box">
+													<select id="parentSelect">
+														<option value="0"<?php echo (empty($parentCurrent) ? ' selected="selected"' : '');?>><?php echo _t('(최상위)');?></option>
+<?php
+	foreach (getCategoriesFlat($blogid) as $parentCandidate) {
+		if (in_array($parentCandidate['id'], $parentExcluded))
+			continue;
+		$parentTooDeep = ($parentCandidate['depth'] + $parentSubtreeHeight > $categoryMaxDepth);
+?>
+														<option value="<?php echo $parentCandidate['id'];?>"<?php echo ($parentCandidate['id'] == $parentCurrent ? ' selected="selected"' : '').($parentTooDeep ? ' disabled="disabled"' : '');?>><?php echo str_repeat('― ', $parentCandidate['depth'] - 1).htmlspecialchars($parentCandidate['name']);?></option>
+<?php
+	}
+?>
+													</select>
+													<input type="button" class="save-button input-button" value="<?php echo _t('옮기기');?>" onclick="changeParent(); return false;" />
+												</div>
+												<p><?php echo _t('다른 분류 아래로 옮깁니다. 하위 분류도 함께 옮겨집니다.');?></p>
+											</dd>
+<?php
+} else {
+?>
+											<dd><p><?php echo _t('최상단 분류는 이동할 수 없습니다.');?></p></dd>
+<?php
+}
+?>
+										</dl>
+										<dl id="label-depth-line" class="line">
+											<dt><label for="maxDepthSelect"><?php echo _t('분류 깊이');?></label></dt>
+											<dd>
+												<div class="field-box">
+													<select id="maxDepthSelect">
+<?php
+for ($depthOption = 2; $depthOption <= 10; $depthOption++) {
+?>
+														<option value="<?php echo $depthOption;?>"<?php echo ($depthOption == $categoryMaxDepth ? ' selected="selected"' : '');?>><?php echo _f('%1단', $depthOption);?></option>
+<?php
+}
+?>
+													</select>
+													<input type="button" class="save-button input-button" value="<?php echo _t('저장하기');?>" onclick="changeMaxDepth(); return false;" />
+												</div>
+												<p><?php echo _t('분류를 몇 단까지 나눌 수 있는지 정합니다. 지금 있는 분류보다 얕게 줄일 수는 없습니다.');?></p>
+											</dd>
+										</dl>
 										<dl id="label-move-line" class="line">
 											<dt><span class="label"><?php echo _t('정렬순서 변경');?></span></dt>
 <?php
@@ -242,6 +326,7 @@ if ($selected > 0) {
 												<div class="field-box">
 													<input type="button" class="up-button input-button" value="<?php echo _t('위로');?>" onclick="moveCategory('up');" /><span class="divider"> | </span><input type="button" class="down-button input-button" value="<?php echo _t('아래로');?>" onclick="moveCategory('down');" />
 												</div>
+												<p><?php echo _t('같은 단계 안에서 순서를 바꿉니다. 다른 분류 아래로 옮기려면 상위 분류를 고르십시오.');?></p>
 											</dd>
 <?php
 } else {

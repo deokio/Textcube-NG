@@ -145,8 +145,8 @@ class Post {
 			return $this->_error('insert');
 		
 		if (isset($this->category)) {
-			$target = ($parentCategory = Category::getParent($this->category)) ? '(id = ' . $this->category . ' OR id = ' . $parentCategory . ')' : 'id = ' . $this->category;
-			if (isset($this->visibility) && ($this->visibility != 'private'))
+			$target = Post::categoryChainCondition($this->category);	// Textcube-NG: R-592 — 자기 + 조상 전체(글 수 자손 합산, 사용자 결정 ③). 원본은 직계 부모까지만
+			if (isset($this->visibility) && in_array($this->visibility, array('protected', 'public', 'syndicated'), true))	// Textcube-NG: r4-14 — 다시 세기(updateEntriesOfCategory, visibility > 0)와 같은 기준. 원본은 예약 글(appointed, -2)도 공개 글 수에 더했다(dojoref 2.5, 사용자 결정 11-23)
 				@POD::query("UPDATE {$database['prefix']}Categories SET entries = entries + 1, entriesinlogin = entriesinlogin + 1 WHERE blogid = ".getBlogId()." AND " . $target);
 			else
 				@POD::query("UPDATE {$database['prefix']}Categories SET entriesinlogin = entriesinlogin + 1 WHERE blogid = ".$this->blogid." AND " . $target);
@@ -209,9 +209,9 @@ class Post {
 		
 		// step 6. update Category
 			if (isset($entry['category'])) {
-				$target = ($parentCategory = Category::getParent($entry['category'])) ? '(id = ' . $entry['category'] . ' OR id = ' . $parentCategory . ')' : 'id = ' . $entry['category'];
+				$target = Post::categoryChainCondition($entry['category']);	// Textcube-NG: R-592 — 자기 + 조상 전체
 
-				if (isset($entry['visibility']) && ($entry['visibility'] != 1))
+				if (isset($entry['visibility']) && ((int)$entry['visibility'] > 0))	// Textcube-NG: r4-14 — DB 값은 숫자(-2 예약·0 비공개·1 보호·2 공개·3 발행). 원본 != 1 은 비공개 글을 지울 때 공개 글 수를 줄이고 보호 글은 줄이지 않았다(dojoref 2.5)
 					POD::query("UPDATE {$database['prefix']}Categories SET entries = entries - 1, entriesinlogin = entriesinlogin - 1 WHERE blogid = ".$this->blogid." AND " . $target);
 				else
 					POD::query("UPDATE {$database['prefix']}Categories SET entriesinlogin = entriesinlogin - 1 WHERE blogid = ".$this->blogid." AND " . $target);
@@ -249,7 +249,7 @@ class Post {
 		if (!$old = $query->getRow('category, visibility'))
 			return $this->_error('id');
 			
-		$bChangedCategory = ($old['category'] != $this->category);
+		$bChangedCategory = isset($this->category) && ($old['category'] != $this->category);	// Textcube-NG: r4-14 — 분류를 주지 않은 update 는 바뀐 것으로 보지 않는다
 		
 		if ($old['visibility'] == 3) {
 			requireComponent('Eolin.API.Syndication');
@@ -261,9 +261,13 @@ class Post {
 		if (!$query->update())
 			return $this->_error('update');
 			
-//		if ($bChangedCategory) {
-//			// TODO : Recalculate Category
-//		}
+		// Textcube-NG: r4-14 — 원본 TODO(Recalculate Category). 분류나 공개 값이 바뀌면 블로그 전체 글 수를 다시 센다(자손 합산 R-592, 사용자 결정 11-23 — dojoref 2.5)
+		$visibilityValues = array('appointed' => -2, 'private' => 0, 'protected' => 1, 'public' => 2, 'syndicated' => 3);	// _buildQuery() 와 같은 값
+		$bChangedVisibility = isset($this->visibility) && is_string($this->visibility) && isset($visibilityValues[$this->visibility]) && ($visibilityValues[$this->visibility] != (int)$old['visibility']);
+		if ($bChangedCategory || $bChangedVisibility) {
+			requireModel('blog.category');
+			updateEntriesOfCategory($this->blogid);
+		}
 
 		if (isset($this->slogan))
 			$this->saveSlogan();
@@ -674,6 +678,19 @@ class Post {
 		}
 	}
 
+	/* Textcube-NG: R-592 글갈래 다단계 — 글 수를 고칠 분류 조건: 분류 자신과 조상 전체(blog.category 의 getCategoryAncestorIds(), 순환·64단 상한).
+	   분류 캐시에 아직 없는 분류(같은 요청에서 막 만든 분류 — 가져오기)면 캐시를 다시 읽는다 */
+	static function categoryChainCondition($category) {
+		requireModel('blog.category');
+		$category = (int)$category;
+		if ($category > 0) {
+			$raw = getCategories(getBlogId(), 'raw');
+			if (!isset($raw[$category]))
+				clearCategoryCache();
+		}
+		$chain = array_merge(array($category), getCategoryAncestorIds(getBlogId(), $category));
+		return (count($chain) > 1) ? '(id IN (' . implode(', ', $chain) . '))' : 'id = ' . $category;
+	}
 	function _error($error) {
 		$this->error = $error;
 		return false;

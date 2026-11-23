@@ -18,10 +18,10 @@ ini_set('display_errors', 'on');
 define('ROOT','.');
 require ROOT.'/framework/id/textcube/config.default.php';
 
-if (version_compare(PHP_VERSION,'5.2.0', '<')) {
+if (version_compare(PHP_VERSION,'8.5.0', '<')) {
 	if(!isset($service['forceinstall']) || $service['forceinstall'] != true) {
 	    header('HTTP/1.1 503 Service Unavailable');
-		echo "PHP Version mismatch. You need at least PHP 5.2.0 to install this version of Textcube.";
+		echo "PHP Version mismatch. You need at least PHP 8.5.0 to install this version of Textcube.";
 		exit;
 	}
 }
@@ -58,7 +58,7 @@ if (preg_match('/[\x00-\x1f\x7f]/', $path) || strpos($path, '?>') !== false) {
 $_SERVER['PHP_SELF'] = rtrim($_SERVER['PHP_SELF'], '/');
 // Set default table prefix.
 if (isset($_POST['dbPrefix']) && $_POST['dbPrefix'] == '') {
-	$_POST['dbPrefix'] == 'tc_';
+	$_POST['dbPrefix'] = 'tc_';	// Textcube-NG: r4-13 — 원본은 대입 대신 비교(==)라 빈 접두어가 그대로 남아 예약어 이름 표 Lines 가 1064 로 만들어지지 않았다(원본 의도대로 'tc_', dojoref 2.5)
 }
 $__requireBasics = array(
 	'function/string',
@@ -658,10 +658,10 @@ xml_set_object
             if (!function_exists($function))
                 array_push($required, $function);
         }
-		if (version_compare(PHP_VERSION, '5.2.0') === -1 && ( !isset( $service['forceinstall'] ) || $service['forceinstall']==false) ) {
+		if (version_compare(PHP_VERSION, '8.5.0') === -1 && ( !isset( $service['forceinstall'] ) || $service['forceinstall']==false) ) {
 			$error = 4;
 ?>
-                <span style="color:red"><?php echo _f('PHP 버전이 낮습니다. 설치를 위해서는 최소한 %1 이상의 버전이 필요합니다.','5.2.0');?></span>
+                <span style="color:red"><?php echo _f('PHP 버전이 낮습니다. 설치를 위해서는 최소한 %1 이상의 버전이 필요합니다.','8.5.0');?></span>
 <?php
 		} else if (count($required) == 0) {
 ?>
@@ -687,6 +687,13 @@ xml_set_object
            echo '<li>Character Set: OK</li>';
         else {
            echo '<li style="color:navy">Character Set: ', _t('UTF8 미지원 (경고: 한글 지원이 불완전할 수 있습니다.)'), '</li>';
+        }
+        if (in_array(POD::dbms(), array('MySQL', 'MySQLi'), true)) {	// Textcube-NG: r4-10 — 이모지(utf8mb4) 사용 여부(새 설치 때 이 판정으로 표를 만든다, 사용자 결정 11-23)
+            $setupMb4 = POD::utf8mb4Collation();
+            if ($setupMb4 !== null)
+                echo '<li>', htmlspecialchars(_t('이모지(utf8mb4): 사용'), ENT_QUOTES, 'UTF-8'), ' (', htmlspecialchars($setupMb4, ENT_QUOTES, 'UTF-8'), ')</li>';
+            else
+                echo '<li style="color:navy">', htmlspecialchars(_t('이모지(utf8mb4): 사용 안 함 — MySQL 5.6 이상·MariaDB 10.0 이상에서 지원'), ENT_QUOTES, 'UTF-8'), '</li>';
         }
 /*        if (POD::query('SET SESSION collation_connection = \'utf8_general_ci\''))
            echo '<li>Collation: OK</li>';
@@ -1107,6 +1114,7 @@ RewriteRule ^testrewrite$ setup.php [L]"
             }
         } else {
 			@POD::query('SET CHARACTER SET utf8');
+			if (in_array(POD::dbms(), array('MySQL', 'MySQLi'), true)) POD::applyStoredCharset($_POST['dbPrefix']);	// Textcube-NG: r4-10 — 이미 utf8mb4 로 바꾼 사이트(표시 있음)를 다시 설정할 때 이름의 이모지가 ? 로 읽히지 않게 연결을 맞춘다
 			if ($result = @POD::query("SELECT loginid, password, name FROM {$_POST['dbPrefix']}Users WHERE userid = 1")) {
 				@list($_POST['email'], $_POST['password'], $_POST['name']) = POD::fetch($result,'row');
 				$_POST['password2'] = $_POST['password'];
@@ -1251,8 +1259,20 @@ RewriteRule ^testrewrite$ setup.php [L]"
 		$baseLanguage = POD::escapeString( $_POST['Lang']);
 		$baseTimezone = POD::escapeString( substr(_t('default:Asia/Seoul'),8));
 
+		$setupCollation = null;	// Textcube-NG: r4-10 — 새 설치에서 utf8mb4 로 만들었을 때의 콜레이션(아래 ServiceSettings databaseCharset 행). MySQL 밖·기준 미만은 null
 		if(POD::dbms() == 'MySQL' || POD::dbms() == 'MySQLi') {
 	        $charset = 'DEFAULT CHARSET=utf8';
+	        // Textcube-NG: r4-10 — 새 설치는 서버가 기준(utf8mb4_unicode_520_ci 가 있는 MySQL 5.6+·MariaDB 10.0+, MySQL 8.0+ 는 utf8mb4_0900_ai_ci)이면
+	        //   연결을 utf8mb4 로 바꾸고 표를 utf8mb4·그 콜레이션으로 만든 뒤 표시(ServiceSettings databaseCharset)를 넣는다. 기준 미만이면 지금과 같음(사용자 결정 11-23).
+	        //   설치가 아닌 모드는 이미 있는 표의 표시를 따라 연결만 맞춘다
+	        if ($_POST['mode'] == 'install') {
+	        	$setupCollation = POD::utf8mb4Collation();
+	        	if ($setupCollation !== null && POD::setCharsetCollation($setupCollation))
+	        		$charset = POD::tableCharsetClause();
+	        	else
+	        		$setupCollation = null;
+	        } else
+	        	POD::applyStoredCharset($_POST['dbPrefix']);
 //    	    if (!@POD::query('SET CHARACTER SET utf8'))
   //      	    $charset = 'TYPE=MyISAM';
 	    //    @POD::query('SET SESSION collation_connection = \'utf8_general_ci\'');
@@ -1284,6 +1304,7 @@ INSERT INTO {$_POST['dbPrefix']}Users VALUES (1, '$loginid', '$password', '$name
 INSERT INTO {$_POST['dbPrefix']}Privileges VALUES (1, 1, 16, ".Timestamp::getUNIXtime().", 0);
 INSERT INTO {$_POST['dbPrefix']}ServiceSettings VALUES ('newlineStyle', '1.1');
 INSERT INTO {$_POST['dbPrefix']}ServiceSettings VALUES ('useNewPluginSetting', 1);
+".($setupCollation !== null ? "INSERT INTO {$_POST['dbPrefix']}ServiceSettings VALUES ('databaseCharset', '$setupCollation');\n" : '')."
 INSERT INTO {$_POST['dbPrefix']}BlogSettings VALUES (1, 'name', '$blog');
 INSERT INTO {$_POST['dbPrefix']}BlogSettings VALUES (1, 'language', '$baseLanguage');
 INSERT INTO {$_POST['dbPrefix']}BlogSettings VALUES (1, 'blogLanguage', '$baseLanguage');
@@ -1524,21 +1545,23 @@ ini_set('display_errors', 'off');
     	    $fp = fopen($filename, 'w+');
 
 			// Textcube-NG: 루트 .htaccess 와 맞춤 — cache 규칙 점 escape \.(R-14), 스킨 index.xml 차단(5330), mod_rewrite 는 .user.ini 차단 블록(Apache 2.2·2.4 겸용, R-6)(v3.196). ISAPI·IISRewrite 규칙은 .htaccess 로 쓰지 않으므로 <Files> 블록 대신 같은 차단을 RewriteRule 로 넣는다(r3-3). 스킨 index.xml 은 깊이와 관계없이 막는다(skin/blog/customize/<id>/index.xml 포함, r3-3)
+			// Textcube-NG: r4-6 — mod_rewrite 템플릿의 .user.ini 차단도 <Files> 블록 대신 plugins·attach 규칙과 같은 꼴의 RewriteRule 로 바꿈(AllowOverride FileInfo 만으로 동작, PATH_INFO 가 붙은 경로도 막음)
 			// Textcube-NG: plugins/ 아래 PHP 파일(.php·.php7 등·.phps·.phtml·.phar, 뒤에 /경로가 붙는 경우 포함) 직접 요청 차단 규칙을 세 템플릿에 더한다. 플러그인 주소 /plugin/<이름> 은 plugins/ 로 시작하지 않아 영향이 없다(r3-6, R-111)
 			// Textcube-NG: attach/ 아래 PHP 파일(.php·.php7 등·.phps·.phtml·.pht·.phar, 뒤에 /경로가 붙는 경우 포함) 실행 차단 규칙을 세 템플릿의 plugins 차단 줄 뒤에 더한다. mod_rewrite 템플릿에는 루트 .htaccess 와 같은 첨부 응답 헤더 블록(mod_headers 가 있을 때만 attach 아래 nosniff, svg 는 CSP sandbox)도 넣는다(r3-20)
 			// Textcube-NG: r3-27 R-448 — attach/ 차단 규칙에 가운데 확장자(a.php.jpg)를 더했다((\.|/|$)). R-434 — mod_rewrite 템플릿의 헤더 블록에 attach 아래 .html·.htm·.xhtml 내려받기(Content-Disposition) 를 더했다
+			// Textcube-NG: r4-17 — ISAPI·IISRewrite 템플릿의 .user.ini 차단 규칙 끝도 mod_rewrite(r4-6)·plugins·attach 줄과 같은 (/|\$) 로 맞춘다(PATH_INFO 가 붙은 .user.ini/x — IIS 실측 못 함, dojoref 2.7)
 			switch ($_POST['rewriteMode']) {
 			case 'ISAPI':
 				// Users must copy these rules to IsapiRewrite4.ini
 				$htaccessContent = <<<EOF
 RewriteRule ^{$path}/(thumbnail)/([0-9]+/.+)\$ {$path}/cache/\$1/\$2 [L,U]
 RewriteCond %{REQUEST_FILENAME} -f
-RewriteRule ^{$path}/(cache)+/+(.+[^/])\.(cache|xml|txt|log)\$ - [NC,F,L,U]
+RewriteRule ^{$path}/(cache)+/+(.*[^/])\.(cache|xml|txt|log)\$ - [NC,F,L,U]
 RewriteCond %{REQUEST_FILENAME} -f
 RewriteRule ^{$path}/(plugins/+[^/]+/+(locale/+.+|index\.xml)|resources/+locale/+.+|skin/+.+/+index\.xml)\$ - [NC,F,L,U]
 RewriteRule ^{$path}/plugins/+.+\.(php[0-9]*|phps|phtml|phar)(/|\$) - [NC,F,L,U]
 RewriteRule ^{$path}/attach/+.+\.(php[0-9]*|phps|phtml|pht|phar)(\.|/|\$) - [NC,F,L,U]
-RewriteRule ^{$path}/(.+/+)?\.user\.ini\$ - [NC,F,L,U]
+RewriteRule ^{$path}/(.+/+)?\.user\.ini(/|\$) - [NC,F,L,U]
 RewriteCond %{REQUEST_FILENAME} -d
 RewriteRule ^{$path}/([^?]+[^/])\$ {$path}/\$1/ [L,U]
 RewriteCond %{REQUEST_FILENAME} !-f
@@ -1552,12 +1575,12 @@ EOF;
 				$htaccessContent = <<<EOF
 RewriteRule ^{$path}/(thumbnail)/([0-9]+/.+)\$ {$path}/cache/\$1/\$2 [L]
 RewriteCond %{REQUEST_FILENAME} -f
-RewriteRule ^{$path}/(cache)+/+(.+[^/])\.(cache|xml|txt|log)\$ - [NC,F,L]
+RewriteRule ^{$path}/(cache)+/+(.*[^/])\.(cache|xml|txt|log)\$ - [NC,F,L]
 RewriteCond %{REQUEST_FILENAME} -f
 RewriteRule ^{$path}/(plugins/+[^/]+/+(locale/+.+|index\.xml)|resources/+locale/+.+|skin/+.+/+index\.xml)\$ - [NC,F,L]
 RewriteRule ^{$path}/plugins/+.+\.(php[0-9]*|phps|phtml|phar)(/|\$) - [NC,F,L]
 RewriteRule ^{$path}/attach/+.+\.(php[0-9]*|phps|phtml|pht|phar)(\.|/|\$) - [NC,F,L]
-RewriteRule ^{$path}/(.+/+)?\.user\.ini\$ - [NC,F,L]
+RewriteRule ^{$path}/(.+/+)?\.user\.ini(/|\$) - [NC,F,L]
 RewriteCond %{REQUEST_FILENAME} -d
 RewriteRule ^{$path}/([^?]+[^/])\$ {$path}/\$1/ [L]
 RewriteCond %{REQUEST_FILENAME} !-f
@@ -1571,17 +1594,6 @@ EOF;
 #CheckURL Off
 #</IfModule>
 #SetEnv PRELOAD_CONFIG 1
-
-# PHP 사용자 설정 파일 직접 접근 차단
-<Files ".user.ini">
-    <IfModule mod_authz_core.c>
-        Require all denied
-    </IfModule>
-    <IfModule !mod_authz_core.c>
-        Order Allow,Deny
-        Deny from all
-    </IfModule>
-</Files>
 
 # Textcube-NG: 첨부 응답 헤더(r3-20) — attach 아래 모든 파일에 nosniff, svg 는 CSP sandbox(문서로 열려도 스크립트·외부 불러오기 차단).
 # mod_headers 가 없으면 건너뛴다(attach 아래 nosniff 는 mod_setenvif 도 있어야 한다)
@@ -1604,13 +1616,15 @@ RewriteEngine On
 RewriteBase {$path}/
 RewriteRule ^(thumbnail)/([0-9]+/.+)\$ cache/\$1/\$2 [L]
 RewriteCond %{REQUEST_FILENAME} -f
-RewriteRule ^(cache)+/+(.+[^/])\.(cache|xml|txt|log)\$ - [NC,F,L]
+RewriteRule ^(cache)+/+(.*[^/])\.(cache|xml|txt|log)\$ - [NC,F,L]
 RewriteCond %{REQUEST_FILENAME} -f
 RewriteRule ^(plugins/+[^/]+/+(locale/+.+|index\.xml)|resources/+locale/+.+|skin/+.+/+index\.xml)\$ - [NC,F,L]
 RewriteRule ^plugins/+.+\.(php[0-9]*|phps|phtml|phar)(/|\$) - [NC,F,L]
 # Textcube-NG: 첨부 폴더(attach/) 안 PHP 실행 차단 — 올린 파일은 PHP 로 실행되면 안 된다(r3-20)
 # Textcube-NG: r3-27 R-448 — 가운데 확장자(a.php.jpg)도 막는다: 확장자 뒤에 '.' 이 이어지는 경우를 더함
 RewriteRule ^attach/+.+\.(php[0-9]*|phps|phtml|pht|phar)(\.|/|\$) - [NC,F,L]
+# Textcube-NG: r4-6 — PHP 사용자 설정 파일(.user.ini, 어느 폴더든) 직접 접근 차단을 <Files> 블록에서 RewriteRule 로 옮김(plugins·attach 규칙과 같이 끝을 슬래시 또는 경로 끝으로 맞춰 PATH_INFO 가 붙은 경로 .user.ini/x 도 막음). <Files> 안 Require·Order 는 AllowOverride AuthConfig·Limit 이 있어야 해서 FileInfo 만 허용한 서버에서 모든 요청이 500 이었다
+RewriteRule ^(.+/+)?\.user\.ini(/|\$) - [NC,F,L]
 RewriteCond %{REQUEST_FILENAME} -d
 RewriteRule ^(.+[^/])\$ \$1/ [L]
 RewriteCond %{REQUEST_FILENAME} !-f

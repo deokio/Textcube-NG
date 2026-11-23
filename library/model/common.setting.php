@@ -2,6 +2,14 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 
 global $userSetting;
 $userSetting = array();
@@ -109,6 +117,9 @@ function getDefinedTableNames() {
 			"{$prefix}Users", 
 			"{$prefix}UserSettings", 
 			"{$prefix}Widgets", 
+			// Textcube-NG: r4-13 — 설치 SQL 의 코어 휴지통 두 테이블이 원본부터 빠져, 플러그인 데이터 관리에서 미등록 표로 보이고(지울 수 있음) REPAIR 대상에서 빠졌다(dojoref 2.5)
+			"{$prefix}TrashComments", 
+			"{$prefix}TrashRemoteResponses", 
 			"{$prefix}XMLRPCPingSettings");
 	return $definedTables;
 }

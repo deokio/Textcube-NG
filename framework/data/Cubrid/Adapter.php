@@ -389,10 +389,11 @@ class DBAdapter implements IAdapter {
 
 			while (true) {
 				// Textcube-NG: 함수 호출 CONCAT( 만 찾는다. 이름의 일부(GROUP_CONCAT, CONCAT_WS, concat_flag, pg_catalog.concat)는 바꾸지 않는다(v3.183)
-				if (!preg_match('/(?<![A-Za-z0-9_$.\x80-\xff])CONCAT(?=\s*\()/i', $query, $match, PREG_OFFSET_CAPTURE, $ppos + 1)) {
+				// Textcube-NG: r4-8 — SQLite 블록(r4-2)과 같게 탐색 구간만 따옴표 밖으로 묶음 — 따옴표 수의 제곱 시간 방지
+				if ($pos - $ppos - 1 < 6 || !preg_match('/(?<![A-Za-z0-9_$.\x80-\xff])CONCAT(?=\s*\()/i', substr($query, $ppos + 1, $pos - $ppos - 1), $match, PREG_OFFSET_CAPTURE)) {
 					break;
 				}
-				$concat = $match[0][1];
+				$concat = $ppos + 1 + $match[0][1];
 				if ($concat >= $pos) {
 					break;
 				}

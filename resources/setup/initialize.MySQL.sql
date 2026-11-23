@@ -124,7 +124,7 @@ CREATE TABLE [##_dbPrefix_##]CommentsNotifiedSiteInfo (
   url varchar(255) NOT NULL default '',
   modified int(11) NOT NULL default '0',
   PRIMARY KEY  (id),
-  UNIQUE KEY url (url),
+  UNIQUE KEY url (url(191)),
   UNIQUE KEY id (id)
 ) [##_charset_##];
 CREATE TABLE [##_dbPrefix_##]DailyStatistics (
@@ -211,7 +211,7 @@ CREATE TABLE [##_dbPrefix_##]FeedItems (
   PRIMARY KEY  (id),
   KEY feed (feed),
   KEY written (written),
-  KEY permalink (permalink)
+  KEY permalink (permalink(191))
 ) [##_charset_##];
 CREATE TABLE [##_dbPrefix_##]FeedReads (
   blogid int(11) NOT NULL default '0',
@@ -248,7 +248,7 @@ CREATE TABLE [##_dbPrefix_##]Filters (
   filtertype enum('content','ip','name','url','whiteurl') NOT NULL default 'content',
   pattern varchar(255) NOT NULL default '',
   PRIMARY KEY (id),
-  UNIQUE KEY blogid (blogid, filtertype, pattern)
+  UNIQUE KEY blogid (blogid, filtertype, pattern(191))
 ) [##_charset_##];
 CREATE TABLE [##_dbPrefix_##]Lines (
   id int(11) NOT NULL default 0,
@@ -275,7 +275,7 @@ CREATE TABLE [##_dbPrefix_##]Links (
   visibility tinyint(4) NOT NULL default '2',
   xfn varchar(128) NOT NULL default '',
   PRIMARY KEY (pid),
-  UNIQUE KEY blogid (blogid,url)
+  UNIQUE KEY blogid (blogid,url(191))
 ) [##_charset_##];
 CREATE TABLE [##_dbPrefix_##]LinkCategories (
   pid int(11) NOT NULL default '0',
@@ -301,13 +301,13 @@ CREATE TABLE [##_dbPrefix_##]PageCacheLog (
   blogid int(11) NOT NULL default '0',
   name varchar(255) NOT NULL default '',
   value text NOT NULL,
-  PRIMARY KEY (blogid,name)
+  PRIMARY KEY (blogid,name(191))
 ) [##_charset_##];
 CREATE TABLE [##_dbPrefix_##]Plugins (
   blogid int(11) NOT NULL default '0',
   name varchar(255) NOT NULL default '',
   settings text,
-  PRIMARY KEY  (blogid,name)
+  PRIMARY KEY  (blogid,name(191))
 ) [##_charset_##];
 CREATE TABLE [##_dbPrefix_##]Privileges (
   blogid int(11) NOT NULL default 1,
@@ -378,7 +378,7 @@ CREATE TABLE [##_dbPrefix_##]Tags (
   id int(11) NOT NULL auto_increment,
   name varchar(255) NOT NULL default '',
   PRIMARY KEY  (id),
-  UNIQUE KEY name (name)
+  UNIQUE KEY name (name(191))
 ) [##_charset_##];
 CREATE TABLE [##_dbPrefix_##]RemoteResponseLogs (
   blogid int(11) NOT NULL default '0',

@@ -2,6 +2,14 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 
 $blogid = getBlogId();
 Statistics::updateVisitorStatistics($blogid);
@@ -71,7 +79,8 @@ if (isset($freeSloganBodyId) && is_string($freeSloganBodyId) && $freeSloganBodyI
 } else if ($context->getProperty('suri.directive') == '/line') {
 	dress('body_id',"tt-body-line",$view);
 } else if (!empty($category)) {
-	dress('body_id',getCategoryBodyIdById($blogid,$category) ? getCategoryBodyIdById($blogid,$category) : 'tt-body-category',$view);
+	// Textcube-NG: r4-16 — 분류 body id 를 escape 해 넣는다(r4-16 전에 저장된 값·다른 경로 값도 속성을 벗어나지 못하게, dojoref 2.4)
+	dress('body_id',htmlspecialchars(getCategoryBodyIdById($blogid,$category) ? getCategoryBodyIdById($blogid,$category) : 'tt-body-category'),$view);
 } else if (!empty($search)) {
 	dress('body_id',"tt-body-search",$view);
 } else if (!empty($period)) {

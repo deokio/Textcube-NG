@@ -554,6 +554,10 @@ function getEnclosure($entry) {
 function return_bytes($val) {
     $val = trim($val);
     $last = strtolower($val[strlen($val)-1]);
+    // Textcube-NG: 단위 문자를 떼고 곱한다. PHP 7.1 부터 '2M' 처럼 앞부분만 숫자인 문자열의 산술은 E_NOTICE, 8.0 부터 E_WARNING(값은 같음)(r4-2)
+    if ($last == 'g' || $last == 'm' || $last == 'k') {
+        $val = substr($val, 0, -1);
+    }
     switch($last) {
         // The 'G' modifier is available since PHP 5.1.0
         case 'g':

@@ -160,27 +160,31 @@ function ST_MediaLog_state($config, $categories, $types) {
 function ST_MediaLog_publicCategories($blogid) {
 	$rows = getCategories($blogid, 'raw');
 	if (!is_array($rows)) return array();
-	$top = array();
-	$children = array();
+	// Textcube-NG: R-592 — 깊이와 관계없이(자손 전체) 공개 분류를 상위부터 깊이 우선으로. 조상이 모두 공개인 분류만(비공개 분류 아래는 빠짐)
+	$byParent = array();
 	foreach ($rows as $row) {
 		if (!is_array($row) || !isset($row['id'], $row['visibility'])) continue;
 		$id = (int)$row['id'];
 		if ($id <= 0 || (int)$row['visibility'] < 2) continue;
 		$parent = isset($row['parent']) ? (int)$row['parent'] : 0;
 		$key = sprintf('%011d.%011d', max(0, isset($row['priority']) ? (int)$row['priority'] : 0), $id);
-		$item = array('id' => $id, 'name' => isset($row['name']) ? (string)$row['name'] : '', 'parent' => $parent);
-		if ($parent > 0) $children[$parent][$key] = $item;
-		else $top[$key] = $item;
+		$byParent[$parent][$key] = array('id' => $id, 'name' => isset($row['name']) ? (string)$row['name'] : '', 'parent' => $parent);
 	}
-	ksort($top, SORT_STRING);
 	$list = array();
-	foreach ($top as $item) {
-		$list[$item['id']] = $item;
-		if (!isset($children[$item['id']])) continue;
-		ksort($children[$item['id']], SORT_STRING);
-		foreach ($children[$item['id']] as $child) $list[$child['id']] = $child;
-	}
+	ST_MediaLog_appendCategories($list, $byParent, 0, 1);
 	return $list;
+}
+
+/// 부모 $parent 아래 공개 분류를 priority 순·깊이 우선으로 $list 에 더한다(순환·64단 상한)
+function ST_MediaLog_appendCategories(&$list, &$byParent, $parent, $depth) {
+	if ($depth > 64 || !isset($byParent[$parent])) return;
+	ksort($byParent[$parent], SORT_STRING);
+	foreach ($byParent[$parent] as $item) {
+		if (isset($list[$item['id']])) continue;
+		$item['depth'] = $depth;
+		$list[$item['id']] = $item;
+		ST_MediaLog_appendCategories($list, $byParent, $item['id'], $depth + 1);
+	}
 }
 
 /// 고른 분류와 그 하위 분류. 고르지 않았으면 분류 0 과 모든 공개 분류
@@ -188,8 +192,11 @@ function ST_MediaLog_categoryIds($categories, $selected) {
 	$ids = array();
 	if ($selected > 0) {
 		$ids[] = (int)$selected;
-		foreach ($categories as $item) {
-			if ($item['parent'] === (int)$selected) $ids[] = (int)$item['id'];
+		// Textcube-NG: R-592 — 직계 자식뿐 아니라 자손 전체(공개 분류 목록 안에서)
+		for ($i = 0; $i < count($ids); $i++) {
+			foreach ($categories as $item) {
+				if ($item['parent'] === $ids[$i] && !in_array((int)$item['id'], $ids, true)) $ids[] = (int)$item['id'];
+			}
 		}
 		return $ids;
 	}

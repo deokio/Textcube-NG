@@ -140,7 +140,7 @@ function getEntryListWithPagingByCategory($blogid, $category, $page, $count) {
 	if (!doesHaveOwnership() && $category != 0 && in_array($category, getCategoryVisibilityList($blogid, 'private')))
 		return array();
 	if ($category > 0) {
-		$categories = POD::queryColumn("SELECT id FROM {$database['prefix']}Categories WHERE blogid = $blogid AND parent = $category");
+		requireModel('blog.category'); $categories = getCategoryDescendantIds($blogid, $category);	// Textcube-NG: R-592 — 직계 자식 대신 자손 전체(사용자 결정 ②, 블로그 범위)
 		array_push($categories, $category);
 		if(!doesHaveOwnership())
 			$categories = array_diff($categories, getCategoryVisibilityList($blogid, 'private'));
@@ -249,7 +249,7 @@ function getEntriesWithPagingByCategory($blogid, $category, $page, $count, $coun
 	// (getEntryListWithPagingByCategory 와 같은 규칙)(v3.138)
 	$visibility = doesHaveOwnership() ? '' : 'AND visibility > 1';
 	if ($category > 0) {
-		$categories = POD::queryColumn("SELECT id FROM {$database['prefix']}Categories WHERE blogid = $blogid AND parent = $category $visibility");
+		requireModel('blog.category'); $categories = doesHaveOwnership() ? getCategoryDescendantIds($blogid, $category) : array_values(array_diff(getCategoryDescendantIds($blogid, $category), getCategoryVisibilityList($blogid, 'private')));	// Textcube-NG: R-592 — 직계 자식 대신 자손 전체(사용자 결정 ②). 손님은 비공개 분류(비공개 분류의 자손 포함)를 뺀다 — 원본의 'AND visibility > 1'(자식 자신의 값만)을 대신함
 		array_push($categories, $category);
 		$cond = 'AND e.category IN (' . implode(', ', $categories) . ')';
 		$visibility = doesHaveOwnership() ? '' : 'AND e.visibility > 0';
@@ -359,7 +359,7 @@ function getEntriesWithPagingForOwner($blogid, $category, $search, $page, $count
 		LEFT JOIN {$database['prefix']}Entries d ON e.blogid = d.blogid AND e.id = d.id AND d.draft = 1 ";
 	$sql = " WHERE e.blogid = $blogid AND e.draft = 0" . $teamMemberFilter;
 	if ($category > 0) {
-		$categories = POD::queryColumn("SELECT id FROM {$database['prefix']}Categories WHERE blogid = $blogid AND parent = $category");
+		requireModel('blog.category'); $categories = getCategoryDescendantIds($blogid, $category);	// Textcube-NG: R-592 — 직계 자식 대신 자손 전체(사용자 결정 ②, 블로그 범위)
 		array_push($categories, $category);
 		$sql .= ' AND e.category IN (' . implode(', ', $categories) . ')';
 	} else if ($category == -3) {
@@ -409,7 +409,7 @@ function getEntryWithPaging($blogid, $id, $isNotice = false, $categoryId = false
 	$category = $isNotice ? 'e.category = -2' : 'e.category >= 0';
 	if($categoryId !== false) {
 		if($categoryId != 0) {	// Not a 'total' category.
-			$childCategories = getChildCategoryId($blogid, $categoryId);
+			$childCategories = getCategoryDescendantIds($blogid, $categoryId);	// Textcube-NG: R-592 — 자손 전체
 			if(!empty($childCategories)) {
 				$category = 'e.category IN ('.$categoryId.','.implode(",",$childCategories).')';
 			} else {
@@ -480,7 +480,7 @@ function getEntryWithPagingBySlogan($blogid, $slogan, $isNotice = false, $catego
 	$category = $isNotice ? 'e.category = -2' : 'e.category >= 0';
 	if($categoryId !== false) {
 		if(!$categoryId == 0) {	// Not a 'total' category.
-			$childCategories = getChildCategoryId($blogid, $categoryId);
+			$childCategories = getCategoryDescendantIds($blogid, $categoryId);	// Textcube-NG: R-592 — 자손 전체
 			if(!empty($childCategories)) {
 				$category = 'e.category IN ('.$categoryId.','.implode(",",$childCategories).')';
 			} else {
@@ -990,6 +990,8 @@ function updateEntry($blogid, $entry, $updateDraft = 0) {
 		));
 
 	CacheControl::flushEntry($entry['id']);
+	if ($oldEntry['category'] != $entry['category'])	// Textcube-NG: r4-15 — 분류를 옮기면 옛 분류(와 조상)의 목록·피드 캐시에도 이 글이 남는다. flushEntry() 는 고친 뒤의 새 분류 사슬만 지운다(최종 시험 T24b)
+		CacheControl::flushCategory($oldEntry['category']);
 	/* Textcube-NG: 공개 여부가 바뀌면 태그 페이지(tagPage) 캐시도 비운다 — 방문자 /tag 는 공개 글의 태그만 보여 준다(v3.136).
 	   태그 구성이 바뀐 경우는 Tag::modifyTagsWithEntryId() 가 비운다 */
 	if ($oldEntry['visibility'] != $entry['visibility'])
@@ -1234,8 +1236,7 @@ function changeCategoryOfEntries($blogid, $entries, $category) {
 			if (POD::queryExistence("SELECT id FROM {$database['prefix']}Entries WHERE blogid = $blogid AND id <> $entryId AND draft = 0 AND title = '$title' AND category = -1") == true) return false;
 		}
 	} else {
-		$parent = getParentCategoryId($blogid, $category); // Textcube-NG: 정의되지 않은 $categoryId 대신 옮길 분류. 최상위 분류(null)는 넣지 않음 — 원본은 null 로 빈 id 질의·전체 분류 캐시 비우기(r3-8)
-		if(!is_null($parent)) array_push($effectedCategories, $parent);
+		$effectedCategories = array_merge($effectedCategories, getCategoryAncestorIds($blogid, $category));	// Textcube-NG: R-592 — 옮길 분류의 조상 전체(글 수 자손 합산, 사용자 결정 ③). r3-8: 정의되지 않은 $categoryId 대신 옮길 분류, 최상위는 조상이 없어 넣지 않음
 	}
 
 	foreach($targets as $entryId) {
@@ -1254,15 +1255,20 @@ function changeCategoryOfEntries($blogid, $entries, $category) {
 
 		if (!in_array($effectedCategoryId, $effectedCategories)) {
 			array_push($effectedCategories, $effectedCategoryId);
-			$parent = getParentCategoryId($blogid, $effectedCategoryId);
-			if(!is_null($parent)) array_push($effectedCategories, $parent);
+			foreach (getCategoryAncestorIds($blogid, $effectedCategoryId) as $ancestorId) {	// Textcube-NG: R-592 — 옛 분류의 조상 전체
+				if (!in_array($ancestorId, $effectedCategories))
+					array_push($effectedCategories, $ancestorId);
+			}
 		}
 	}
 	$effected = false;
-	foreach($effectedCategories as $effectedCategory) {
-		updateEntriesOfCategory($blogid, $effectedCategory);
+	foreach($effectedCategories as $effectedCategory) {	// Textcube-NG: R-592 — updateEntriesOfCategory() 가 블로그 전체를 다시 세므로 분류 캐시만 비우고 아래에서 한 번 센다
+		if ($effectedCategory >= 0)
+			CacheControl::flushCategory($effectedCategory);
 		$effected = true;
 	}
+	if ($effected)
+		updateEntriesOfCategory($blogid);
 
 	if(updateEntriesOfCategory($blogid, $category)) {
 		if ($effected) {

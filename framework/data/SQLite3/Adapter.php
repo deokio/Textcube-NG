@@ -347,7 +347,7 @@ class DBAdapter implements IAdapter {
 		return $result;
 	}
 
-	/* query() 의 호환 변환을 함수로 분리(동작 같음). prepare() 는 문장 틀에 같은 변환을 적용한다. */
+	/* query() 의 호환 변환을 함수로 분리(동작 같음). prepare() 는 문장 틀에 같은 변환을 적용한다. Textcube-NG: CONCAT( 는 SQLite 버전과 관계없이 || 로 바꾼다 — SQLite 3.44 미만에는 CONCAT 함수가 없어 Filter 질의(이름·홈페이지·본문 차단, 화이트리스트)가 실패했다(아래 블록은 같은 트리 PostgreSQL __compatQuery 의 CONCAT 블록에서 탐색 구간만 따옴표 밖으로 묶은 것, r4-2) */
 	public static function __compatQuery($query) {
 		// Textcube-NG: 따옴표·주석 밖의 UNIX_TIMESTAMP() 만 바꾼다(사용자 값 안의 같은 문자열이 저장 전에 epoch 로 바뀌던 문제, S-3)(v3.183)
 		$query = self::__replaceOutsideQuotes($query, 'UNIX_TIMESTAMP()', (string)Timestamp::getUNIXtime()); // compatibility issue.			
@@ -362,6 +362,65 @@ class DBAdapter implements IAdapter {
 		);
 		$query = preg_replace($origPagingInst, $descPagingInst,$query);	
 		if ($query === null) return '';	// Textcube-NG: preg_replace() 가 PCRE 오류로 null 을 돌려주면 빈 문장(Cubrid __compatQuery 와 같음, r3-3)
+		// CONCAT
+		$ppos = -1;
+		$length = strlen($query);
+		do {
+			$pos = strpos($query, '\'', $ppos + 1);
+			if ($pos === false) {
+				$pos = strlen($query);
+			}
+
+			while (true) {
+				// Textcube-NG: 함수 호출 CONCAT( 만 찾는다. 이름의 일부(GROUP_CONCAT, CONCAT_WS, concat_flag, pg_catalog.concat)는 바꾸지 않는다(v3.183)
+				// Textcube-NG: PostgreSQL 블록과 같음, 탐색 구간만 따옴표 밖으로 묶음 — 따옴표 수의 제곱 시간 방지(r4-2)
+				if ($pos - $ppos - 1 < 6 || !preg_match('/(?<![A-Za-z0-9_$.\x80-\xff])CONCAT(?=\s*\()/i', substr($query, $ppos + 1, $pos - $ppos - 1), $match, PREG_OFFSET_CAPTURE)) {
+					break;
+				}
+				$concat = $ppos + 1 + $match[0][1];
+				if ($concat >= $pos) {
+					break;
+				}
+
+				$depth = 0;
+				$quote = null;
+				for ($i = $concat + 6; $i < $length; $i++) {
+					if ($quote === null) {
+						if ($query[$i] == '\'' || $query[$i] == '"') {
+							$quote = $query[$i];
+						} elseif ($query[$i] == ',' && $depth == 1) {	// Textcube-NG: CONCAT 바로 아래 인자 쉼표만 바꾸고(안쪽 REPLACE(x,'a','b') 의 쉼표는 그대로) 늘어난 길이를 반영한다(v3.183)
+							$query = substr($query, 0, $i).' || '.substr($query, $i + 1);
+							$length += 3;
+						} elseif ($query[$i] == '(') {
+							$depth++;
+						} elseif ($query[$i] == ')') {
+							if (--$depth == 0) {
+								break;
+							}
+						}
+					} else {
+						if ($query[$i] == $quote) {	// Textcube-NG: 겹친 따옴표('')는 닫힘·열림으로 지나가고 백슬래시는 일반 문자(escapeString 결과)(v3.183)
+							$quote = null;
+						}
+					}
+				}
+				$query = substr($query, 0, $concat).substr($query, $concat + 6);
+
+				$pos = strpos($query, '\'', $ppos + 1);
+				if ($pos === false) {	// [보안] 뒤에 따옴표가 없으면 문장 끝(원본은 false 로 남아 처음부터 다시 훑음)
+					$pos = strlen($query);
+				}
+				$length = strlen($query);
+			}
+
+			$ppos = $pos;
+			if ($ppos < $length) {	// Textcube-NG: 닫는 따옴표 앞 백슬래시를 따지지 않는다('a\' 처럼 백슬래시로 끝나는 값)(v3.183)
+				$ppos = strpos($query, '\'', $ppos + 1);
+				if ($ppos === false) {	// [보안] 닫는 따옴표가 없으면 문장 끝으로(원본은 false 로 남아 처음부터 다시 훑으며 끝나지 않음)
+					$ppos = $length;
+				}
+			}
+		} while ($ppos < $length);
 		return $query;
 	}
 

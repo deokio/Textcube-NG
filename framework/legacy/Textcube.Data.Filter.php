@@ -2,6 +2,14 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 #[AllowDynamicProperties]
 class Filter {
 	function __construct() {
@@ -118,7 +126,7 @@ class Filter {
 							$pattern[] = '*';
 						}
 					}
-					$conditions[] = 'pattern = "'.POD::escapeString(implode('.', $pattern)).'"';
+					$conditions[] = 'pattern = \''.POD::escapeString(implode('.', $pattern)).'\'';	// Textcube-NG: r4-7 — 값은 SQL 문자열(작은따옴표) 리터럴로 쓴다. 큰따옴표는 PostgreSQL·Cubrid(ansi_quotes 기본 yes)에서 식별자로 읽혀 질의가 실패하고 IP 차단이 늘 꺼졌다. POD::escapeString 은 작은따옴표 리터럴 기준 escape
 				}
 				if (!empty($conditions)) {
 					$conditions = ' AND ('.implode(' OR ', $conditions).')';

@@ -26,7 +26,7 @@ define('TEXTCUBE_VERSION', TEXTCUBE_VERSION_ID.' : '.TEXTCUBE_CODENAME);
 define('TEXTCUBE_NG_CHECKUP_REVISION', 6);
 // PHP port(Textcube-NG): NG 판 번호. TEXTCUBE_VERSION·TEXTCUBE_VERSION_ID 는 점검(cache/CHECKUP)·플러그인 호환성 판정·쿠키 이름에 쓰이므로 바꾸지 않고 따로 둔다.
 // 관리 화면 footer·정보 화면·checkup·피드 generator·블로그 화면 머리 주석에 덧붙여 출력한다. VERSION 파일을 읽지 않고 트리별로 고정한다(파일이 오염되면 출력도 오염되므로).
-define('TEXTCUBE_NG_VERSION', '1.10.10+php85.r3');
+define('TEXTCUBE_NG_VERSION', '1.10.10+php85.r4');
 define('TEXTCUBE_COPYRIGHT', 'Copyright &copy; 2004-2016. Needlworks / Tatter Network Foundation. All rights reserved. Licensed under the GPL.');
 define('TEXTCUBE_HOMEPAGE', 'http://www.textcube.org/');
 define('TEXTCUBE_RESOURCE_URL', 'http://resources.textcube.org/1.10.9');

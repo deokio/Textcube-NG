@@ -1,7 +1,7 @@
 # MIGRATION — Textcube 1.10.10 → Textcube-NG 이전 안내
 
 원본 Textcube 1.10.10 에서 Textcube-NG(PHP 7.4~8.5 이식본)로 옮기거나 원본으로 되돌릴 때의 절차와 주의사항.
-원본과 달라진 동작 전체는 8절, 변경 내용은 [CHANGELOG.md](CHANGELOG.md), 보안 현황은 [SECURITY.md](SECURITY.md) 참조.
+원본과 달라진 동작 전체는 8절, 이전 NG 판(r3 이하)에서 r4 로 올릴 때의 주의는 10절, 변경 내용은 [CHANGELOG.md](CHANGELOG.md), 보안 현황은 [SECURITY.md](SECURITY.md) 참조.
 아래 `{접두어}` 는 `config.php` 의 `$database['prefix']`, `{블로그 주소}` 는 블로그 첫 화면 주소.
 
 ---
@@ -35,6 +35,7 @@
    - `library/contrib/phpopenid/` — OpenID 2.0 라이브러리(v3.53 에서 제거).
    - `plugins/StatGraph/count/` — jpgraph 그래프(v3.52 에서 SVG 로 대체). 남아 있으면 `count.php` 를 웹에서 직접 호출할 수 있음. `plugins/StatGraph/` 의 다른 파일은 지우지 말 것.
    - `library/contrib/phpmailer/` 의 PHPMailer 5.x 파일 — `class.phpmailer.php`·`class.smtp.php`·`class.pop3.php`·`ChangeLog.txt`·`codeworxtech.html`·`README`(r3 에서 제거, 메일은 같은 폴더의 PHPMailer 6.x `src/`·`legacy_shim.php` 를 씀). 남아 있어도 쓰는 코드는 없음. `LICENSE`·`language/`·`src/`·`legacy_shim.php` 는 지우지 말 것.
+   - `plugins/ED_tinyMCE/tinymce/plugins/codemirror/CodeMirror/` 의 node.js 전용 파일 `package.json`·`bin/source-highlight`·`addon/runmode/runmode.node.js`(r4 에서 제거, 편집기는 쓰지 않음). 지운 뒤 ED_tinyMCE 플러그인은 무결성 검사에 한 번 막히므로 플러그인 화면에서 '다시 검사하고 풀기'(10절).
    - 미사용 레거시 정적 자산(8.4).
    - 실행: NG 루트의 `cleanup_legacy_assets.php` 를 명령줄에서 실행(전체 목록은 스크립트 머리 주석과 `$files`).
      - `php cleanup_legacy_assets.php` 는 미리보기(지우지 않음), `--apply` 로 지움. `--backup=DIR`(미리 만든 웹 루트 밖 디렉토리)을 붙이면 복사한 뒤 지움.
@@ -183,7 +184,7 @@
 ### 8.2 웹 서버 설정(`.htaccess`·nginx·Apache·PHP-FPM)
 
 - 실행 차단: `plugins/`·`attach/` 아래 PHP 류 파일 요청은 403. 기존 `.htaccess` 에는 `/checkup` 이 이 규칙을 더하고 `.htaccess_backup_<날짜>` 를 남김(쓸 수 없으면 "확인 필요"). `attach/` 의 `.html`·`.htm`·`.xhtml` 은 내려받기로 나감.
-- 기존 루트 `.htaccess` 는 업그레이드 때 다시 쓰지 않음(릴리즈 zip 에도 없음) → `.user.ini`·스킨 `index.xml` 차단 규칙은 `setup.php` 템플릿과 같은 줄을 직접 옮김.
+- 기존 루트 `.htaccess` 는 업그레이드 때 다시 쓰지 않음(릴리즈 zip 에도 없음) → `.user.ini`·스킨 `index.xml` 차단 규칙은 `setup.php` 템플릿과 같은 줄을 직접 옮김. r4 에서 `.user.ini` 차단 줄의 꼴과 캐시 차단 줄이 바뀌었으므로 10절 1번을 따름.
 - nginx: `setup_nginx.txt` 의 `location` 규칙을 옮김.
 - Apache + PHP-FPM(`ProxyPassMatch`): `ProxyPassMatch "^/(.*\.php(/.*)?)$" fcgi://…` 는 `.htaccess` 규칙보다 먼저 `.php` 요청을 PHP-FPM 으로 넘기므로, `attach` 아래 `.php`류 이름을 `.htaccess` 의 `RewriteRule` 로 막지 못할 수 있음. `ProxyPassMatch "^/(?!attach/)(.*\.php(/.*)?)$"` 처럼 `attach` 를 제외하거나 `attach` 폴더에서 PHP 핸들러를 끄고 `security.limit_extensions` 로 제한할 것(앱 코드로는 막을 수 없음).
 - Host 헤더:
@@ -201,6 +202,7 @@
   - PostgreSQL: 원본 `compatibility.PostgreSQL.sql` 은 PostgreSQL 12 이상에서 함수가 만들어지지 않아 보관 목록·달력 질의가 실패(`year()` 도 두 자리) → checkup 이 함수를 확인해 다시 만듦. 점검 개정 번호가 올라 기존 NG 설치도 점검 안내가 한 번 다시 나옴(PostgreSQL 이 아니면 추가로 바뀌는 것 없음).
   - 점검 개정 5: 댓글 알림 대기열 고유 인덱스가 (blogid, commentid) 로 바뀜. 코드만 되돌려도 인덱스는 그대로 남음.
   - `.htaccess` 실행 차단 규칙 추가는 8.2.
+  - MySQL 8(STRICT): r4 부터 checkup 이 다시 만드는 `Lines`·`Widgets` 표의 TEXT 열에 기본값을 붙이지 않음(설치 SQL 과 같음, 전에는 1101 오류로 표를 만들지 못했음). 이모지(utf8mb4) 변환은 10절 3번.
 - 임시 첨부: 새 글의 첨부는 사용자별 `parent = -(userid+1)` 로 저장되고, 글을 처음 저장할 때 자기 것만 글로 옮김.
   - 새 글 화면에서 임시 첨부를 자동 삭제하지 않음. 원본은 새 글 화면에서 삭제하므로 같은 DB 를 원본과 함께 쓰면 작성 중 첨부가 지워질 수 있음.
   - 업그레이드 전 임시 첨부(`parent = 0`)는 `group.administrators` 만 정리(`interface/owner/entry/attachmulti/orphancheck`·`orphandelete`).
@@ -379,7 +381,40 @@
 - [ ] 플러그인 켜기·끄기를 GET 으로 부르던 외부 스크립트는 POST + 토큰으로(8절)
 - [ ] 스킨에 `[##_SocialLogin_##]` 가 있으면 CL_SocialLogin 의 댓글 폼 자동 표시를 끔(8절)
 - [ ] 배포 뒤 ED_tinyMCE·FM_Modern 이 차단되면 '다시 검사하고 풀기'(8절)
+- [ ] (r3 이하 NG 에서 올릴 때) 10절 — 기존 `.htaccess` 의 `.user.ini`·캐시 차단 줄 바꾸기, `/checkup`, ED_tinyMCE·CL_Moblog·ST_MediaLog '다시 검사하고 풀기'
+- [ ] 이모지를 쓰려면(MySQL 5.6+·MariaDB 10.0+) DB 백업 뒤 `/checkup` 의 '데이터베이스 문자셋(이모지)' 에서 변환, 중복 목록이 나오면 먼저 정리(10절 3번)
+- [ ] 분류 최대 깊이(분류 관리, 기본 3) 확인. 새 백업을 r3 이하 판으로 가져오지 않음(10절 5번)
 - [ ] 원본으로 되돌릴 가능성이 있으면 6절 먼저 확인
+
+## 10. r3 이하 NG 에서 r4 로 올릴 때
+
+파일을 덮어쓴 뒤(3절 2~4번) 아래를 확인한다. 원본에서 바로 오는 경우도 1번의 캐시 차단 줄과 3·5·6번이 해당한다.
+
+1. 기존 `.htaccess`(자동으로 바뀌지 않음)
+   - `.user.ini` 차단: r3 의 `<Files ".user.ini">` 블록(안의 `Require`·`Order`)은 `AllowOverride FileInfo` 만 허용한 Apache 에서 모든 요청을 500 으로 만든다. 이 블록을 지우고 attach PHP 차단 줄 뒤에 다음 줄을 넣는다.
+     `RewriteRule ^(.+/+)?\.user\.ini(/|$) - [NC,F,L]`
+   - 캐시 차단: `RewriteRule ^(cache)+/+(.+[^/])\.(cache|xml|txt|log)$ - [NC,F,L]` 줄이면 `(.+[^/])` 를 `(.*[^/])` 로 바꾸면 한 글자 이름의 캐시 파일도 막힌다(새 설치 템플릿은 r4 에서 바뀜).
+   - IIS(`web.config`)는 설치 마법사의 IIS 템플릿과 같은 줄로 맞춘다.
+2. `/checkup` 을 한 번 실행한다(3절 5번). MySQL 8(STRICT)에서 표를 다시 만드는 단계가 이제 성공한다.
+3. 이모지(4바이트 문자) — MySQL·MariaDB 만
+   - 새 설치는 MySQL 5.6+·MariaDB 10.0+ 이면 처음부터 utf8mb4 다. 이미 설치한 사이트는 자동으로 바뀌지 않는다.
+   - 바꾸려면 **DB 를 백업한 뒤** 서비스 관리자로 로그인해 `{블로그 주소}/checkup` 의 '데이터베이스 문자셋(이모지)' 절에서 버튼을 누른다. 요청 하나에 표 하나씩 바꾸며 '끝날 때까지 이어서' 를 고르면 자동으로 이어 간다. 중간에 끊겨도 다시 누르면 남은 표부터 잇는다. 모든 표가 끝나면 다음 요청부터 이모지를 저장한다.
+   - 되돌리는 화면은 없다. 되돌리려면 변환 전 백업을 복원한다.
+   - 긴 주소·필터·태그는 앞 191자만 비교하고, 새 콜레이션은 대소문자·악센트·`ß`/`ss`·전각/반각 차이를 같은 값으로 본다. 그렇게 같아지는 값이 있으면 버튼 대신 '변환 전에 정리할 중복' 목록이 나온다 — 관리 화면에서 그 태그·링크·필터·계정 이름을 고치거나 지운 뒤 다시 연다(자동으로 고치지 않음).
+   - 표를 바꾸는 동안 그 표에 쓰기가 막히고, 글이 많은 사이트는 요청마다 몇 초가 더 걸린다. 변환 중(표시가 켜지기 전)에 쓴 이모지는 잘린다.
+   - 플러그인이 등록하지 않은 표는 바꾸지 않고 목록만 보인다. 그런 표의 열에 이모지 조건을 거는 질의는 콜레이션 혼합 오류(1267)가 날 수 있다.
+4. 플러그인 '다시 검사하고 풀기': CL_Moblog·ST_MediaLog(분류 다단계로 파일이 바뀜)를 켜 둔 사이트는 덮어쓴 뒤, ED_tinyMCE 는 `cleanup_legacy_assets.php` 로 CodeMirror node.js 파일을 지운 뒤 무결성 검사에 한 번 막힌다 → 플러그인 화면(목록 보기)에서 '다시 검사하고 풀기'.
+5. 분류(글갈래)
+   - 분류 관리에 '분류 깊이'(기본 3, 2~10)와 '상위 분류' 선택 상자가 생겼다. 위·아래 단추는 같은 단계 안의 순서만 바꾼다(전에는 단계도 바꿈).
+   - 하위 분류가 있거나 글(임시 저장 글 제외)이 있는 분류는 지울 수 없다.
+   - 분류 경로(`상위/중간/하위`)가 255자를 넘으면 만들거나 이름을 바꿀 수 없다.
+   - r4 에서 만든 백업에는 분류가 깊이만큼 들어간다. 이 백업을 r3 이하 판(또는 원본)으로 가져오면 3단 이하 분류가 빠지고 그 글은 분류 없음이 된다.
+   - 분류 RSS 번호 주소(`/rss/category/<번호>`)의 제목에 분류 이름이 들어간다(ATOM·경로 주소와 같아짐).
+   - 다른 언어 화면에서는 새 문구(분류 깊이·상위 분류·body id 안내 등)가 한국어로 보인다(번역 없음).
+6. 분류 body id: 영문·숫자·`_`·`-` 20자 이하만 저장한다. 예전에 다른 문자로 넣은 값은 그대로 출력되지만(escape 됨) 고치려면 규칙에 맞는 값으로 다시 넣는다. 이름과 함께 저장하면 이름은 저장되고 body id 만 거부된다.
+7. 테이블 접두어: 설치 때 비우면 `tc_` 를 쓴다. 예전에 빈 접두어로 설치한 PostgreSQL·SQLite·Cubrid 사이트는 `setup.php` 로 다시 설정하면 빈 칸이 `tc_` 로 바뀌어 기존 표를 찾지 못한다 — 이런 사이트는 다시 설정하지 말고 `config.php` 를 직접 고친다.
+8. 손님 이름·홈페이지 기억: 전 판은 쓰는 쿠키 이름과 읽는 이름이 달라 기억이 동작하지 않았다. 업데이트 뒤 손님이 댓글을 한 번 쓰면 그때부터 기억한다. 예전 쿠키(`guestName`·`guestHomepage`)는 30일 뒤 만료된다.
+9. 그 밖: 휴지통 화면에서 줄바꿈이 든 분류 이름은 줄바꿈 없이 보인다. 블로그 API 등으로 글 분류·공개 값을 바꾸면 블로그 전체 분류 글 수를 다시 세므로 글이 아주 많은 블로그는 그 저장이 느려질 수 있다.
 
 ---
 

@@ -495,15 +495,34 @@ class CacheControl {
 	public static function flushCategory($categoryId = null) {
 		global $database;
 
-		if(empty($categoryId)) $categoryId = '';
-		else $categoryId = $categoryId.'-';
-		
+		// Textcube-NG: r4-15 — 분류 번호를 주면 원본은 RSS·ATOM 캐시도 'categoryRSS-<번호>-%' 로 찾아, 실제 이름 'categoryRSS-<번호>'(interface/rss·atom/category/index.php)를
+		//   지우지 못했다 — 글을 비공개로 바꾸거나 지워도 손님 분류 피드 캐시에 남았다(dojoref 2.4). 목록 캐시만 'categoryList-<번호>-' 로 시작하는 이름을 찾고,
+		//   피드 캐시는 이름이 같은 것만 지운다. 번호는 정수로 바꾼다. 번호가 없으면 원본처럼 분류 캐시 전부
+		//   R-592 뒤에는 조상 분류의 목록·피드에도 자손 분류 글이 들어가므로 조상 사슬(Categories.parent)의 캐시도 함께 지운다(최종 시험 T24b).
+		//   이 함수는 blog.category 모델이 적재되지 않은 요청에서도 불리므로 모델 함수 대신 여기서 parent 를 따라간다(캐시 안 쓴 질의, 되돌아오는 고리·64단 넘음은 멈춤)
+		if (empty($categoryId)) {
+			$condition = "name like 'categoryList-%' OR name like 'categoryRSS-%' OR name like 'categoryATOM-%'";
+		} else {
+			$categoryId = (int)$categoryId;
+			$chain = array($categoryId);
+			$seen = array($categoryId => true);
+			$current = $categoryId;
+			for ($step = 0; $step < 64; $step++) {
+				$parent = POD::queryCell("SELECT parent FROM {$database['prefix']}Categories WHERE blogid = ".getBlogId()." AND id = $current", 0, false);
+				if (!is_numeric($parent) || (int)$parent <= 0 || isset($seen[(int)$parent])) break;
+				$current = (int)$parent;
+				$seen[$current] = true;
+				$chain[] = $current;
+			}
+			$parts = array();
+			foreach ($chain as $chainId)
+				$parts[] = "name like 'categoryList-{$chainId}-%' OR name = 'categoryRSS-{$chainId}' OR name = 'categoryATOM-{$chainId}'";
+			$condition = implode(' OR ', $parts);
+		}
 		$categoryLists = POD::queryColumn("SELECT name
 			FROM {$database['prefix']}PageCacheLog
 			WHERE blogid = ".getBlogId()."
-			AND (name like 'categoryList-".$categoryId."%' 
-				OR name like 'categoryRSS-".$categoryId."%'
-				OR name like 'categoryATOM-".$categoryId."%')");
+			AND ($condition)");
 		CacheControl::purgeItems($categoryLists);
 		CacheControl::flushRSS();
 		return true;

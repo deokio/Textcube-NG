@@ -205,10 +205,10 @@ foreach (getAllEditors() as $key => $value) {
 														<option value="<?php echo $category['id'];?>"><?php echo ($category['visibility'] > 1 ? '' : _t('(비공개)')).htmlspecialchars($category['name']);?></option>
 			<?php
 				}
-				foreach ($category['children'] as $child) {
+				foreach (getCategoryDescendantRows(getBlogId(), $category['id']) as $child) {
 					if ($category['id'] != 0) {
 			?>
-														<option value="<?php echo $child['id'];?>">&nbsp;― <?php echo ($category['visibility'] > 1 && $child['visibility'] > 1 ? '' : _t('(비공개)')).htmlspecialchars($child['name']);?></option>
+														<option value="<?php echo $child['id'];?>">&nbsp;― <?php echo str_repeat('&nbsp;― ', $child['depth'] - 2).($child['hiddenByAncestor'] ? _t('(비공개)') : '').htmlspecialchars($child['name']);?></option>
 			<?php
 					}
 				}

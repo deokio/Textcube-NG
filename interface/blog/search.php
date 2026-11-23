@@ -2,6 +2,14 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 require ROOT . '/library/preprocessor.php';
 
 // Textcube-NG: ?search[]= ·?q[]= 처럼 배열이 오면 원본(5.6)은 strlen() Warning 뒤 'Array' 로 댓글·트랙백을 검색했고 PHP 8 은 strlen() TypeError 로 멈췄다(HTTP 500). 문자열이 아닌 값은 받지 않고 경로 값을 쓴다(addopenid 의 __T__ 와 같은 방식, v3.221)

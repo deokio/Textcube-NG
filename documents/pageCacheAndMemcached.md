@@ -2,7 +2,7 @@
 
 ## Context
 
-NAT 환경의 `uri.service` 포트 누락 버그를 4개 STAGE 모두 수정했다 (`framework/model/URIHandler.php`: `$_SERVER['HTTP_HOST']` 뒤에 `service.port` 합성). 캐시 OFF 상태에서는 정상 작동을 확인했고, 캐시 ON(pagecache/skincache/codecache 각각)에서도 동일 호스트 기준 hit/miss 정합성은 확보됐다.
+NAT 환경의 `uri.service` 포트 누락 버그를 이식본 모두에서 수정했다 (`framework/model/URIHandler.php`: `$_SERVER['HTTP_HOST']` 뒤에 `service.port` 합성). 캐시 OFF 상태에서는 정상 작동을 확인했고, 캐시 ON(pagecache/skincache/codecache 각각)에서도 동일 호스트 기준 hit/miss 정합성은 확보됐다.
 
 그러나 다음 두 가지가 미해결로 남아있다:
 
@@ -86,7 +86,7 @@ NAT 환경의 `uri.service` 포트 누락 버그를 4개 STAGE 모두 수정했�
 - 한 인스턴스를 2개 이상의 외부 호스트로 동시 서빙하는 운영 시나리오가 실제로 요구되는가?
 - secondaryDomain 기능을 적극 사용하는가?
 
-이 조건이 명확히 "예" 가 아니라면, 본 마이그레이션 프로젝트의 범위(= PHP 버전 이식)를 넘어가므로 **별도 트랙으로 분리** 권고. CLAUDE.md 의 "동일한 기능을 하는 코드로 변경" 원칙에도 부합.
+이 조건이 명확히 "예" 가 아니라면, 본 마이그레이션 프로젝트의 범위(= PHP 버전 이식)를 넘어가므로 **별도 트랙으로 분리** 권고. 이 이식 프로젝트의 "동일한 기능을 하는 코드로 변경" 원칙에도 부합.
 
 ---
 
@@ -111,9 +111,9 @@ NAT 환경의 `uri.service` 포트 누락 버그를 4개 STAGE 모두 수정했�
 4. IModel 계층의 `insert()/replace()` 도 동일하게 멤버 TTL 사용.
 5. 회귀 방지: pageCache 등 의도적으로 무한 보관해야 하는 경로가 있다면 그쪽은 호출 시 명시적으로 0 을 넘기게 정리.
 
-### 변경 STAGE
+### 적용 범위
 
-4개 STAGE(`php7.4/8.2/8.4/8.5-Textcube-1.10.10`) 모두 동일 적용. 원본 `Textcube-1.10.10\` 미수정.
+Textcube-NG 이식본(PHP 7.4·8.2·8.4·8.5 판) 모두 같은 내용이다. 원본 Textcube 1.10.10 은 바꾸지 않는다.
 
 ### Pros / Cons
 
@@ -144,7 +144,7 @@ NAT 환경의 `uri.service` 포트 누락 버그를 4개 STAGE 모두 수정했�
 - `ob_gzhandler` 와의 콜백 순서 의존성 — 잘못 등록 시 gzip 된 바이트열에 치환 적용되어 본문 손상.
 - 캐시 작성 경로의 어떤 한 지점이라도 토큰화 누락 시 `{__TC_*__}` 토큰이 그대로 클라이언트에 노출.
 - `plugins/*` 의 캐시 작성 사각지대 미확정.
-- 본 작업이 PHP 버전 이식 외 별도 기능 변경에 해당하므로 CLAUDE.md 의 "동일한 기능을 하는 코드로 변경" 원칙과 정면으로 어긋남.
+- 본 작업이 PHP 버전 이식 외 별도 기능 변경에 해당하므로 이 이식 프로젝트의 "동일한 기능을 하는 코드로 변경" 원칙과 정면으로 어긋남.
 
 → 본 마이그레이션 프로젝트 동안 **방안 B 는 시도하지 않는다.** 향후 별도 트랙(예: Textcube 정식 다중호스트 지원 기획) 에서 다룰 사안. 본 문서는 "왜 보류했는가" 의 근거 기록으로 보존하며, 아래 운영 가이드(섹션 3)로 NAT + memcached 환경에서의 실용적 우회를 제공한다.
 
@@ -177,9 +177,9 @@ NAT 환경의 `uri.service` 포트 누락 버그를 4개 STAGE 모두 수정했�
 
 토큰 누락(치환 안 된 토큰이 클라이언트에 노출) 방지 검증을 위해 비프로덕션 모드에선 출력 후 `{__TC_` 잔존 여부 assert 권장.
 
-### B-4. 변경 대상 STAGE
+### B-4. 적용 범위
 
-`php7.4 / php8.2 / php8.4 / php8.5 - Textcube-1.10.10` 4 STAGE 동일 적용. 원본 `Textcube-1.10.10\` 미수정.
+Textcube-NG 이식본(PHP 7.4·8.2·8.4·8.5 판) 모두 같은 내용이다. 원본 Textcube 1.10.10 은 바꾸지 않는다.
 
 ### B-5. 영향 분석
 
@@ -193,7 +193,7 @@ NAT 환경의 `uri.service` 포트 누락 버그를 4개 STAGE 모두 수정했�
 
 ### B-6. 실제 영향 범위 (코드베이스 인벤토리 결과)
 
-호출 카운트 (각 STAGE 동일 구조):
+호출 카운트 (이식본 모두 같은 구조):
 
 | 항목 | 영향 |
 |---|---|
@@ -242,18 +242,17 @@ NAT 환경의 `uri.service` 포트 누락 버그를 4개 STAGE 모두 수정했�
 
 ## 3. NAT + memcached 환경 운영 가이드
 
-**포트가 다른 NAT 환경에서 memcached(공유 캐시) 를 사용하는 경우 `$serviceURL` 을 명시적으로 세팅** 하도록 각 STAGE 의 3개 문서/파일을 갱신했다.
+**포트가 다른 NAT 환경에서 memcached(공유 캐시) 를 사용하는 경우 `$serviceURL` 을 명시적으로 세팅** 하도록 아래 3개 문서/파일을 갱신했다.
 
-### 갱신 대상 (4 STAGE 모두)
+### 갱신 대상
 
-| STAGE | README.md | config.php | setup.php |
-|---|---|---|---|
-| php7.4 | `php7.4-Textcube-1.10.10\README.md` | `php7.4-Textcube-1.10.10\config.php` | `php7.4-Textcube-1.10.10\setup.php` |
-| php8.2 | `php8.2-Textcube-1.10.10\README.md` | `php8.2-Textcube-1.10.10\config.php` | `php8.2-Textcube-1.10.10\setup.php` |
-| php8.4 | `php8.4-Textcube-1.10.10\README.md` | `php8.4-Textcube-1.10.10\config.php` | `php8.4-Textcube-1.10.10\setup.php` |
-| php8.5 | `php8.5-Textcube-1.10.10\README.md` | `php8.5-Textcube-1.10.10\config.php` | `php8.5-Textcube-1.10.10\setup.php` |
+| 파일(패키지 루트 기준) | 내용 |
+|---|---|
+| `README.md` | memcached 절의 NAT 주의 |
+| `config.php`(설치 때 만들어짐) | `$serviceURL` 주석 |
+| `setup.php` | 설치 때 만드는 `config.php` 템플릿의 같은 주석 |
 
-원본 `Textcube-1.10.10\` 미수정.
+원본 Textcube 1.10.10 은 바꾸지 않는다.
 
 ### 갱신 내용
 
@@ -288,10 +287,10 @@ NAT 환경의 `uri.service` 포트 누락 버그를 4개 STAGE 모두 수정했�
 
 ## 5. 완료된 실행 항목
 
-- `config.php` (4 STAGE): `$serviceURL` 주석 NAT + memcached 필수 설명 추가.
-- `setup.php` (4 STAGE): 설치 시 생성되는 config.php 템플릿에 동일 가이드 추가.
-- `README.md` (4 STAGE): memcached 섹션에 NAT 주의 블록쿼트 삽입.
-- `dbg_server.php` (php8.5): 디버그 목적 완료 후 삭제.
+- `config.php`: `$serviceURL` 주석 NAT + memcached 필수 설명 추가.
+- `setup.php`: 설치 시 생성되는 config.php 템플릿에 동일 가이드 추가.
+- `README.md`: memcached 섹션에 NAT 주의 블록쿼트 삽입.
+- 디버그용 임시 파일은 배포본에 넣지 않았다.
 
 ---
 
@@ -300,5 +299,5 @@ NAT 환경의 `uri.service` 포트 누락 버그를 4개 STAGE 모두 수정했�
 | 항목 | 결정 | 비고 |
 |---|---|---|
 | pageCache Placeholder 기반 URL (방안 B) | **보류** (위험성 근거) | 본 문서에 보류 사유 보존 |
-| NAT + memcached 환경 `$serviceURL` 명시 가이드 | **완료** | 4 STAGE × 3파일 갱신 |
+| NAT + memcached 환경 `$serviceURL` 명시 가이드 | **완료** | 3파일 갱신 |
 | memcached TTL 옵트인 도입 | **별건 보류** | 추후 별도 결정 |

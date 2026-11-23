@@ -2,6 +2,14 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 
 
 #[AllowDynamicProperties]
@@ -18,6 +26,8 @@ class Category {
 		$this->label =
 		$this->name =
 		$this->priority =
+		$this->visibility =	// Textcube-NG: R-592 — 분류 공개 설정·body id(가져오기·내보내기)
+		$this->bodyid =
 		$this->posts =
 		$this->exposedPosts =
 			null;
@@ -116,6 +126,11 @@ class Category {
 				return $this->_error('priority');
 			$query->setAttribute('priority', $this->priority);
 		}
+		// Textcube-NG: R-592 — 가져오기가 넘긴 분류 공개 설정·body id(새 백업 형식, 사용자 결정 ⑩ 안 A)
+		if (isset($this->visibility))
+			$query->setAttribute('visibility', ($this->visibility < 2) ? 1 : 2);
+		if (isset($this->bodyid))
+			$query->setAttribute('bodyid', UTF8::lessenAsEncoding($this->bodyid, 20), true);
 		
 		if ($query->doesExist()) {
 			$this->id = $query->getCell('id');

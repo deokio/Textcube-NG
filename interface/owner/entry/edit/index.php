@@ -730,10 +730,10 @@ if (defined('__TEXTCUBE_POST__')) {
 														<option value="<?php echo $category['id'];?>"<?php echo ($category['id'] == $entry['category'] ? ' selected="selected"' : '');?>><?php echo ($category['visibility'] > 1 ? '' : _t('(비공개)')).htmlspecialchars($category['name']);?></option>
 <?php
 			}
-			foreach ($category['children'] as $child) {
+			foreach (getCategoryDescendantRows($blogid, $category['id']) as $child) {
 				if ($category['id']!= 0) {
 ?>
-														<option value="<?php echo $child['id'];?>"<?php echo ($child['id'] == $entry['category'] ? ' selected="selected"' : '');?>>&nbsp;― <?php echo ($category['visibility'] > 1 ? '' : _t('(비공개)')).htmlspecialchars($child['name']);?></option>
+														<option value="<?php echo $child['id'];?>"<?php echo ($child['id'] == $entry['category'] ? ' selected="selected"' : '');?>>&nbsp;― <?php echo str_repeat('&nbsp;― ', $child['depth'] - 2).($child['hiddenByAncestor'] ? _t('(비공개)') : '').htmlspecialchars($child['name']);?></option>
 <?php
 				}
 			}

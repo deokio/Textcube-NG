@@ -26,6 +26,10 @@ require ROOT . '/library/preprocessor.php';
    ② 다시 점검: 점검 기록(cache/CHECKUP)이 현재 버전과 맞으면(Checkup::isCurrent()) 아무 작업도 하지 않고 다시 점검할지 묻는다.
       다시 점검은 소유자의 POST(CSRF 토큰 확인)나 맞는 점검 키로만 한다.
    원본의 소유자 판정 doesHaveOwnership() 14곳은 $checkupAuthorized(소유자이거나 맞는 키, 그리고 ②로 건너뛰지 않음)로 바꿨다. */
+/* PHP port(Textcube-NG): r4-10 데이터베이스 문자셋 utf8mb4 수동 변환(사용자 결정 11-23 — 진입점 checkup, 자동 실행 없음).
+   MySQL·MySQLi 에서 서비스 관리자(group.creators, 로그인 세션)에게만 '데이터베이스 문자셋(이모지)' 절을 보인다. 점검 키로 들어온 요청은 변환하지 않는다.
+   변환은 POST dbcharsetConvert + CSRF 토큰 + 점검 기록이 현재 판 + 표시(ServiceSettings databaseCharset) 없음 + 서버가 기준(MySQL 5.6+·MariaDB 10.0+)일 때만,
+   요청 하나에 테이블 하나씩. 진행은 카탈로그로 판정하고 모두 끝나면 표시를 켠다(다음 요청부터 utf8mb4 연결). 되돌리는 화면은 없다(백업 복원). */
 // 점검 키 파일: config.php(__TEXTCUBE_CONFIG_FILE__)와 같은 폴더의 checkup.key.php
 function checkupKeyFile() {
 	return dirname(__TEXTCUBE_CONFIG_FILE__) . '/checkup.key.php';
@@ -182,6 +186,31 @@ if (!$checkupRerun && $checkupIsPost && isset($_POST['rerun']) && doesHaveOwners
 $checkupSkip = $checkupIsCurrent && !$checkupRerun;
 $checkupAuthorized = (doesHaveOwnership() || $checkupKeyAccepted) && !$checkupSkip;
 $checkupRepair = $checkupKeyAccepted && isset($_POST['repair']) && ($_POST['repair'] === '1');
+// PHP port(Textcube-NG): r4-10 데이터베이스 문자셋(이모지) 절·변환 조건(위 머리 주석). 절은 MySQL·MySQLi·서비스 관리자·점검 키 요청 아님일 때만
+$dbcharsetVisible = in_array(POD::dbms(), array('MySQL', 'MySQLi'), true) && !$checkupKeyAccepted && Acl::check('group.creators');
+$dbcharsetStored = null;
+$dbcharsetCollation = null;
+$dbcharsetFormVisible = false;
+$dbcharsetRun = false;
+$dbcharsetRejected = false;
+$dbcharsetStep = null;
+$dbcharsetDuplicates = null;	// 바꾸면 같은 값이 되는 키 묶음(checkupDbCharsetDuplicates(), 변환 요청에서 이미 읽었으면 화면에 그대로 쓴다)
+$dbcharsetAuto = $checkupIsPost && isset($_POST['dbcharsetAuto']) && ($_POST['dbcharsetAuto'] === '1');
+$checkupTokenPrinted = $checkupSkip && doesHaveOwnership();	// 아래 '다시 점검' 버튼이 이미 csrfToken 을 찍는 조건
+if ($dbcharsetVisible) {
+	$dbcharsetStored = POD::queryCell("SELECT value FROM {$database['prefix']}ServiceSettings WHERE name = 'databaseCharset'", 0, false);
+	if (!is_string($dbcharsetStored) || ($dbcharsetStored === ''))
+		$dbcharsetStored = null;
+	if ($dbcharsetStored === null)
+		$dbcharsetCollation = POD::utf8mb4Collation();
+	$dbcharsetFormVisible = ($dbcharsetStored === null) && ($dbcharsetCollation !== null) && $checkupIsCurrent;
+	if ($checkupIsPost && isset($_POST['dbcharsetConvert']) && is_string($_POST['dbcharsetConvert'])) {
+		if (!__isCSRFTokenValid())
+			$dbcharsetRejected = true;
+		else if ($dbcharsetFormVisible)
+			$dbcharsetRun = true;
+	}
+}
 if ($checkupAuthorized) {
 	$codeCache = new CodeCache();
 	$codeCache->flush();
@@ -192,6 +221,7 @@ require ROOT . '/library/model/blog.skin.php';
 requireModel('common.setting');
 requireModel('blog.entry');
 requireModel('blog.trash');
+requireModel('common.plugin');	// Textcube-NG: r4-10 — 데이터베이스 문자셋 변환 대상(등록된 플러그인 테이블, getPluginTableList())
 
 if(!file_exists(__TEXTCUBE_CACHE_DIR__.'/CHECKUP')) $currentVersion = _text('첫번째 점검');
 else $currentVersion = Checkup::version(file_get_contents(__TEXTCUBE_CACHE_DIR__.'/CHECKUP'));	// PHP port: 1행 = 원본 버전(2행은 NG 점검 표시, Checkup)
@@ -401,6 +431,250 @@ function checkupRepairTables() {
 	return true;
 }
 
+/* PHP port(Textcube-NG): r4-10 데이터베이스 문자셋 utf8mb4 수동 변환(사용자 결정 11-23 — 진입점 checkup, 진행은 카탈로그로 판정, 대상은 코어 + 등록 플러그인 테이블).
+   대상: 정의된 테이블(getDefinedTableNames() — r4-13 부터 휴지통 두 테이블 TrashComments·TrashRemoteResponses 포함),
+   등록된 플러그인 테이블(checkupRepairTables() 와 같은 기준) 가운데 카탈로그(BASE TABLE)에 있고 이름이 [A-Za-z0-9_] 1~64자인 것. 등록되지 않은 테이블은 바꾸지 않고 목록만 보인다.
+   끝난 테이블 = 테이블 콜레이션이 고른 콜레이션이고 문자 열이 모두 utf8mb4(information_schema) — 따로 기록하지 않아 끊겨도 다음 요청이 남은 테이블부터 잇는다.
+   요청 하나에 테이블 하나를 ALTER 한 문장(191자를 넘는 BTREE 색인 열은 앞부분 191자로 다시 만들고 CONVERT TO CHARACTER SET)으로 바꾸고, 모두 끝나면 표시(ServiceSettings databaseCharset)를 켠다.
+   ALTER 는 사본을 만든 뒤 바꿔치기라 실패·연결 끊김에도 테이블이 중간 상태로 남지 않는다. 테이블·색인·열 이름은 카탈로그 값만 쓰고, DB 가 돌려준 글은 escape 해서 보인다. */
+function checkupDbCharsetTargets() {
+	global $database;
+	$names = array();
+	$catalog = POD::queryColumn("SHOW FULL TABLES WHERE Table_type = 'BASE TABLE'", false);
+	if (is_array($catalog)) {
+		foreach ($catalog as $name) {
+			if (is_string($name) && preg_match('/\A[A-Za-z0-9_]{1,64}\z/', $name))
+				$names[strtolower($name)] = $name;
+		}
+	}
+	$tables = array();
+	$defined = getDefinedTableNames();	// Textcube-NG: r4-13 — 휴지통 두 테이블은 getDefinedTableNames() 에 들어가 따로 더하지 않는다
+	foreach ($defined as $name) {
+		if (isset($names[strtolower($name)]))
+			$tables[strtolower($name)] = $names[strtolower($name)];
+	}
+	$unknown = array();
+	$pluginTables = getPluginTableList();
+	if (is_array($pluginTables) && isset($pluginTables['plugins']) && is_array($pluginTables['plugins'])) {
+		$caseInsensitive = !empty($pluginTables['caseInsensitive']);
+		foreach ($pluginTables['plugins'] as $plugin) {
+			if (!isset($plugin['tables']) || !is_array($plugin['tables']))
+				continue;
+			foreach ($plugin['tables'] as $name) {
+				if (is_string($name) && isset($names[strtolower($name)]) && !isOtherInstallTableName($name, $caseInsensitive))
+					$tables[strtolower($name)] = $names[strtolower($name)];
+			}
+		}
+	}
+	if (is_array($pluginTables) && isset($pluginTables['unknown']) && is_array($pluginTables['unknown'])) {
+		foreach ($pluginTables['unknown'] as $name) {
+			if (is_string($name) && isset($names[strtolower($name)]) && !isset($tables[strtolower($name)]))
+				$unknown[strtolower($name)] = $names[strtolower($name)];
+		}
+	}
+	ksort($tables);
+	ksort($unknown);
+	return array(array_values($tables), array_values($unknown));
+}
+
+// 아직 끝나지 않은 테이블(이름 순). 카탈로그를 읽지 못하면 null
+function checkupDbCharsetPending($tables, $collation) {
+	$collations = array();
+	$rows = POD::queryAllWithoutCache("SELECT TABLE_NAME, TABLE_COLLATION FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE()", 'num');
+	if (!is_array($rows))
+		return null;
+	foreach ($rows as $row)
+		$collations[strtolower((string)$row[0])] = (string)$row[1];
+	$mixed = array();
+	$rows = POD::queryAllWithoutCache("SELECT TABLE_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND CHARACTER_SET_NAME IS NOT NULL AND CHARACTER_SET_NAME <> 'utf8mb4' GROUP BY TABLE_NAME", 'num');
+	if (!is_array($rows))
+		return null;
+	foreach ($rows as $row)
+		$mixed[strtolower((string)$row[0])] = true;
+	$pending = array();
+	foreach ($tables as $table) {
+		$key = strtolower($table);
+		if (!isset($collations[$key]) || ($collations[$key] !== $collation) || isset($mixed[$key]))
+			$pending[] = $table;
+	}
+	return $pending;
+}
+
+// 테이블의 색인과 열(information_schema) — array(색인 이름 => array('unique', 'type', 'long', 'columns' => array(array(열, 앞부분 길이 또는 null, 문자 열 여부), ...))).
+// 'long' = 191자를 넘는 문자 열이 앞부분 없이(또는 191자보다 길게) 든 색인이고, 그 열의 앞부분 길이는 191 로 바꿔 둔다(변환 ALTER 와 중복 검사가 함께 쓴다). 읽지 못하면 null
+function checkupDbCharsetIndexes($table) {
+	if (!is_string($table) || !preg_match('/\A[A-Za-z0-9_]{1,64}\z/', $table))
+		return null;
+	$rows = POD::queryAllWithoutCache("SELECT s.INDEX_NAME, s.COLUMN_NAME, s.SUB_PART, s.NON_UNIQUE, s.INDEX_TYPE, c.DATA_TYPE, c.CHARACTER_MAXIMUM_LENGTH"
+		. " FROM information_schema.STATISTICS s JOIN information_schema.COLUMNS c ON c.TABLE_SCHEMA = s.TABLE_SCHEMA AND c.TABLE_NAME = s.TABLE_NAME AND c.COLUMN_NAME = s.COLUMN_NAME"
+		. " WHERE s.TABLE_SCHEMA = DATABASE() AND s.TABLE_NAME = '" . POD::escapeString($table) . "' ORDER BY s.INDEX_NAME, s.SEQ_IN_INDEX", 'num');
+	if (!is_array($rows))
+		return null;
+	$indexes = array();
+	foreach ($rows as $row) {
+		$index = (string)$row[0];
+		if (!isset($indexes[$index]))
+			$indexes[$index] = array('unique' => ((string)$row[3] === '0'), 'type' => strtoupper((string)$row[4]), 'long' => false, 'columns' => array());
+		$isChar = in_array(strtolower((string)$row[5]), array('char', 'varchar', 'tinytext', 'text', 'mediumtext', 'longtext'), true);
+		$long = $isChar && ((int)$row[6] > 191) && (($row[2] === null) || ((int)$row[2] > 191));
+		if ($long)
+			$indexes[$index]['long'] = true;
+		$indexes[$index]['columns'][] = array((string)$row[1], $long ? 191 : (($row[2] === null) ? null : (int)$row[2]), $isChar);
+	}
+	return $indexes;
+}
+
+/* PHP port(Textcube-NG): r4-10 변환 전 중복 검사(사용자 결정 11-23 '미리 검사·목록 안내', '검사 범위 넓힘').
+   아직 끝나지 않은 테이블($tables)의 UNIQUE·PRIMARY 키 가운데 문자 열이 든 키 전부(비고유 색인·FULLTEXT·SPATIAL 제외 — 191자로 줄이지 않는 키도 콜레이션이 바뀌어 같은 값이 될 수 있다)를,
+   바꾼 뒤의 문자셋·콜레이션(문자 열은 CONVERT(… USING utf8mb4) COLLATE <콜레이션>, 변환 ALTER 가 줄이는 열과 이미 앞부분 색인인 열은 그 길이의 LEFT(열, n), 숫자 열은 그대로)으로 묶어 2건 이상인 묶음을 찾는다.
+   미리 보기 값은 키의 첫 문자 열.
+   테이블·키·열 이름은 카탈로그 값을 [A-Za-z0-9_] 1~64자로 확인한 뒤 역따옴표로만 쓴다. 키마다 묶음 20개까지(21개째가 있으면 '20+').
+   반환 array(array(테이블, 키, 묶음 수(최대 21), array(array(건수, 값 앞부분 60자), ...)), ...) — 중복이 없으면 빈 배열, 읽지 못하면 null */
+function checkupDbCharsetDuplicates($tables, $collation) {
+	if (!is_array($tables) || !in_array($collation, array('utf8mb4_unicode_520_ci', 'utf8mb4_0900_ai_ci'), true))
+		return null;
+	$found = array();
+	foreach ($tables as $table) {
+		$indexes = checkupDbCharsetIndexes($table);
+		if (!is_array($indexes))
+			return null;
+		foreach ($indexes as $index => $info) {
+			$index = (string)$index;
+			if (!$info['unique'] || in_array($info['type'], array('FULLTEXT', 'SPATIAL'), true))
+				continue;
+			if (!preg_match('/\A[A-Za-z0-9_]{1,64}\z/', $index))
+				return null;
+			$groups = array();
+			$preview = null;
+			foreach ($info['columns'] as $column) {
+				if (!preg_match('/\A[A-Za-z0-9_]{1,64}\z/', $column[0]))
+					return null;
+				$expr = '`' . $column[0] . '`';
+				if ($column[1] !== null)
+					$expr = 'LEFT(' . $expr . ', ' . (int)$column[1] . ')';
+				if ($column[2])
+					$expr = 'CONVERT(' . $expr . ' USING utf8mb4) COLLATE ' . $collation;
+				$groups[] = $expr;
+				if (($preview === null) && $column[2])
+					$preview = $column[0];
+			}
+			if ($preview === null)	// 문자 열이 없는 키(숫자만)는 콜레이션과 관계없다
+				continue;
+			$rows = POD::queryAllWithoutCache('SELECT COUNT(*), MIN(LEFT(`' . $preview . '`, 60)) FROM `' . $table . '` GROUP BY ' . implode(', ', $groups) . ' HAVING COUNT(*) > 1 LIMIT 21', 'num');
+			if (!is_array($rows))
+				return null;
+			if (empty($rows))
+				continue;
+			$items = array();
+			foreach (array_slice($rows, 0, 20) as $row)
+				$items[] = array((int)$row[0], (string)$row[1]);
+			$found[] = array($table, $index, count($rows), $items);
+		}
+	}
+	return $found;
+}
+
+// 테이블 하나를 바꾸는 ALTER 한 문장. 191자를 넘는 문자 열이 든 BTREE 색인은 그 열만 (191) 로 다시 만든다(다른 열의 앞부분 길이는 그대로). 만들 수 없으면 null
+function checkupDbCharsetAlterSql($table, $collation) {
+	if (!is_string($table) || !preg_match('/\A[A-Za-z0-9_]{1,64}\z/', $table) || !in_array($collation, array('utf8mb4_unicode_520_ci', 'utf8mb4_0900_ai_ci'), true))
+		return null;
+	$indexes = checkupDbCharsetIndexes($table);	// Textcube-NG: r4-10 — 색인 읽기는 중복 검사(checkupDbCharsetDuplicates())와 같은 함수
+	if (!is_array($indexes))
+		return null;
+	$parts = array();
+	foreach ($indexes as $index => $info) {
+		$index = (string)$index;
+		if (!$info['long'] || in_array($info['type'], array('FULLTEXT', 'SPATIAL'), true))
+			continue;
+		if (!preg_match('/\A[A-Za-z0-9_]{1,64}\z/', $index))
+			return null;
+		$columns = array();
+		foreach ($info['columns'] as $column) {
+			if (!preg_match('/\A[A-Za-z0-9_]{1,64}\z/', $column[0]))
+				return null;
+			$columns[] = '`' . $column[0] . '`' . (($column[1] === null) ? '' : '(' . $column[1] . ')');
+		}
+		if ($index === 'PRIMARY') {
+			$parts[] = 'DROP PRIMARY KEY';
+			$parts[] = 'ADD PRIMARY KEY (' . implode(', ', $columns) . ')';
+		} else {
+			$parts[] = 'DROP INDEX `' . $index . '`';
+			$parts[] = 'ADD ' . ($info['unique'] ? 'UNIQUE KEY' : 'KEY') . ' `' . $index . '` (' . implode(', ', $columns) . ')';
+		}
+	}
+	$parts[] = 'CONVERT TO CHARACTER SET utf8mb4 COLLATE ' . $collation;
+	return 'ALTER TABLE `' . $table . '` ' . implode(', ', $parts);
+}
+
+function checkupDbCharsetLine($message, $ok) {
+	echo '<li>', htmlspecialchars(_text('데이터베이스 문자셋(이모지)'), ENT_QUOTES, 'UTF-8'), ': ', htmlspecialchars($message, ENT_QUOTES, 'UTF-8'),
+		' <span class="result ', ($ok ? 'success' : 'fail'), '">', htmlspecialchars($ok ? _text('성공') : _text('확인 필요'), ENT_QUOTES, 'UTF-8'), '</span></li>';
+}
+
+// 테이블 하나를 바꾼다. 반환: next(하나 바꿈, 남음)·done(모두 끝나 표시를 켬)·dup(바꾸면 같은 값이 되는 중복이 있거나 확인하지 못해 거부 — 테이블 변화 없음)·fail·lock.
+// $duplicates 에는 남은 테이블의 중복 검사 결과(checkupDbCharsetDuplicates())를 돌려준다
+function checkupDbCharsetStep($collation, &$duplicates) {
+	global $database;
+	if (!in_array($collation, array('utf8mb4_unicode_520_ci', 'utf8mb4_0900_ai_ci'), true))
+		return 'fail';
+	$lockName = POD::escapeString($database['prefix'] . 'dbcharset');
+	if ((string)POD::queryCell("SELECT GET_LOCK('$lockName', 0)", 0, false) !== '1') {
+		checkupDbCharsetLine(_text('다른 요청이 테이블을 바꾸는 중입니다. 잠시 뒤 다시 시도해 주십시오.'), false);
+		return 'lock';
+	}
+	$status = 'fail';
+	list($tables, $unknown) = checkupDbCharsetTargets();
+	$pending = checkupDbCharsetPending($tables, $collation);
+	if (!is_array($pending) || empty($tables)) {
+		checkupDbCharsetLine(_text('바꿀 테이블을 확인하지 못했습니다.'), false);
+	} else {
+		if (!empty($pending)) {
+			// Textcube-NG: r4-10 — 남은 테이블 어디든 바꾸면 같은 값이 되는 중복이 있으면(또는 확인하지 못하면) 이번 요청에서는 아무 테이블도 바꾸지 않는다(사용자 결정 11-23)
+			$duplicates = checkupDbCharsetDuplicates($pending, $collation);
+			if (!is_array($duplicates) || !empty($duplicates)) {
+				checkupDbCharsetLine(is_array($duplicates) ? _text('바꾸면 같은 값이 되는 중복이 있어 바꾸지 않았습니다. 아래 "변환 전에 정리할 중복" 목록을 확인해 정리한 뒤 다시 눌러 주십시오.') : _text('바꾸면 같은 값이 되는 중복이 있는지 확인하지 못해 바꾸지 않았습니다. 잠시 뒤 다시 시도해 주십시오.'), false);
+				POD::queryCell("SELECT RELEASE_LOCK('$lockName')", 0, false);
+				return 'dup';
+			}
+			$table = $pending[0];
+			$position = count($tables) - count($pending) + 1;
+			$sql = checkupDbCharsetAlterSql($table, $collation);
+			$error = null;
+			if ($sql === null) {
+				$error = _text('색인 정보를 읽지 못했거나 이름에 쓸 수 없는 문자가 있습니다');
+			} else {
+				ignore_user_abort(true);
+				@set_time_limit(0);
+				if (!POD::execute($sql)) {
+					$errorCode = (int)POD::__lastErrorCode();
+					$error = $errorCode . ' ' . POD::error();
+					if ($errorCode == 1062)	// 중복 키: 검사 뒤에 생긴 값 등
+						$error .= ' — ' . _text('바꾸면 같은 값이 되는 중복입니다. 아래 "변환 전에 정리할 중복" 목록을 확인해 주십시오');
+				}
+			}
+			if ($error !== null) {
+				checkupDbCharsetLine(_textf('데이터베이스 테이블 %1 을 utf8mb4 로 바꾸지 못했습니다(%2). 테이블은 바뀌기 전 그대로입니다. 원인을 해결한 뒤 다시 누르면 남은 테이블부터 이어서 바꿉니다.', $table, $error), false);
+				POD::queryCell("SELECT RELEASE_LOCK('$lockName')", 0, false);
+				return 'fail';
+			}
+			checkupDbCharsetLine(_textf('데이터베이스 테이블 %1 을 utf8mb4 로 바꿉니다(%2/%3)', $table, $position, count($tables)), true);
+			$pending = checkupDbCharsetPending($tables, $collation);
+		}
+		if (is_array($pending) && empty($pending)) {
+			if (Setting::setServiceSettingGlobal('databaseCharset', $collation)) {
+				checkupDbCharsetLine(_text('모든 테이블을 바꿨습니다. 다음 요청부터 이모지를 저장할 수 있습니다.'), true);
+				$status = 'done';
+			} else {
+				checkupDbCharsetLine(_text('모든 테이블을 바꿨지만 표시를 저장하지 못했습니다. 다시 누르면 표시만 다시 저장합니다.'), false);
+			}
+		} else if (is_array($pending)) {
+			$status = 'next';
+		}
+	}
+	POD::queryCell("SELECT RELEASE_LOCK('$lockName')", 0, false);
+	return $status;
+}
+
 ?>
 <!DOCTYPE html PUBLIC "-//W3C//XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="ko">
@@ -411,7 +685,7 @@ function checkupRepairTables() {
 </head>
 <body>
 	<div id="container">
-		<form id="checkup"<?php /* PHP port(Textcube-NG): r3-11 점검 키·다시 점검은 POST 로 보낸다(키가 주소에 남지 않게) */ if ($checkupKeyFormVisible || ($checkupSkip && doesHaveOwnership())) echo ' method="post"';?>>
+		<form id="checkup"<?php /* PHP port(Textcube-NG): r3-11 점검 키·다시 점검은 POST 로 보낸다(키가 주소에 남지 않게) */ if ($checkupKeyFormVisible || ($checkupSkip && doesHaveOwnership()) || $dbcharsetFormVisible) echo ' method="post"';?>>
 			<div id="title">
 				<h1><img src="<?php echo $service['path']?>/resources/style/setup/image/title.gif" width="253" height="44" alt="<?php echo _text('텍스트큐브를 점검합니다.');?>" /></h1>
 			</div>
@@ -485,6 +759,16 @@ if ($checkupSkip) {
 // PHP port(Textcube-NG): r3-11 맞는 점검 키로 복구를 골랐을 때만 테이블 복구(REPAIR)
 if ($checkupRepair && checkupRepairTables())
 	$changed = true;
+// PHP port(Textcube-NG): r4-10 서비스 관리자가 누른 데이터베이스 문자셋 변환(POST·토큰·점검 기록이 현재 판일 때만, 요청 하나에 테이블 하나)
+if ($dbcharsetRejected)
+	checkupDbCharsetLine(_text('요청을 확인하지 못했습니다(보안 토큰). 화면을 새로 고친 뒤 다시 눌러 주십시오.'), false);
+if ($dbcharsetRun) {
+	$dbcharsetStep = checkupDbCharsetStep($dbcharsetCollation, $dbcharsetDuplicates);
+	if (($dbcharsetStep === 'next') || ($dbcharsetStep === 'done'))
+		$changed = true;
+	if ($dbcharsetStep === 'done')
+		$dbcharsetStored = $dbcharsetCollation;
+}
 if($checkupAuthorized && $currentVersion != TEXTCUBE_VERSION && in_array(POD::dbms(),array('MySQL','MySQLi'))) {
 	// From 1.6
 	if (POD::queryCell("DESC {$database['prefix']}CommentsNotified id", 'Extra') == 'auto_increment') {
@@ -548,7 +832,7 @@ if($checkupAuthorized && $currentVersion != TEXTCUBE_VERSION && in_array(POD::db
 			KEY userid (userid, blogid)
 			)
 		";
-		if (POD::execute($query . ' DEFAULT CHARSET=utf8') || POD::execute($query))
+		if (POD::execute($query . ((POD::charset() === 'utf8mb4') ? ' ' . POD::tableCharsetClause() : ' DEFAULT CHARSET=utf8')) || POD::execute($query))	// Textcube-NG: r4-10 — 표시가 있는(utf8mb4) 사이트는 utf8mb4·그 콜레이션으로 만든다. utf8 사이트는 그대로
 			showCheckupMessage(true);
 		else {
 			showCheckupMessage(false);
@@ -570,7 +854,7 @@ if($checkupAuthorized && $currentVersion != TEXTCUBE_VERSION && in_array(POD::db
 		  PRIMARY KEY  (blogid,openid)
 		)
 		";
-		if (POD::execute($query . ' DEFAULT CHARSET=utf8') || POD::execute($query))
+		if (POD::execute($query . ((POD::charset() === 'utf8mb4') ? ' ' . POD::tableCharsetClause() : ' DEFAULT CHARSET=utf8')) || POD::execute($query))	// Textcube-NG: r4-10 — 표시가 있는(utf8mb4) 사이트는 utf8mb4·그 콜레이션으로 만든다. utf8 사이트는 그대로
 			showCheckupMessage(true);
 		else {
 			showCheckupMessage(false);
@@ -738,7 +1022,7 @@ if($checkupAuthorized && $currentVersion != TEXTCUBE_VERSION && in_array(POD::db
 		  UNIQUE KEY blogid (blogid, id)
 		)
 		";
-		if (POD::execute($query . ' DEFAULT CHARSET=utf8') || POD::execute($query)) {
+		if (POD::execute($query . ((POD::charset() === 'utf8mb4') ? ' ' . POD::tableCharsetClause() : ' DEFAULT CHARSET=utf8')) || POD::execute($query)) {	// Textcube-NG: r4-10 — 표시가 있는(utf8mb4) 사이트는 utf8mb4·그 콜레이션으로 만든다. utf8 사이트는 그대로
 			if (POD::execute("ALTER TABLE {$database['prefix']}Links
 					ADD category int(11) NOT NULL DEFAULT 0 AFTER id,
 					ADD pid int(11) NOT NULL DEFAULT 0 FIRST,
@@ -901,7 +1185,7 @@ if($checkupAuthorized && $currentVersion != TEXTCUBE_VERSION && in_array(POD::db
 				PRIMARY KEY (blogid,name)
 			)
 		";
-		if (POD::execute($query . ' DEFAULT CHARSET=utf8') || POD::execute($query)) {
+		if (POD::execute($query . ((POD::charset() === 'utf8mb4') ? ' ' . POD::tableCharsetClause() : ' DEFAULT CHARSET=utf8')) || POD::execute($query)) {	// Textcube-NG: r4-10 — 표시가 있는(utf8mb4) 사이트는 utf8mb4·그 콜레이션으로 만든다. utf8 사이트는 그대로
 			$query = DBModel::getInstance();
 			$query->reset('SkinSettings');
 			if($query->doesExist()) {
@@ -1078,6 +1362,7 @@ if($checkupAuthorized && $currentVersion != TEXTCUBE_VERSION && in_array(POD::db
 	if (!doesExistTable($database['prefix'] . 'Lines')) {
 		$changed = true;
 		echo '<li>', _text('라인 기능을 위한 테이블을 만듭니다'), ': ';
+		// Textcube-NG: r4-13 — TEXT 열의 default '' 를 뺌(설치 SQL 과 같게). MySQL STRICT(8.0 기본)에서 1101 로 표를 만들지 못했고, 비STRICT MySQL 은 원래 이 기본값을 버렸다(dojoref 2.5)
 		$query = "
 		CREATE TABLE {$database['prefix']}Lines (
 		  id int(11) NOT NULL default 0,
@@ -1085,7 +1370,7 @@ if($checkupAuthorized && $currentVersion != TEXTCUBE_VERSION && in_array(POD::db
 		  root varchar(11) NOT NULL default 'default',
 		  category varchar(11) NOT NULL default 'public',
 		  author varchar(32) NOT NULL default '',
-		  content mediumtext NOT NULL default '',
+		  content mediumtext NOT NULL,
 		  permalink varchar(128) NOT NULL default '',
 		  created int(11) NOT NULL default 0,
 		  PRIMARY KEY (id),
@@ -1093,7 +1378,7 @@ if($checkupAuthorized && $currentVersion != TEXTCUBE_VERSION && in_array(POD::db
 		  KEY (blogid, category, created)
 		)
 		";
-		if (POD::execute($query . ' DEFAULT CHARSET=utf8') || POD::execute($query))
+		if (POD::execute($query . ((POD::charset() === 'utf8mb4') ? ' ' . POD::tableCharsetClause() : ' DEFAULT CHARSET=utf8')) || POD::execute($query))	// Textcube-NG: r4-10 — 표시가 있는(utf8mb4) 사이트는 utf8mb4·그 콜레이션으로 만든다. utf8 사이트는 그대로
 			showCheckupMessage(true);
 		else {
 			showCheckupMessage(false);
@@ -1114,6 +1399,7 @@ if($checkupAuthorized && $currentVersion != TEXTCUBE_VERSION && in_array(POD::db
 	if (!doesExistTable($database['prefix'] . 'Widgets')) {
 		$changed = true;
 		echo '<li>', _text('위젯 기능 및 오픈소셜 지원을 위한 테이블을 만듭니다'), ': ';
+		// Textcube-NG: r4-13 — content text 의 default '' 를 뺌(설치 SQL 과 같게, MySQL STRICT 1101 — dojoref 2.5)
 		$query = "
 		CREATE TABLE {$database['prefix']}Widgets (
 		  id int(11) NOT NULL default 1,
@@ -1130,12 +1416,12 @@ if($checkupAuthorized && $currentVersion != TEXTCUBE_VERSION && in_array(POD::db
 		  height int(11) DEFAULT NULL,
 		  scrolling int(1) default 0,
 		  feature varchar(32) default 'opensocial',
-		  content text NOT NULL default '',
+		  content text NOT NULL,
 		  PRIMARY KEY(id),
 		  KEY(blogid)
 		)
 		";
-		if (POD::execute($query . ' DEFAULT CHARSET=utf8') || POD::execute($query))
+		if (POD::execute($query . ((POD::charset() === 'utf8mb4') ? ' ' . POD::tableCharsetClause() : ' DEFAULT CHARSET=utf8')) || POD::execute($query))	// Textcube-NG: r4-10 — 표시가 있는(utf8mb4) 사이트는 utf8mb4·그 콜레이션으로 만든다. utf8 사이트는 그대로
 			showCheckupMessage(true);
 		else {
 			showCheckupMessage(false);
@@ -1628,6 +1914,7 @@ if ($checkupAuthorized && ((preg_match('@rewrite\.php@', $content) == 0 ) ||
 		fclose($fp);
 	}
 	// Textcube-NG: 루트 .htaccess 와 같은 내용·순서 — thumbnail 규칙을 앞으로 옮겨 rewrite.php 규칙에 !-f 조건이 붙게 함(R-10), .user.ini 차단(Apache 2.2·2.4 겸용, R-6), 스킨 index.xml 차단(5330)(v3.196). 스킨 index.xml 은 깊이와 관계없이 막는다(skin/blog/customize/<id>/index.xml 포함, r3-3)
+	// Textcube-NG: r4-6 — 루트 .htaccess 와 같이 .user.ini 차단을 <Files> 블록 대신 RewriteRule 로 바꿈(AllowOverride FileInfo 만으로 동작). 이미 설치된 사이트의 옛 <Files> 블록은 이 점검이 바꾸지 않는다(사용자 결정 11-23 — 안내만)
 	// Textcube-NG: plugins/ 아래 PHP 파일 직접 요청 차단 규칙 추가(r3-6, R-111). 이 블록이 쓰지 않은 기존 .htaccess 는 아래 별도 점검이 이 규칙 한 줄을 넣고 옛 스킨 index.xml 차단 줄을 바꾼다(R-58)
 	// Textcube-NG: cache/ 차단 규칙의 이름 부분을 (.+[^/]) 에서 (.*[^/]) 로 바꿔 한 글자 이름(cache/x.cache)도 막는다 — 원본은 두 글자 이상만 막았다(r3-16, R-389)
 	// Textcube-NG: attach/ 아래 PHP 파일 실행 차단 규칙을 plugins 차단 줄 뒤에 추가(r3-20). 이 블록이 쓰지 않은 기존 .htaccess 는 아래 별도 점검이 이 규칙 한 줄을 넣는다
@@ -1636,17 +1923,6 @@ if ($checkupAuthorized && ((preg_match('@rewrite\.php@', $content) == 0 ) ||
 #CheckURL Off
 #</IfModule>
 #SetEnv PRELOAD_CONFIG 1
-
-# PHP 사용자 설정 파일 직접 접근 차단
-<Files \".user.ini\">
-    <IfModule mod_authz_core.c>
-        Require all denied
-    </IfModule>
-    <IfModule !mod_authz_core.c>
-        Order Allow,Deny
-        Deny from all
-    </IfModule>
-</Files>
 
 RewriteEngine On
 RewriteBase ".$service['path']."/
@@ -1659,6 +1935,8 @@ RewriteRule ^plugins/+.+\\.(php[0-9]*|phps|phtml|phar)(/|$) - [NC,F,L]
 # Textcube-NG: 첨부 폴더(attach/) 안 PHP 실행 차단 — 올린 파일은 PHP 로 실행되면 안 된다(r3-20)
 # Textcube-NG: r3-27 R-448 — 가운데 확장자(a.php.jpg)도 막는다: 확장자 뒤에 . 이 이어지는 경우를 더함
 RewriteRule ^attach/+.+\\.(php[0-9]*|phps|phtml|pht|phar)(\\.|/|$) - [NC,F,L]
+# Textcube-NG: r4-6 — PHP 사용자 설정 파일(.user.ini, 어느 폴더든) 직접 접근 차단을 <Files> 블록에서 RewriteRule 로 옮김(plugins·attach 규칙과 같이 끝을 슬래시 또는 경로 끝으로 맞춰 PATH_INFO 가 붙은 경로 .user.ini/x 도 막음). <Files> 안 Require·Order 는 AllowOverride AuthConfig·Limit 이 있어야 해서 FileInfo 만 허용한 서버에서 모든 요청이 500 이었다
+RewriteRule ^(.+/+)?\\.user\\.ini(/|$) - [NC,F,L]
 RewriteCond %{REQUEST_FILENAME} -d
 RewriteRule ^(.+[^/])$ $1/ [L]
 RewriteCond %{REQUEST_FILENAME} !-f
@@ -1815,6 +2093,74 @@ if ($checkupAuthorized) {
 }
 ?>
 					</ul>
+<?php
+// PHP port(Textcube-NG): r4-10 데이터베이스 문자셋(이모지) 절 — MySQL·MySQLi 이고 서비스 관리자(group.creators)이며 점검 키 요청이 아닐 때만(사용자 결정 11-23)
+$dbcharsetContinue = false;
+if ($dbcharsetVisible) {
+	echo '<h3>', htmlspecialchars(_text('데이터베이스 문자셋(이모지)'), ENT_QUOTES, 'UTF-8'), '</h3>', "\n", '<ul id="dbCharset">', "\n";
+	if ($dbcharsetStored !== null) {
+		echo '<li>', htmlspecialchars(_textf('데이터베이스 문자셋: utf8mb4(%1). 이모지를 저장할 수 있습니다.', $dbcharsetStored), ENT_QUOTES, 'UTF-8'), '</li>', "\n";
+		// Textcube-NG: r4-10 — 바꾼 뒤에도 등록되지 않은 테이블(바꾸지 않음) 목록을 계속 보인다(명세 R10 2.2-7)
+		list($dbcharsetTables, $dbcharsetUnknown) = checkupDbCharsetTargets();
+		if (!empty($dbcharsetUnknown))
+			echo '<li>', htmlspecialchars(_textf('등록되지 않은 테이블은 바꾸지 않았습니다: %1. 이 테이블에 이모지를 쓰거나 찾으면 오류가 날 수 있으니, 플러그인을 다시 켜서 등록하거나 직접 바꿔 주십시오.', implode(', ', $dbcharsetUnknown)), ENT_QUOTES, 'UTF-8'), '</li>', "\n";
+	} else {
+		echo '<li>', htmlspecialchars(_text('데이터베이스 문자셋: utf8. 4바이트 문자(이모지)는 저장되지 않습니다.'), ENT_QUOTES, 'UTF-8'), '</li>', "\n";
+		if ($dbcharsetCollation === null) {
+			echo '<li>', htmlspecialchars(_textf('이 데이터베이스 서버(%1)는 utf8mb4 변환 기준(MySQL 5.6 이상·MariaDB 10.0 이상)이 아니어서 바꿀 수 없습니다.', (string)POD::queryCell('SELECT VERSION()', 0, false)), ENT_QUOTES, 'UTF-8'), '</li>', "\n";
+		} else {
+			list($dbcharsetTables, $dbcharsetUnknown) = checkupDbCharsetTargets();
+			$dbcharsetPending = checkupDbCharsetPending($dbcharsetTables, $dbcharsetCollation);
+			if (is_array($dbcharsetPending))
+				echo '<li>', htmlspecialchars(_textf('바꿀 테이블 %1개 가운데 %2개를 바꿨습니다.', count($dbcharsetTables), count($dbcharsetTables) - count($dbcharsetPending)), ENT_QUOTES, 'UTF-8'), '</li>', "\n";
+			if (!empty($dbcharsetUnknown))
+				echo '<li>', htmlspecialchars(_textf('등록되지 않은 테이블은 바꾸지 않습니다: %1. 다 바꾼 뒤 이 테이블에 이모지를 쓰거나 찾으면 오류가 날 수 있으니, 플러그인을 다시 켜서 등록하거나 직접 바꿔 주십시오.', implode(', ', $dbcharsetUnknown)), ENT_QUOTES, 'UTF-8'), '</li>', "\n";
+			echo '<li>', htmlspecialchars(_text('바꾸는 동안 테이블마다 잠시 쓰기가 막히고, 글이 많으면 한 테이블에 수십 초가 걸릴 수 있습니다. 시작하기 전에 데이터베이스를 백업하십시오. 바꾼 뒤 되돌리는 화면은 없으며, 되돌리려면 백업을 복원해야 합니다.'), ENT_QUOTES, 'UTF-8'), '</li>', "\n";
+			// Textcube-NG: r4-10 — 변환 전 중복 검사(사용자 결정 11-23 '미리 검사·목록 안내'). 중복이 있거나 확인하지 못하면 버튼을 내지 않는다(변환 요청도 서버 쪽에서 거부)
+			$dbcharsetDupBlocked = false;
+			if (is_array($dbcharsetPending) && !empty($dbcharsetPending)) {
+				if (!is_array($dbcharsetDuplicates))
+					$dbcharsetDuplicates = checkupDbCharsetDuplicates($dbcharsetPending, $dbcharsetCollation);
+				if (!is_array($dbcharsetDuplicates)) {
+					$dbcharsetDupBlocked = true;
+					echo '<li>', htmlspecialchars(_text('바꾸면 같은 값이 되는 중복이 있는지 확인하지 못했습니다. 잠시 뒤 이 화면을 다시 열어 주십시오.'), ENT_QUOTES, 'UTF-8'), ' <span class="result fail">', htmlspecialchars(_text('확인 필요'), ENT_QUOTES, 'UTF-8'), '</span></li>', "\n";
+				} else if (!empty($dbcharsetDuplicates)) {
+					$dbcharsetDupBlocked = true;
+					echo '<li>', htmlspecialchars(_text('변환 전에 정리할 중복'), ENT_QUOTES, 'UTF-8'), ': ',
+						htmlspecialchars(_text('utf8mb4 로 바꾸면 아래 키에서 같은 값이 되는 묶음이 있어 바꿀 수 없습니다(긴 값은 앞 191자까지만 비교하고, 문자 비교는 새 콜레이션을 따릅니다). 바꾸기 전에 관리 화면에서 긴 태그·링크 주소·필터 등을 고치거나 지워 주십시오(자동으로 고치지 않습니다). 정리한 뒤 이 화면을 다시 열면 바꿀 수 있습니다.'), ENT_QUOTES, 'UTF-8'),
+						' <span class="result fail">', htmlspecialchars(_text('확인 필요'), ENT_QUOTES, 'UTF-8'), '</span>', "\n", '<ul>', "\n";
+					foreach ($dbcharsetDuplicates as $dbcharsetDuplicate) {
+						$dbcharsetDuplicateValues = array();
+						foreach ($dbcharsetDuplicate[3] as $dbcharsetDuplicateItem)
+							$dbcharsetDuplicateValues[] = _textf('%1건: %2', $dbcharsetDuplicateItem[0], $dbcharsetDuplicateItem[1]);
+						echo '<li>', htmlspecialchars(_textf('테이블 %1 의 키 %2: 같은 값이 되는 묶음 %3개', $dbcharsetDuplicate[0], $dbcharsetDuplicate[1], ($dbcharsetDuplicate[2] > 20) ? '20+' : $dbcharsetDuplicate[2]), ENT_QUOTES, 'UTF-8'),
+							'<br />', htmlspecialchars(implode(' / ', $dbcharsetDuplicateValues), ENT_QUOTES, 'UTF-8'), '</li>', "\n";
+					}
+					echo '</ul></li>', "\n";
+					unset($dbcharsetDuplicate, $dbcharsetDuplicateValues, $dbcharsetDuplicateItem);
+				}
+			}
+			if (!$checkupIsCurrent) {
+				echo '<li>', htmlspecialchars(_text('먼저 점검을 끝낸 뒤 바꿀 수 있습니다.'), ENT_QUOTES, 'UTF-8'), '</li>', "\n";
+			} else if (!$dbcharsetDupBlocked) {
+				echo '<li>';
+				if (!$checkupTokenPrinted)
+					echo '<input type="hidden" name="csrfToken" value="', htmlspecialchars(getCSRFToken(), ENT_QUOTES, 'UTF-8'), '" />';
+				echo '<label><input type="checkbox" name="dbcharsetAuto" value="1"', ($dbcharsetAuto ? ' checked="checked"' : ''), ' /> ', htmlspecialchars(_text('끝날 때까지 이어서 바꾸기'), ENT_QUOTES, 'UTF-8'), '</label> ',
+					'<input type="submit" name="dbcharsetConvert" value="', htmlspecialchars(_text('이모지(utf8mb4)로 바꾸기'), ENT_QUOTES, 'UTF-8'), '" onclick="',
+					htmlspecialchars('return confirm(' . json_encode(_text('데이터베이스를 백업했습니까? 테이블을 utf8mb4 로 바꾸기 시작합니다. 되돌리려면 백업을 복원해야 합니다.')) . ');', ENT_QUOTES, 'UTF-8'), '" /></li>', "\n";
+				$dbcharsetContinue = ($dbcharsetStep === 'next') && $dbcharsetAuto;
+			}
+		}
+	}
+	echo '</ul>', "\n";
+	// '끝날 때까지 이어서': 직전 요청이 테이블 하나를 바꿨고 남았을 때만 1초 뒤 다시 보낸다(실패·끝·잠금 실패면 멈춘다)
+	if ($dbcharsetContinue)
+		echo '<script type="text/javascript">', "\n", '//<![CDATA[', "\n",
+			'setTimeout(function () { var f = document.getElementById("checkup"); if (!f) return; var i = document.createElement("input"); i.type = "hidden"; i.name = "dbcharsetConvert"; i.value = "1"; f.appendChild(i); f.submit(); }, 1000);', "\n",
+			'//]]>', "\n", '</script>', "\n";
+}
+?>
 
 					<p id="lastMessage">
 						<?php

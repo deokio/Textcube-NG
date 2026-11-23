@@ -197,6 +197,49 @@ class DBAdapter implements IAdapter {
 		else return null;
 	}
 
+	/* Textcube-NG: r4-10 utf8mb4 연결(사용자 결정 11-23). 연결은 bind() 처럼 utf8 로 맺고, 표 변환 완료 표시
+	   (ServiceSettings 'databaseCharset' = 콜레이션 이름)가 있을 때만 utf8mb4 로 바꾼다 — library/preprocessor.php·setup.php 가 부른다.
+	   콜레이션은 utf8mb4_unicode_520_ci(MySQL 5.6+·MariaDB 10.0+)·utf8mb4_0900_ai_ci(MySQL 8.0+)만 받는다.
+	   PDO 는 DSN 문자셋을 연결 뒤 바꿀 수 없어 SET NAMES 로 서버 쪽만 바꾼다 — utf8·utf8mb4 는 escape 대상 바이트(ASCII)가 같다 */
+	public static function setCharsetCollation($collation) {
+		if (!is_string($collation) || !in_array($collation, array('utf8mb4_unicode_520_ci', 'utf8mb4_0900_ai_ci'), true)) return false;
+		if (self::__isPDO()) {
+			if (!self::__pdoExec("SET NAMES utf8mb4 COLLATE $collation")) return false;
+		} else if (!(self::$db->set_charset('utf8mb4') && self::execute("SET SESSION collation_connection = '$collation'"))
+			&& !self::execute("SET NAMES utf8mb4 COLLATE $collation")) {
+			@self::$db->set_charset('utf8');	// 콜레이션을 맞추지 못했으면 bind() 와 같은 utf8 연결로 되돌린다(set_charset('utf8mb4') 만 성공한 경우)
+			@self::query('SET SESSION collation_connection = \'utf8_general_ci\'');
+			return false;
+		}
+		self::$dbProperties['charset'] = 'utf8mb4';
+		self::$dbProperties['collation'] = $collation;
+		return true;
+	}
+
+	public static function applyStoredCharset($prefix) {
+		if (!is_string($prefix) || !preg_match('/^[A-Za-z0-9_]*$/', $prefix)) return false;
+		$collation = self::queryCell("SELECT value FROM {$prefix}ServiceSettings WHERE name = 'databaseCharset'", 0, false);
+		if (!is_string($collation) || $collation === '') return false;	// 표시 없음 = utf8 그대로(지금과 같음)
+		if (self::setCharsetCollation($collation)) return true;
+		error_log("MySQL/MariaDB charset error : the stored databaseCharset could not be applied; this request uses utf8");
+		return false;
+	}
+
+	public static function utf8mb4Collation() {
+		$version = (string)self::queryCell('SELECT VERSION()', 0, false);
+		if (stripos($version, 'MariaDB') === false && version_compare(preg_replace('/[^0-9.].*$/', '', $version), '8.0.0', '>=')
+			&& self::queryAllWithoutCache("SHOW COLLATION LIKE 'utf8mb4_0900_ai_ci'")) return 'utf8mb4_0900_ai_ci';
+		if (self::queryAllWithoutCache("SHOW COLLATION LIKE 'utf8mb4_unicode_520_ci'")) return 'utf8mb4_unicode_520_ci';
+		return null;
+	}
+
+	public static function tableCharsetClause() {
+		$charset = self::charset();
+		if ($charset === 'utf8mb4' && isset(self::$dbProperties['collation'])) return 'DEFAULT CHARSET=utf8mb4 COLLATE ' . self::$dbProperties['collation'];
+		if ($charset === 'utf8') return 'DEFAULT CHARSET=utf8';
+		return '';
+	}
+
 	public static function dbms() {
 		return 'MySQLi';
 	}
@@ -508,7 +551,7 @@ class DBAdapter implements IAdapter {
 
 	/* 연결 문자셋 이름(Debug 의 오류 문구 변환용). PDO 는 DSN 의 charset=utf8 */
 	public static function __charsetName() {
-		if (self::__isPDO()) return 'utf8';
+		if (self::__isPDO()) return (isset(self::$dbProperties['charset']) && self::$dbProperties['charset'] === 'utf8mb4') ? 'utf8mb4' : 'utf8';	// Textcube-NG: r4-10 — setCharsetCollation() 로 utf8mb4 로 바꾼 뒤에는 utf8mb4
 		return self::$db->character_set_name();
 	}
 

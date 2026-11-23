@@ -157,7 +157,7 @@ class Tag {
 			// small step, get tag id list
 			$tagliststr =  '\'' . implode('\' , \'', $deletedTagList) . '\'';
 			$t1list = POD::queryColumn("SELECT id FROM {$database['prefix']}Tags WHERE name in ( $tagliststr )");
-			if (is_null($t1list)) 
+			if (empty($t1list))	// Textcube-NG: r4-9 — 지울 태그 이름이 Tags 에 없으면(0행 → 빈 배열) 아래 tag in (  ) 질의(문법 오류)를 보내지 않고 끝낸다. 원본은 그 질의가 실패해(queryColumn → null) 바로 아래 줄에서 끝났으므로 동작은 같다
 				return; // What?
 			
 			// Flushing pageCache
@@ -169,7 +169,7 @@ class Tag {
 			$taglist = POD::queryColumn(
 					"SELECT tag FROM {$database['prefix']}TagRelations 
 						WHERE blogid = $blogid AND entry = $entry AND tag in ( $t1liststr )");
-			if (is_null($taglist)) 
+			if (empty($taglist))	// Textcube-NG: r4-9 — 이 글에 붙은 관계가 없으면(0행 → 빈 배열) 아래 빈 IN (  ) DELETE·SELECT·DELETE(문법 오류)를 보내지 않고 끝낸다. 원본은 세 질의가 모두 실패해 지운 행이 없었으므로 동작은 같다
 				return; // What?
 			
 			// now delete tag
@@ -195,7 +195,7 @@ class Tag {
 	{
 		global $database;
 		$taglist = POD::queryColumn("SELECT tag FROM {$database['prefix']}TagRelations WHERE blogid = $blogid AND entry = $entry");
-		if (!is_null($taglist)) {
+		if (!empty($taglist)) {	// Textcube-NG: r4-9 — 태그 없는 글(0행 → 빈 배열, 원본 queryColumn 도 같음)이면 아래 빈 IN (  ) 질의(문법 오류)를 보내지 않는다. 0행이면 TagRelations DELETE 도 지울 행이 없어 동작은 같다
 			$tagliststr = implode(',', $taglist);
 			foreach($taglist as $tagid) {
 				CacheControl::flushTag($tagid);

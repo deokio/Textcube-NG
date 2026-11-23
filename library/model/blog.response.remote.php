@@ -23,7 +23,7 @@ function getRemoteResponsesWithPagingForOwner($blogid, $category, $site, $ip, $s
 		LEFT JOIN {$database['prefix']}Categories c ON t.blogid = c.blogid AND e.category = c.id
 		WHERE t.blogid = $blogid AND t.isfiltered = 0 $typeFilter";
 	if ($category > 0) {
-		$categories = POD::queryColumn("SELECT id FROM {$database['prefix']}Categories WHERE blogid = $blogid AND parent = $category");
+		requireModel('blog.category'); $categories = getCategoryDescendantIds($blogid, $category);	// Textcube-NG: R-592 — 직계 자식 대신 자손 전체(사용자 결정 ②, 블로그 범위)
 		array_push($categories, $category);
 		$sql .= ' AND e.category IN (' . implode(', ', $categories) . ')';
 				$postfix .= '&amp;category=' . rawurlencode($category);
@@ -80,7 +80,7 @@ function getRemoteResponseLogsWithPagingForOwner($blogid, $category, $site, $ip,
 		LEFT JOIN {$database['prefix']}Categories c ON t.blogid = c.blogid AND e.category = c.id
 		WHERE t.blogid = $blogid $typeFilter";
 	if ($category > 0) {
-		$categories = POD::queryColumn("SELECT id FROM {$database['prefix']}Categories WHERE blogid = $blogid AND parent = $category");
+		requireModel('blog.category'); $categories = getCategoryDescendantIds($blogid, $category);	// Textcube-NG: R-592 — 직계 자식 대신 자손 전체(사용자 결정 ②, 블로그 범위)
 		array_push($categories, $category);
 		$sql .= ' AND e.category IN (' . implode(', ', $categories) . ')';
 		$postfix .= '&amp;category=' . rawurlencode($category);

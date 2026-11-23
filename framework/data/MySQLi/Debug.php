@@ -55,7 +55,7 @@ function __tcSqlLogEnd( $result, $cachedResult = 0 )
 		$client_encoding = str_replace('_','-',DBAdapter::__charsetName());
 	}
 
-	if( $client_encoding != 'utf8' && function_exists('iconv') ) {
+	if( !in_array($client_encoding, array('utf8', 'utf8mb4'), true) && function_exists('iconv') ) {	// Textcube-NG: r4-10 — utf8mb4 연결도 변환하지 않는다(utf8mb4 는 iconv 문자셋 이름이 아니어서 오류 문구가 false 로 사라졌다)
 		$__tcSqlLog[$__tcSqlLogCount]['error'] = iconv( $client_encoding, 'utf-8', DBAdapter::__lastErrorMessage());
 	}
 	else {

@@ -2,6 +2,14 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 #[AllowDynamicProperties]
 class SkinSetting {
 	function __construct() {
@@ -44,9 +52,9 @@ class SkinSetting {
 		$result = $pool->getAll('name, value');
 		if (!empty($result)) {
 			foreach ($result as $data) {
-				if (!empty($date['name'])) {
+				if (!empty($data['name'])) {	// Textcube-NG: r4-9 — $date 오타(원본부터)로 load() 가 값을 하나도 읽지 않아 데이터 내보내기 <skin> 이 빈 값이었다
 					if ($data['name'] == 'tagboxAlign') $data['name'] = 'alignOnTagbox';
-					$this->$data['name'] = $data['value'];
+					$this->{$data['name']} = $data['value'];	// Textcube-NG: r4-9 — PHP 7.0 균일 변수 문법(Uniform Variable Syntax)으로 $this->$data['name'] 의 해석이 ($this->$data)['name'] 으로 바뀜 — 원본(PHP 5)의 뜻 $this->{$data['name']} 을 중괄호로 밝힘
 				}
 			}
 			return true;
@@ -107,6 +115,11 @@ class SkinSetting {
 			if (!Validator::number($this->recentNoticeLength, 0))
 				return $this->_error('recentNoticeLength');
 			Setting::setSkinSetting('recentNoticeLength', $this->recentNoticeLength);
+		}
+		if (isset($this->recentEntryLength)) {	// Textcube-NG: r4-14 — 원본부터 빠져 가져오기에서 이 값만 복원되지 않았다(dojoref 2.5)
+			if (!Validator::number($this->recentEntryLength, 0))
+				return $this->_error('recentEntryLength');
+			Setting::setSkinSetting('recentEntryLength', $this->recentEntryLength);
 		}
 		if (isset($this->recentTrackbackLength)) {
 			if (!Validator::number($this->recentTrackbackLength, 0))

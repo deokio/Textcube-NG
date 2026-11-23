@@ -39,9 +39,11 @@ class Message extends Singleton {
 	function __construct() {
 	}
 	public function add($message) {
-		Validator::validateiArray($message, $IV);
-		$message['id'] = $__maxid++; 
-		array_push($this->__storage,$message);
+		// Textcube-NG: r4-19 — 명백한 오류만 고침(사용자 결정 11-24): 없는 함수 validateiArray → validateArray(10-CoreClasses.php),
+		//   정적 속성을 지역 변수($IV·$__maxid)·$this 로 읽던 것을 self:: 로. 쓰이지 않는 클래스(호출처 0건, dojoref 2.7)
+		Validator::validateArray($message, self::$IV);
+		$message['id'] = self::$__maxid++;
+		array_push(self::$__storage,$message);
 		return $message['id'];
 	}
 	public function remove($condition) {
@@ -50,25 +52,25 @@ class Message extends Singleton {
 	}
 	public function get($condition = null) {
 		$result = array();
-		if(is_null($condition)) return $this->__storage;
+		if(is_null($condition)) return self::$__storage;
 		if(isset($condition['category'])) {
 			if(is_array($condition['category'])) {
 				foreach ($condition['category'] as $cat) {
-					array_push($result, MMCache::queryAll($this->__storage,'category',$cat));
+					array_push($result, MMCache::queryAll(self::$__storage,'category',$cat));
 				}
 			} else {
-				array_push($result, MMCache::queryAll($this->__storage,'category',$condition['category']));
+				array_push($result, MMCache::queryAll(self::$__storage,'category',$condition['category']));
 			}
 		}
 		if(isset($condition['status'])) {
 			switch($condition['status']) {
 				case 'OK':
-					array_push($result, MMCache::queryAll($this->__storage,'status','OK'));
+					array_push($result, MMCache::queryAll(self::$__storage,'status','OK'));
 				case 'WARNING':
-					array_push($result, MMCache::queryAll($this->__storage,'status','WARNING'));
+					array_push($result, MMCache::queryAll(self::$__storage,'status','WARNING'));
 				case 'ERROR':
 				default:
-					array_push($result, MMCache::queryAll($this->__storage,'status','OK'));
+					array_push($result, MMCache::queryAll(self::$__storage,'status','OK'));
 			}
 		}
 		return $result;

@@ -2,6 +2,14 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 
 global $pluginSetting;
 $pluginSetting = array();
@@ -622,6 +630,8 @@ function treatPluginTable($plugin, $name, $fields, $keys, $version, $indexes = a
             $query = "CREATE TABLE {$database['prefix']}{$name} (blogid int(11) NOT NULL default 0,";
             $isaiExists = false;
             $index = '';
+            // Textcube-NG: r4-10 — 191자를 넘는 varchar·char 열은 기본 키에 앞부분 191자로 넣는다(utf8mb4 + 767바이트 한도 서버에서 1071 로 테이블을 못 만들던 것, 모든 판 — 사용자 결정 11-23)
+            $longFields = array();
             foreach ($fields as $field) {
                 $ai = '';
                 if (strtolower($field['attribute']) == 'int' || strtolower($field['attribute']) == 'mediumint') {
@@ -639,14 +649,21 @@ function treatPluginTable($plugin, $name, $fields, $keys, $version, $indexes = a
                 $defaultValue = $hasDefault ? " DEFAULT '" . POD::escapeString($field['default']) . "' " : '';
                 $fieldLength = ($field['length'] >= 0) ? "(" . $field['length'] . ")" : '';
                 $sentence = $field['name'] . " " . $field['attribute'] . $fieldLength . $isNull . $defaultValue . $ai . ",";
+                if (in_array(strtolower($field['attribute']), array('varchar', 'char'), true) && isset($field['length']) && $field['length'] > 191) {
+                    $longFields[$field['name']] = true;
+                }
                 $query .= $sentence;
             }
 
             array_unshift($keys, 'blogid');
-            $query .= " PRIMARY KEY (" . implode(',', $keys) . ")";
+            $keyColumns = array();
+            foreach ($keys as $key) {
+                $keyColumns[] = (is_string($key) && isset($longFields[$key])) ? $key . '(191)' : $key;
+            }
+            $query .= " PRIMARY KEY (" . implode(',', $keyColumns) . ")";
             $query .= $index;
             $query .= ") ";
-            $query .= (POD::charset() == 'utf8') ? 'DEFAULT CHARSET=utf8' : '';
+            $query .= in_array(POD::charset(), array('utf8', 'utf8mb4'), true) ? POD::tableCharsetClause() : '';	// Textcube-NG: r4-10 — utf8mb4 연결이면 utf8mb4·그 콜레이션
         }
         if (POD::execute($query)) {
             // Textcube-NG: 등록은 첫 분기와 같은 DBModel 꼴(VALUES·escape=true·Cubrid "value") — 원본 INSERT … SET 은 MySQL 전용. 만든 뒤 테이블 목록을 다시 읽고 색인을 만든다(v3.210)
@@ -752,6 +769,16 @@ function getPluginTableIndexColumns($table, $indexName) {
 function createPluginTableIndexes($name, $fields, $indexes, $onlyMissing) {
     global $database;
     $table = $database['prefix'] . $name;
+    // Textcube-NG: r4-10 — MySQL·MySQLi 는 191자를 넘는 varchar·char 열에 앞부분 191자로 색인을 만든다(모든 판 — 사용자 결정 11-23)
+    $longFields = array();
+    if (in_array(POD::dbms(), array('MySQL', 'MySQLi'), true) && is_array($fields)) {
+        foreach ($fields as $field) {
+            if (is_array($field) && isset($field['name'], $field['attribute'], $field['length']) && is_string($field['name'])
+                && in_array(strtolower($field['attribute']), array('varchar', 'char'), true) && $field['length'] > 191) {
+                $longFields[$field['name']] = true;
+            }
+        }
+    }
     $reserved = POD::reservedFieldNames();
     if (!is_array($reserved)) {
         $reserved = array();
@@ -766,6 +793,9 @@ function createPluginTableIndexes($name, $fields, $indexes, $onlyMissing) {
         foreach ($columns as $i => $column) {
             if (in_array($column, $reserved)) {
                 $columns[$i] = '"' . $column . '"';
+            }
+            if (isset($longFields[$column])) {
+                $columns[$i] .= '(191)';
             }
         }
         POD::execute("CREATE INDEX {$indexName} ON {$table} (" . implode(', ', $columns) . ")");

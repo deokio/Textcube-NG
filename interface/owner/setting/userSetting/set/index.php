@@ -2,6 +2,14 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 /* [보안] 원본은 이름·값 검사 없이 블로그 설정(BlogSettings)에 기록해, 이 경로를 쓸 수 있는 구성원이 시간대·사이드바 배치 등
    임의 설정을 덮어쓸 수 있었다 → 기본 제공 스크립트(reader.js, FM_Modern·ED_tinyMCE 편집기)가 쓰는 화면 설정 3개만 받고
    값은 정수로 정규화한다(readerPannelVisibility·editorPropertyPositionFix: 0/1, readerPannelHeight: 1 이상). */

@@ -3,6 +3,14 @@
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
 ///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
+///
 /// ---- Modification Notice ----
 /// OpenID 2.0 (EOL) 제거 → OIDC 전용. 계정에 OIDC 식별자를 연결(add)/해제(del)한다.
 /// 연결은 이미 id_token 으로 검증된 현재 OIDC 식별자(Acl 'openid')만 사용하므로 Yadis fetch/재인증이 없다.

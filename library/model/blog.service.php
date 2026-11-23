@@ -359,6 +359,7 @@ function writeConfigFile($settings) {
 function getDefaultHtaccess($jsPrint = false) {
 	$rootURL = substr($_SERVER['PHP_SELF'], 0, strlen($_SERVER['PHP_SELF']) - 12);
 	// Textcube-NG: 루트 .htaccess 와 맞춤 — .user.ini 차단(Apache 2.2·2.4 겸용, R-6), 스킨 index.xml 차단(5330)(v3.196). 스킨 index.xml 은 깊이와 관계없이 막는다(skin/blog/customize/<id>/index.xml 포함, r3-3)
+	// Textcube-NG: r4-6 — .user.ini 차단을 <Files> 블록 대신 plugins·attach 규칙과 같은 꼴의 RewriteRule 로 바꿈(AllowOverride FileInfo 만으로 동작, PATH_INFO 가 붙은 경로도 막음)
 	// Textcube-NG: plugins/ 아래 PHP 파일 직접 요청 차단 규칙 추가(r3-6, R-111)
 	// Textcube-NG: attach/ 아래 PHP 파일 실행 차단 규칙을 plugins 차단 줄 뒤에 추가(r3-20)
 	$source = '#<IfModule mod_url.c>
@@ -366,28 +367,19 @@ function getDefaultHtaccess($jsPrint = false) {
 #</IfModule>
 #SetEnv PRELOAD_CONFIG 1
 
-# PHP 사용자 설정 파일 직접 접근 차단
-<Files ".user.ini">
-    <IfModule mod_authz_core.c>
-        Require all denied
-    </IfModule>
-    <IfModule !mod_authz_core.c>
-        Order Allow,Deny
-        Deny from all
-    </IfModule>
-</Files>
-
 RewriteEngine On
 RewriteBase '.$rootURL.'/
 RewriteRule ^(thumbnail)/([0-9]+/.+)$ cache/$1/$2 [L]
 RewriteCond %{REQUEST_FILENAME} -f
-RewriteRule ^(cache)+/+(.+[^/])\.(cache|xml|txt|log)$ - [NC,F,L]
+RewriteRule ^(cache)+/+(.*[^/])\.(cache|xml|txt|log)$ - [NC,F,L]
 RewriteCond %{REQUEST_FILENAME} -f
 RewriteRule ^(plugins/+[^/]+/+(locale/+.+|index\.xml)|resources/+locale/+.+|skin/+.+/+index\.xml)$ - [NC,F,L]
 RewriteRule ^plugins/+.+\.(php[0-9]*|phps|phtml|phar)(/|$) - [NC,F,L]
 # Textcube-NG: 첨부 폴더(attach/) 안 PHP 실행 차단 — 올린 파일은 PHP 로 실행되면 안 된다(r3-20)
 # Textcube-NG: r3-27 R-448 — 가운데 확장자(a.php.jpg)도 막는다: 확장자 뒤에 . 이 이어지는 경우를 더함
 RewriteRule ^attach/+.+\.(php[0-9]*|phps|phtml|pht|phar)(\.|/|$) - [NC,F,L]
+# Textcube-NG: r4-6 — PHP 사용자 설정 파일(.user.ini, 어느 폴더든) 직접 접근 차단을 <Files> 블록에서 RewriteRule 로 옮김(plugins·attach 규칙과 같이 끝을 슬래시 또는 경로 끝으로 맞춰 PATH_INFO 가 붙은 경로 .user.ini/x 도 막음). <Files> 안 Require·Order 는 AllowOverride AuthConfig·Limit 이 있어야 해서 FileInfo 만 허용한 서버에서 모든 요청이 500 이었다
+RewriteRule ^(.+/+)?\.user\.ini(/|$) - [NC,F,L]
 RewriteCond %{REQUEST_FILENAME} -d
 RewriteRule ^(.+[^/])$ $1/ [L]
 RewriteCond %{REQUEST_FILENAME} !-f

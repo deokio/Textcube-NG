@@ -319,9 +319,9 @@ foreach (getCategories($blogid) as $category) {
 ?>
 										<option value="<?php echo $category['id'];?>"<?php echo ($category['id'] == $categoryId ? ' selected="selected"' : '');?>><?php echo htmlspecialchars($category['name']);?></option>
 <?php
-	foreach ($category['children'] as $child) {
+	foreach (getCategoryDescendantRows($blogid, $category['id']) as $child) {
 ?>
-										<option value="<?php echo $child['id'];?>"<?php echo ($child['id'] == $categoryId ? ' selected="selected"' : '');?>>&nbsp;― <?php echo htmlspecialchars($child['name']);?></option>
+										<option value="<?php echo $child['id'];?>"<?php echo ($child['id'] == $categoryId ? ' selected="selected"' : '');?>>&nbsp;― <?php echo str_repeat('&nbsp;― ', $child['depth'] - 2).htmlspecialchars($child['name']);?></option>
 <?php
 	}
 }

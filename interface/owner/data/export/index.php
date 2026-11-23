@@ -68,19 +68,15 @@ $category = new Category();
 if ($category->open()) {
 	do {
 		if($category->id != 0) {
-		   	$category->escape();
-			$writer->write('<category>' . '<name>' . $category->name . '</name>' . '<priority>' . $category->priority . '</priority>');
-			if ($childCategory = $category->getChildren()) {
-				do {
-					$childCategory->escape();
-					$writer->write('<category>' . '<name>' . $childCategory->name . '</name>' . '<priority>' . $childCategory->priority . '</priority>' . '</category>');
-				} while ($childCategory->shift());
-				$childCategory->close();
-			}
+			$category->escape();
+			// Textcube-NG: R-592 — 하위 분류를 깊이만큼 재귀로 쓰고(사용자 결정 ⑩ 안 A), 분류마다 공개 설정(visibility)·body id 를 더한다
+			//   (원본은 2단까지만 썼고 공개 설정·body id 를 쓰지 않아, 복원하면 비공개 분류가 공개로 돌아갔다)
+			$writer->write('<category>' . '<name>' . $category->name . '</name>' . '<priority>' . $category->priority . '</priority>' . exportCategoryExtra($category));
+			exportCategoryChildren($writer, $category, array((string)$category->id => true), 2);
 			$writer->write('</category>');
 			$writer->write(CRLF);
 		} else {
-		   	$category->escape();
+			$category->escape();
 			$writer->write('<category>' . '<name>' . $category->name . '</name>' . '<priority>' . $category->priority . '</priority>');
 			$writer->write('<root>1</root>');
 			$writer->write('</category>');
@@ -88,6 +84,31 @@ if ($category->open()) {
 		}
 	} while ($category->shift());
 	$category->close();
+}
+
+function exportCategoryExtra($category) {
+	$extra = '<visibility>' . ((isset($category->visibility) && $category->visibility !== null && $category->visibility < 2) ? 1 : 2) . '</visibility>';
+	if (isset($category->bodyid) && $category->bodyid !== '' && $category->bodyid !== 'tt-body-category')
+		$extra .= '<bodyId>' . Validator::escapeXML($category->bodyid) . '</bodyId>';
+	return $extra;
+}
+
+function exportCategoryChildren($writer, $parent, $visited, $depth) {
+	if ($depth > 64)
+		return;
+	if ($childCategory = $parent->getChildren()) {
+		do {
+			if (isset($visited[(string)$childCategory->id]))
+				continue;
+			$childVisited = $visited;
+			$childVisited[(string)$childCategory->id] = true;
+			$childCategory->escape();
+			$writer->write('<category>' . '<name>' . $childCategory->name . '</name>' . '<priority>' . $childCategory->priority . '</priority>' . exportCategoryExtra($childCategory));
+			exportCategoryChildren($writer, $childCategory, $childVisited, $depth + 1);
+			$writer->write('</category>');
+		} while ($childCategory->shift());
+		$childCategory->close();
+	}
 }
 $post = new Post();
 if ($post->open('', '*', 'published, id')) {
@@ -346,30 +367,31 @@ if ($statistics->open()) {
 }
 $setting = new SkinSetting();
 if ($setting->load()) {
+	// Textcube-NG: r4-9 — SkinSetting::load() 오타를 고쳐 이제 <skin> 에 실제 값이 들어가므로 다른 요소처럼 htmlspecialchars 로 XML escape 한다(행이 없는 값은 null 이라 (string) 으로 바꿈 — PHP 8.1+ null 인자 Deprecated 방지)
 	$writer->write('<skin>' .
-		'<name>' . $setting->skin . '</name>' .
-		'<entriesOnRecent>' . $setting->entriesOnRecent . '</entriesOnRecent>' .
-		'<commentsOnRecent>' . $setting->commentsOnRecent . '</commentsOnRecent>' .
-		'<trackbacksOnRecent>' . $setting->trackbacksOnRecent . '</trackbacksOnRecent>' .
-		'<commentsOnGuestbook>' . $setting->commentsOnGuestbook . '</commentsOnGuestbook>' .
-		'<tagsOnTagbox>' . $setting->tagsOnTagbox . '</tagsOnTagbox>' .
-		'<alignOnTagbox>' . $setting->alignOnTagbox . '</alignOnTagbox>' .
-		'<expandComment>' . $setting->expandComment . '</expandComment>' .
-		'<expandTrackback>' . $setting->expandTrackback . '</expandTrackback>' .
-		'<recentNoticeLength>' . $setting->recentNoticeLength . '</recentNoticeLength>' .
-		'<recentEntryLength>' . $setting->recentEntryLength . '</recentEntryLength>' .
-		'<recentTrackbackLength>' . $setting->recentTrackbackLength . '</recentTrackbackLength>' .
-		'<linkLength>' . $setting->linkLength . '</linkLength>' .
-		'<showListOnCategory>' . $setting->showListOnCategory . '</showListOnCategory>' .
-		'<showListOnArchive>' . $setting->showListOnArchive . '</showListOnArchive>' .
+		'<name>' . htmlspecialchars((string)$setting->skin) . '</name>' .
+		'<entriesOnRecent>' . htmlspecialchars((string)$setting->entriesOnRecent) . '</entriesOnRecent>' .
+		'<commentsOnRecent>' . htmlspecialchars((string)$setting->commentsOnRecent) . '</commentsOnRecent>' .
+		'<trackbacksOnRecent>' . htmlspecialchars((string)$setting->trackbacksOnRecent) . '</trackbacksOnRecent>' .
+		'<commentsOnGuestbook>' . htmlspecialchars((string)$setting->commentsOnGuestbook) . '</commentsOnGuestbook>' .
+		'<tagsOnTagbox>' . htmlspecialchars((string)$setting->tagsOnTagbox) . '</tagsOnTagbox>' .
+		'<alignOnTagbox>' . htmlspecialchars((string)$setting->alignOnTagbox) . '</alignOnTagbox>' .
+		'<expandComment>' . htmlspecialchars((string)$setting->expandComment) . '</expandComment>' .
+		'<expandTrackback>' . htmlspecialchars((string)$setting->expandTrackback) . '</expandTrackback>' .
+		'<recentNoticeLength>' . htmlspecialchars((string)$setting->recentNoticeLength) . '</recentNoticeLength>' .
+		'<recentEntryLength>' . htmlspecialchars((string)$setting->recentEntryLength) . '</recentEntryLength>' .
+		'<recentTrackbackLength>' . htmlspecialchars((string)$setting->recentTrackbackLength) . '</recentTrackbackLength>' .
+		'<linkLength>' . htmlspecialchars((string)$setting->linkLength) . '</linkLength>' .
+		'<showListOnCategory>' . htmlspecialchars((string)$setting->showListOnCategory) . '</showListOnCategory>' .
+		'<showListOnArchive>' . htmlspecialchars((string)$setting->showListOnArchive) . '</showListOnArchive>' .
 		'<tree>' .
-			'<name>' . $setting->tree . '</name>' .
-			'<color>' . $setting->colorOnTree . '</color>' .
-			'<bgColor>' . $setting->bgcolorOnTree . '</bgColor>' .
-			'<activeColor>' . $setting->activecolorOnTree . '</activeColor>' .
-			'<activeBgColor>' . $setting->activebgcolorOnTree . '</activeBgColor>' .
-			'<labelLength>' . $setting->labelLengthOnTree . '</labelLength>' .
-			'<showValue>' . $setting->showValueOnTree . '</showValue>' .
+			'<name>' . htmlspecialchars((string)$setting->tree) . '</name>' .
+			'<color>' . htmlspecialchars((string)$setting->colorOnTree) . '</color>' .
+			'<bgColor>' . htmlspecialchars((string)$setting->bgcolorOnTree) . '</bgColor>' .
+			'<activeColor>' . htmlspecialchars((string)$setting->activecolorOnTree) . '</activeColor>' .
+			'<activeBgColor>' . htmlspecialchars((string)$setting->activebgcolorOnTree) . '</activeBgColor>' .
+			'<labelLength>' . htmlspecialchars((string)$setting->labelLengthOnTree) . '</labelLength>' .
+			'<showValue>' . htmlspecialchars((string)$setting->showValueOnTree) . '</showValue>' .
 		'</tree>' .
 	'</skin>');
 	$writer->write(CRLF);

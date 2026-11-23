@@ -2,6 +2,14 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 
 require ROOT . '/library/preprocessor.php';
 $context = Model_Context::getInstance();
@@ -51,8 +59,12 @@ if (!doesHaveMembership() && !doesHaveOwnership() && $userName == '') {
 	Respond::PrintResult(array('error' => 2, 'description' => _text('본문을 입력해 주십시오.')));
 	exit;
 } else {
+	// Textcube-NG: r4-9 — 손님 이름·홈페이지 기억 쿠키를 읽는 쪽(library/view/view.php·replyEditorView.php·mobileView.php)과 같은 접두어(service.cookie_prefix) 붙은 이름으로 쓴다. 원본부터 쓰는 이름과 읽는 이름이 달라 기억이 동작하지 않았다
+	// Textcube-NG: r4-9 — 접두어에 쿠키 이름에 쓸 수 없는 문자(=,; 공백·탭·줄바꿈·\013·\014)가 있으면 이 기억 쿠키만 쓰지 않는다(PHP 8 setcookie() 의 ValueError 로 댓글 저장까지 막히지 않게, 사용자 결정 11-23)
+	$guestCookiePrefix = (string)$context->getProperty('service.cookie_prefix');
+	$guestCookieOk = (strpbrk($guestCookiePrefix, "=,; \t\r\n\013\014") === false);
 	if (!empty($userName)) {
-		setcookie('guestName', $userName, array('expires' => time() + 2592000, 'path' => "$blogURL/", 'secure' => (bool)$context->getProperty('service.useSSL', false), 'httponly' => true, 'samesite' => 'Lax'));
+		if ($guestCookieOk) setcookie($guestCookiePrefix . 'guestName', $userName, array('expires' => time() + 2592000, 'path' => "$blogURL/", 'secure' => (bool)$context->getProperty('service.useSSL', false), 'httponly' => true, 'samesite' => 'Lax'));
 	}
 	if (!empty($userHomepage) && ($userHomepage != 'http://')) {
 		if (preg_match('/^\s*javascript\s*:/i', $userHomepage)) {
@@ -60,7 +72,7 @@ if (!doesHaveMembership() && !doesHaveOwnership() && $userName == '') {
 		} else {
 			if (strpos($userHomepage, 'http://') !== 0)
 				$userHomepage = "http://$userHomepage";
-			setcookie('guestHomepage', $userHomepage, array('expires' => time() + 2592000, 'path' => "$blogURL/", 'secure' => (bool)$context->getProperty('service.useSSL', false), 'httponly' => true, 'samesite' => 'Lax'));
+			if ($guestCookieOk) setcookie($guestCookiePrefix . 'guestHomepage', $userHomepage, array('expires' => time() + 2592000, 'path' => "$blogURL/", 'secure' => (bool)$context->getProperty('service.useSSL', false), 'httponly' => true, 'samesite' => 'Lax'));
 		}
 	}
 	if( Acl::getIdentity( 'openid' ) ) {

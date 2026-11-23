@@ -2,6 +2,14 @@
 /// Copyright (c) 2004-2016, Needlworks  / Tatter Network Foundation
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
+///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
 
 $entriesView = '';
 requireModel('blog.comment');
@@ -136,7 +144,7 @@ if (isset($cache->contents)) {
 			dress('article_rep_rp_atomurl', $defaultURL.'/atom/comment/'.$entry['id'], $entryView);
 			dress('article_rep_tb_atomurl', $defaultURL.'/atom/trackback/'.$entry['id'], $entryView);
 			dress('article_rep_response_atomurl', $defaultURL.'/atom/response/'.$entry['id'], $entryView);
-			dress('article_rep_category_body_id',getCategoryBodyIdById($blogid,$entry['category']) ? getCategoryBodyIdById($blogid,$entry['category']) : 'tt-body-category',$entryView);
+			dress('article_rep_category_body_id',htmlspecialchars(getCategoryBodyIdById($blogid,$entry['category']) ? getCategoryBodyIdById($blogid,$entry['category']) : 'tt-body-category'),$entryView);	// Textcube-NG: r4-16 — escape(dojoref 2.4)
 			dress('article_rep_title', htmlspecialchars(fireEvent('ViewPostTitle', $entry['title'], $entry['id'])), $entryView);
 			// 사용자가 작성한 본문은 interface/common/blog/end.php의 removeAllTags() 다음에 처리하기 위한 조치.
 			$contentContainer["article_{$entry['id']}"] = getEntryContentView($blogid, $entry['id'], $entry['content'], $entry['contentformatter'], getKeywordNames($blogid));

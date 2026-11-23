@@ -3,6 +3,14 @@
 /// All rights reserved. Licensed under the GPL.
 /// See the GNU General Public License for more details. (/documents/LICENSE, /documents/COPYRIGHT)
 ///
+/// ---- Modification Notice (GPL §2(a)) ----
+/// Modified 2026 by @deokio for PHP 8.5 compatibility,
+/// performed with AI assistance (Anthropic Claude) under human review.
+/// Changes consist primarily of mechanical PHP migration transformations
+/// per the official PHP upgrade documentation.
+/// No additional copyright is asserted over these modifications.
+/// See CHANGELOG.md and SECURITY.md for full modification history.
+///
 /// ---- Modification Notice ----
 /// OpenID 2.0 컨슈머 제거에 따라, 과거 OpenIDConsumer::setComment / setOpenIDLogoDisplay 호출을
 /// 동등한 설정 저장으로 인라인화한다. 플러그인 자동 활성(activatePlugin)은 이중 옵트인 정책상 제거한다.

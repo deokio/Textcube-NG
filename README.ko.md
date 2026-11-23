@@ -2,7 +2,7 @@
 Textcube-NG: Brand Yourself - 개인화된 웹 퍼블리싱 플랫폼
 ==========================================================
 
-**버전**: `1.10.10+php85.r3` · [English](./README.md)
+**버전**: `1.10.10+php85.r4` · [English](./README.md)
 
 > ## ⚠️ 보안 공지 — 배포 전 반드시 확인하세요
 >
@@ -47,16 +47,21 @@ Textcube는 2004년 JH가 시작한 온라인 퍼블리싱 플랫폼 'Tattertool
 
 Textcube-NG는 업스트림이 마지막으로 지원한 PHP 5.6에서 PHP 8.5로 코드베이스를 이식한,
 Textcube 1.10.10의 커뮤니티 유지 관리 후속 프로젝트입니다. PHP 7.4·8.2·8.4 이식본도 함께 유지합니다.
-PHP 8.4 이식본과 이 PHP 8.5 패키지는 PHP 8.5 에서 deprecated 된 부분의 대응만 다릅니다. 이 패키지는 PHP 8.5
-전용 문법을 쓰지 않으므로 PHP 8.4 에서도 수정 없이 쓸 수 있습니다(PDO 드라이버 상수는 PHP 8.4 에서 도입된
-`Pdo\Mysql`·`Pdo\Pgsql` 을 씁니다).
+이 패키지는 PHP 8.5 가 필요합니다(설치 마법사가 8.5.0 이상인지 확인). PHP 8.4 이식본은 PHP 8.5 에서
+deprecated 된 부분의 대응만 다릅니다.
+
+기존 호스팅을 위한 **PHP 5.5 ~ 7.3 레거시판**(MySQL 5.0+ / MariaDB 5.1+)을 같은 변경 사항으로
+`Textcube-NG-1.10.10+php55.r4.zip` 으로 따로 배포합니다.
 
 ### 원본 Textcube 1.10.10과 달라진 점
 
 - **PHP 8.5 호환**: 코드 전체의 deprecated·제거된 문법 수정(PHP4 방식 생성자, 동적 프로퍼티,
   `${}` 문자열 보간, `strftime()`, 중괄호 배열 접근, mysqli 절차형 API 등).
-- **보안 수정**: r1~r3 에서 해소한 항목(권한, CSRF, SQL 삽입, XSS, SSRF, 세션, 업로드 파일 실행 등)은
+- **보안 수정**: r1~r4 에서 해소한 항목(권한, CSRF, SQL 삽입, XSS, SSRF, 세션, 업로드 파일 실행 등)은
   [SECURITY.md](./documents/SECURITY.md) 참조.
+- **이모지(4바이트 문자)**: MySQL 5.6+·MariaDB 10.0+ 새 설치는 utf8mb4. 기존 사이트는 점검(checkup) 화면에서
+  변환합니다(먼저 DB 백업, [MIGRATION.md](./documents/MIGRATION.md) 10절).
+- **분류**: 3단계 이상(분류 관리에서 최대 깊이 설정, 기본 3). 분류 글 목록·피드·글 수는 모든 하위 분류를 포함합니다.
 - **라이브러리**: PHPMailer 5.x → 6.9(기존 메일 호출은 그대로 동작), OpenID 2.0 제거·OpenID Connect 추가
   (선택, 기본 꺼짐), jpgraph → 인라인 SVG 차트, jQuery 3.7.1·jQuery UI 1.13.3·Lodash 4.18.1·
   TinyMCE 7.9.3·CodeMirror 5.65.21, Dojo·MooTools 제거.
@@ -76,8 +81,12 @@ OIDC 식별자 등)은 [MIGRATION.md](./documents/MIGRATION.md) 8절에, 전체 
    `plugins/`·`attach/` 실행 차단 규칙을 넣습니다.
 2. 루트의 `cleanup_legacy_assets.php` 를 명령줄에서 실행합니다(`php cleanup_legacy_assets.php` 로
    미리보기 → `--apply`). 이전 판에만 있던 파일(옛 정적 자산, PHPMailer 5.x, OpenID 2.0 라이브러리,
-   jpgraph `plugins/StatGraph/count/` 폴더)을 지웁니다. 내용이 바뀐 파일은 건너뛰므로 직접 지우세요.
-   정리한 뒤 이 파일은 지워도 됩니다.
+   jpgraph `plugins/StatGraph/count/` 폴더, CodeMirror node.js 전용 파일)을 지웁니다. 내용이 바뀐 파일은
+   건너뛰므로 직접 지우세요. 정리한 뒤 이 파일은 지워도 됩니다.
+
+이전 Textcube-NG(r3 이하)에서 올리는 경우 [MIGRATION.md](./documents/MIGRATION.md) 10절도 따르세요 —
+기존 `.htaccess` 의 `.user.ini`·캐시 차단 줄은 자동으로 바뀌지 않고, CL_Moblog·ST_MediaLog(정리 스크립트를
+돌린 뒤에는 ED_tinyMCE 도)는 플러그인 화면에서 '다시 검사하고 풀기'를 한 번 해야 합니다.
 
 단계별 절차(파일 교체, 백업 가져오기로 이전, 원본으로 되돌리기, 점검 목록)는
 [MIGRATION.md](./documents/MIGRATION.md)를 참조하세요.
@@ -107,6 +116,7 @@ OIDC 식별자 등)은 [MIGRATION.md](./documents/MIGRATION.md) 8절에, 전체 
 * 데이터베이스 관리 시스템 (하나 이상의 환경 필요)
   * **MySQL 5.7.6+ 또는 8.0+** (UTF-8 문자셋 및 정렬 설정 필요)
   * MariaDB 10.2 이상
+  * (MySQL·MariaDB) 새 설치는 이모지(utf8mb4)를 저장, 기존 설치는 점검(checkup) 화면에서 변환
   * PostgreSQL, Cubrid, SQLite 3 (제한 있음, SQLite는 운영 환경 비권장 —
     [MIGRATION.md](./documents/MIGRATION.md) 8절 참조)
     * Cubrid PHP 8.x 모듈(네이티브·PDO)은 [deokio/php8_cubrid](https://github.com/deokio/php8_cubrid)를 참고하세요.

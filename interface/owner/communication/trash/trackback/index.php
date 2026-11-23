@@ -219,10 +219,12 @@ require ROOT . '/interface/common/owner/header.php';
 									trashOption.value = "0";
 									trashSelect.appendChild(trashOption);
 <?php
+// Textcube-NG: r4-15 — 분류 이름을 JS 큰따옴표 문자열에 htmlspecialchars 만 거쳐 넣어, 이름 속 역슬래시(\x3c 등)가 JS 에서 풀려 innerHTML 의 태그가 되었다(편집자가 만든 이름이 관리자 화면에서 실행 — 저장형 XSS, dojoref 2.3).
+//   escapeJSInCData()(library/function/javascript.php)로 역슬래시·따옴표·줄바꿈·<> 를 JS 문자열 escape 한다
 foreach (getCategories($blogid) as $category) {
 ?>
 									trashOption = document.createElement("OPTION");
-									trashOption.innerHTML = "<?php echo htmlspecialchars($category['name']);?>";
+									trashOption.innerHTML = "<?php echo escapeJSInCData(htmlspecialchars($category['name']));?>";
 									trashOption.value = "<?php echo $category['id'];?>";
 <?php
 	if ($category['id'] == $categoryId) {
@@ -234,10 +236,10 @@ foreach (getCategories($blogid) as $category) {
 ?>
 									trashSelect.appendChild(trashOption);
 <?php
-	foreach ($category['children'] as $child) {
+	foreach (getCategoryDescendantRows($blogid, $category['id']) as $child) {
 ?>
 									trashOption = document.createElement("OPTION");
-									trashOption.innerHTML = " ― <?php echo htmlspecialchars($child['name']);?>";
+									trashOption.innerHTML = " ― <?php echo str_repeat(' ― ', $child['depth'] - 2).escapeJSInCData(htmlspecialchars($child['name']));?>";
 									trashOption.value = "<?php echo $child['id'];?>";
 <?php
 		if ($child['id'] == $categoryId) {

@@ -806,10 +806,10 @@ if (!file_exists(__TEXTCUBE_CACHE_DIR__.'/CHECKUP')) {
 												<option value="<?php echo $category['id'];?>"<?php echo ($category['id'] == $categoryId ? ' selected="selected"' : '');?>><?php echo ($category['visibility'] > 1 ? '' : _t('(비공개)')).htmlspecialchars($category['name']);?></option>
 	<?php
 		}
-		foreach ($category['children'] as $child) {
+		foreach (getCategoryDescendantRows($blogid, $category['id']) as $child) {
 			if ($category['id'] != 0) {
 	?>
-												<option value="<?php echo $child['id'];?>"<?php echo ($child['id'] == $categoryId ? ' selected="selected"' : '');?>>&nbsp;― <?php echo ($category['visibility'] > 1 && $child['visibility'] > 1 ? '' : _t('(비공개)')).htmlspecialchars($child['name']);?></option>
+												<option value="<?php echo $child['id'];?>"<?php echo ($child['id'] == $categoryId ? ' selected="selected"' : '');?>>&nbsp;― <?php echo str_repeat('&nbsp;― ', $child['depth'] - 2).($child['hiddenByAncestor'] ? _t('(비공개)') : '').htmlspecialchars($child['name']);?></option>
 	<?php
 			}
 		}
@@ -851,10 +851,10 @@ foreach ($categories as $category) {
 										<option class="parent-category" value="category_<?php echo $category['id'];?>" label="<?php echo htmlspecialchars($category['name']);?>"><?php echo ($category['visibility'] > 1 ? '' : _t('(비공개)')).htmlspecialchars($category['name']);?></option>
 <?php
 	}
-	foreach ($category['children'] as $child) {
+	foreach (getCategoryDescendantRows($blogid, $category['id']) as $child) {
 		if ($category['id']!= 0) {
 ?>
-										<option class="child-category" value="category_<?php echo $child['id'];?>" label="<?php echo htmlspecialchars($category['name']);?>/<?php echo htmlspecialchars($child['name']);?>">― <?php echo ($category['visibility'] > 1 && $child['visibility'] > 1 ? '' : _t('(비공개)')).htmlspecialchars($child['name']);?></option>
+										<option class="child-category" value="category_<?php echo $child['id'];?>" label="<?php echo htmlspecialchars($category['name']);?><?php foreach ($child['subPath'] as $subName) echo '/', htmlspecialchars($subName);?>">― <?php echo str_repeat('― ', $child['depth'] - 2).($child['hiddenByAncestor'] ? _t('(비공개)') : '').htmlspecialchars($child['name']);?></option>
 <?php
 		}
 	}
@@ -1200,10 +1200,10 @@ if (sizeof($entries) == 0) {
 												<option class="parent-category" value="category_<?php echo $category['id'];?>" label="<?php echo htmlspecialchars($category['name']);?>"><?php echo ($category['visibility'] > 1 ? '' : _t('(비공개)')).htmlspecialchars($category['name']);?></option>
 <?php
 			}
-			foreach ($category['children'] as $child) {
+			foreach (getCategoryDescendantRows($blogid, $category['id']) as $child) {
 				if ($category['id']!= 0) {
 ?>
-												<option class="child-category" value="category_<?php echo $child['id'];?>" label="<?php echo htmlspecialchars($category['name']);?>/<?php echo htmlspecialchars($child['name']);?>">― <?php echo ($category['visibility'] > 1 && $child['visibility'] > 1 ? '' : _t('(비공개)')).htmlspecialchars($child['name']);?></option>
+												<option class="child-category" value="category_<?php echo $child['id'];?>" label="<?php echo htmlspecialchars($category['name']);?><?php foreach ($child['subPath'] as $subName) echo '/', htmlspecialchars($subName);?>">― <?php echo str_repeat('― ', $child['depth'] - 2).($child['hiddenByAncestor'] ? _t('(비공개)') : '').htmlspecialchars($child['name']);?></option>
 <?php
 				}
 			}
